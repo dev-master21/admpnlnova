@@ -767,9 +767,9 @@ private async findAvailableWindows(
  */
 private async executeSearch(filters: SearchFilters, userId: number): Promise<{ properties: any[] }> {
   const whereConditions: string[] = [
-  'p.deleted_at IS NULL', 
-  'p.status IN ("published", "draft")'
-    ];
+    'p.deleted_at IS NULL', 
+    'p.status IN ("published", "draft")'
+  ];
   const queryParams: any[] = [];
 
   logger.info('=== STARTING PROPERTY SEARCH ===');
@@ -778,7 +778,6 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
   // Deal type
   if (filters.deal_type) {
     if (filters.deal_type === 'both') {
-      // Не фильтруем
       logger.info('Deal type: both (no filter)');
     } else {
       whereConditions.push('(p.deal_type = ? OR p.deal_type = "both")');
@@ -794,45 +793,41 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
     logger.info(`Property type filter: ${filters.property_type}`);
   }
 
-    // Bedrooms - НОВАЯ ЛОГИКА
-    if (filters.bedrooms !== undefined && filters.bedrooms !== null) {
-      // Точное количество спален
-      whereConditions.push('p.bedrooms = ?');
-      queryParams.push(filters.bedrooms);
-      logger.info(`Bedrooms filter: EXACTLY ${filters.bedrooms}`);
-    } else {
-      // Диапазон спален
-      if (filters.bedrooms_min !== undefined && filters.bedrooms_min !== null) {
-        whereConditions.push('p.bedrooms >= ?');
-        queryParams.push(filters.bedrooms_min);
-        logger.info(`Bedrooms filter: >= ${filters.bedrooms_min}`);
-      }
-      if (filters.bedrooms_max !== undefined && filters.bedrooms_max !== null) {
-        whereConditions.push('p.bedrooms <= ?');
-        queryParams.push(filters.bedrooms_max);
-        logger.info(`Bedrooms filter: <= ${filters.bedrooms_max}`);
-      }
+  // Bedrooms
+  if (filters.bedrooms !== undefined && filters.bedrooms !== null) {
+    whereConditions.push('p.bedrooms = ?');
+    queryParams.push(filters.bedrooms);
+    logger.info(`Bedrooms filter: EXACTLY ${filters.bedrooms}`);
+  } else {
+    if (filters.bedrooms_min !== undefined && filters.bedrooms_min !== null) {
+      whereConditions.push('p.bedrooms >= ?');
+      queryParams.push(filters.bedrooms_min);
+      logger.info(`Bedrooms filter: >= ${filters.bedrooms_min}`);
     }
-    
-    // Bathrooms - НОВАЯ ЛОГИКА
-    if (filters.bathrooms !== undefined && filters.bathrooms !== null) {
-      // Точное количество ванных
-      whereConditions.push('p.bathrooms = ?');
-      queryParams.push(filters.bathrooms);
-      logger.info(`Bathrooms filter: EXACTLY ${filters.bathrooms}`);
-    } else {
-      // Диапазон ванных
-      if (filters.bathrooms_min !== undefined && filters.bathrooms_min !== null) {
-        whereConditions.push('p.bathrooms >= ?');
-        queryParams.push(filters.bathrooms_min);
-        logger.info(`Bathrooms filter: >= ${filters.bathrooms_min}`);
-      }
-      if (filters.bathrooms_max !== undefined && filters.bathrooms_max !== null) {
-        whereConditions.push('p.bathrooms <= ?');
-        queryParams.push(filters.bathrooms_max);
-        logger.info(`Bathrooms filter: <= ${filters.bathrooms_max}`);
-      }
+    if (filters.bedrooms_max !== undefined && filters.bedrooms_max !== null) {
+      whereConditions.push('p.bedrooms <= ?');
+      queryParams.push(filters.bedrooms_max);
+      logger.info(`Bedrooms filter: <= ${filters.bedrooms_max}`);
     }
+  }
+  
+  // Bathrooms
+  if (filters.bathrooms !== undefined && filters.bathrooms !== null) {
+    whereConditions.push('p.bathrooms = ?');
+    queryParams.push(filters.bathrooms);
+    logger.info(`Bathrooms filter: EXACTLY ${filters.bathrooms}`);
+  } else {
+    if (filters.bathrooms_min !== undefined && filters.bathrooms_min !== null) {
+      whereConditions.push('p.bathrooms >= ?');
+      queryParams.push(filters.bathrooms_min);
+      logger.info(`Bathrooms filter: >= ${filters.bathrooms_min}`);
+    }
+    if (filters.bathrooms_max !== undefined && filters.bathrooms_max !== null) {
+      whereConditions.push('p.bathrooms <= ?');
+      queryParams.push(filters.bathrooms_max);
+      logger.info(`Bathrooms filter: <= ${filters.bathrooms_max}`);
+    }
+  }
 
   // Regions
   if (filters.regions && filters.regions.length > 0) {
@@ -842,7 +837,7 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
     logger.info(`Regions filter: ${filters.regions.join(', ')}`);
   }
 
-  // ✅ ТИПЫ ВЛАДЕНИЯ (только для продажи)
+  // Ownership types
   if (filters.building_ownership) {
     whereConditions.push('p.building_ownership = ?');
     queryParams.push(filters.building_ownership);
@@ -901,7 +896,7 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
     }
   }
 
-  // Floors (этажность здания)
+  // Floors
   if (filters.floors) {
     if (filters.floors.min !== undefined) {
       whereConditions.push('p.floors >= ?');
@@ -922,7 +917,7 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
     logger.info(`Distance to beach: <= ${filters.distance_to_beach.max}m`);
   }
 
-  // Owner name (только если есть права)
+  // Owner name
   if (filters.owner_name) {
     const canViewOwner = await this.checkOwnerViewPermission(userId);
     if (canViewOwner) {
@@ -932,7 +927,7 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
     }
   }
 
-  // Map search (поиск по радиусу от точки)
+  // Map search
   if (filters.map_search) {
     const { lat, lng, radius_km } = filters.map_search;
     whereConditions.push(`
@@ -946,18 +941,16 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
     logger.info(`Map search: radius ${radius_km}km from (${lat}, ${lng})`);
   }
 
-  // ✅ КРИТИЧЕСКИ ВАЖНО: BUDGET FILTER
+  // ✅ КРИТИЧЕСКИ ВАЖНО: BUDGET FILTER - ТОЛЬКО ДЛЯ ПРОДАЖИ ИЛИ БЕЗ ДАТ
   if (filters.budget && filters.budget.max) {
     let budgetMax = filters.budget.max;
     const tolerance = filters.budget.tolerance || 0;
 
-    // Применяем погрешность
     if (tolerance > 0) {
       budgetMax = budgetMax * (1 + tolerance / 100);
       logger.info(`Budget tolerance: ${tolerance}% → new max: ${budgetMax}`);
     }
 
-    // Конвертируем в THB если нужно
     if (filters.budget.currency && filters.budget.currency !== 'THB') {
       const originalMax = budgetMax;
       budgetMax = aiSearchService.convertToTHB(budgetMax, filters.budget.currency);
@@ -966,21 +959,18 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
 
     logger.info(`=== BUDGET FILTER: max ${budgetMax} THB ===`);
 
-    // Для продажи - проверяем sale_price
+    // ✅ ДЛЯ ПРОДАЖИ - фильтруем по sale_price в SQL
     if (filters.deal_type === 'sale') {
       whereConditions.push('(p.sale_price IS NOT NULL AND p.sale_price <= ?)');
       queryParams.push(budgetMax);
-      logger.info(`Sale price filter: <= ${budgetMax} THB`);
+      logger.info(`Sale price filter in SQL: <= ${budgetMax} THB`);
     } 
-
-    // ✅ ДЛЯ АРЕНДЫ С ДАТАМИ - НЕ ФИЛЬТРУЕМ В SQL (будем фильтровать после расчета)
+    // ✅ ДЛЯ АРЕНДЫ БЕЗ ДАТ - грубый фильтр по месячным/годовым
     else if (filters.deal_type === 'rent' || !filters.deal_type) {
       if (!filters.dates?.check_in || !filters.dates?.check_out) {
-        // Только если НЕТ конкретных дат - фильтруем по месячным ценам
-        logger.info(`Monthly/yearly price filter: <= ${budgetMax} THB/month`);
-
+        logger.info(`Rental without dates: applying rough SQL filter`);
         whereConditions.push(`(
-          (p.year_price IS NOT NULL AND p.year_price / 12 <= ?) OR
+          (p.year_price IS NOT NULL AND p.year_price <= ?) OR
           EXISTS (
             SELECT 1 FROM property_pricing_monthly ppm
             WHERE ppm.property_id = p.id
@@ -989,11 +979,11 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
         )`);
         queryParams.push(budgetMax, budgetMax);
       } else {
-        // ✅ ЕСЛИ ЕСТЬ ДАТЫ - пропускаем SQL фильтр, будем фильтровать после расчета
-        logger.info(`⚠️ Budget filter for dates will be applied AFTER price calculation`);
+        // ✅ ДЛЯ АРЕНДЫ С ДАТАМИ - НЕ фильтруем в SQL, будем после расчета
+        logger.info(`⚠️ Rental with dates: budget filter will be applied AFTER price calculation`);
       }
     }
-  }  // ✅ ДОБАВЛЕНА ЗАКРЫВАЮЩАЯ СКОБКА для if (filters.budget && filters.budget.max)
+  }
 
   const whereClause = whereConditions.length > 0
     ? `WHERE ${whereConditions.join(' AND ')}` 
@@ -1041,8 +1031,7 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
   let properties = await db.query<any>(query, queryParams);
   logger.info(`Base query returned ${properties.length} properties`);
 
-  // ✅ КРИТИЧЕСКИ ВАЖНО: FEATURES FILTER
-  // Сначала фильтруем по ОБЯЗАТЕЛЬНЫМ особенностям (must_have)
+  // FEATURES FILTER
   if (filters.must_have_features && filters.must_have_features.length > 0) {
     logger.info(`=== FILTERING BY MUST-HAVE FEATURES: ${filters.must_have_features.join(', ')} ===`);
     
@@ -1051,7 +1040,6 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
     for (const property of properties) {
       let hasAllMustHaveFeatures = true;
       
-      // Проверяем наличие КАЖДОЙ обязательной особенности
       for (const requiredFeature of filters.must_have_features) {
         const hasFeature = await db.queryOne<any>(
           `SELECT 1 FROM property_features 
@@ -1076,11 +1064,9 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
     logger.info(`After MUST-HAVE features filter: ${properties.length} properties`);
   }
 
-  // Затем проверяем ЖЕЛАЕМЫЕ особенности (для сортировки, не для исключения)
   if (filters.features && filters.features.length > 0) {
     logger.info(`=== CHECKING DESIRED FEATURES: ${filters.features.join(', ')} ===`);
     
-    // Для каждого объекта считаем количество совпадений и недостающие особенности
     for (const property of properties) {
       let matchedFeaturesCount = 0;
       const missingFeatures: string[] = [];
@@ -1100,26 +1086,23 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
         }
       }
       
-      // Добавляем метаданные к объекту
       property.features_match_score = matchedFeaturesCount;
       property.features_match_total = filters.features.length;
       property.missing_features = missingFeatures;
       
-      logger.info(`Property ${property.id}: ${matchedFeaturesCount}/${filters.features.length} features matched. Missing: ${missingFeatures.join(', ') || 'none'}`);
+      logger.info(`Property ${property.id}: ${matchedFeaturesCount}/${filters.features.length} features matched`);
     }
     
-    // ✅ СОРТИРОВКА ПО КОЛИЧЕСТВУ СОВПАДАЮЩИХ ОСОБЕННОСТЕЙ
     properties.sort((a, b) => {
       const scoreA = a.features_match_score || 0;
       const scoreB = b.features_match_score || 0;
-      return scoreB - scoreA; // От большего к меньшему
+      return scoreB - scoreA;
     });
     
     logger.info(`Properties sorted by features match score`);
   }
 
-  // ✅ КРИТИЧЕСКИ ВАЖНО: DATE AVAILABILITY FILTER
-  // Фильтруем по доступности на даты
+  // DATE AVAILABILITY FILTER
   let filteredProperties = properties;
   
   if (filters.dates && filters.dates.check_in && filters.dates.check_out) {
@@ -1135,14 +1118,13 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
     logger.info(`After date filter: ${filteredProperties.length} properties`);
   }
 
-  // ✅ ОБРАБОТКА FLEXIBLE DATES (duration + search_window)
+  // FLEXIBLE DATES
   if (filters.flexible_dates) {
     logger.info('=== PROCESSING FLEXIBLE DATES ===');
-    logger.info(`Looking for ${filters.flexible_dates.duration}-night windows in period ${filters.flexible_dates.search_window_start} to ${filters.flexible_dates.search_window_end}`);
+    logger.info(`Looking for ${filters.flexible_dates.duration}-night windows`);
     
     const { duration, search_window_start, search_window_end } = filters.flexible_dates;
     
-    // Для каждого объекта найдем доступные окна
     const propertiesWithWindows: any[] = [];
     
     for (const property of filteredProperties) {
@@ -1154,7 +1136,6 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
       );
       
       if (availableWindows.length > 0) {
-        // Берем первое доступное окно с минимальной ценой
         const bestWindow = availableWindows.reduce((best, current) => {
           if (!best.price) return current;
           if (!current.price) return best;
@@ -1164,21 +1145,17 @@ private async executeSearch(filters: SearchFilters, userId: number): Promise<{ p
         propertiesWithWindows.push({
           ...property,
           available_windows: availableWindows,
-          // Устанавливаем даты из лучшего окна для расчета цены
           check_in: bestWindow.check_in,
           check_out: bestWindow.check_out,
           total_available_windows: availableWindows.length
         });
         
-        logger.info(`✓ Property ${property.id} has ${availableWindows.length} available windows, best: ${bestWindow.check_in} to ${bestWindow.check_out}`);
-      } else {
-        logger.info(`✗ Property ${property.id} has NO available ${duration}-night windows in the specified period`);
+        logger.info(`✓ Property ${property.id} has ${availableWindows.length} available windows`);
       }
     }
     
     filteredProperties = propertiesWithWindows;
-    
-    logger.info(`=== FLEXIBLE DATES COMPLETE: ${filteredProperties.length} properties with available windows ===`);
+    logger.info(`=== FLEXIBLE DATES COMPLETE: ${filteredProperties.length} properties ===`);
   }
 
   // Добавляем URL изображений
@@ -1337,7 +1314,16 @@ private async calculatePricesForProperties(
         checkOut
       );
 
-      logger.info(`Property ${property.id} price for ${checkIn} to ${checkOut}: ${calculatedPrice?.total_price || 'N/A'} THB`);
+      if (calculatedPrice) {
+        logger.info(`Property ${property.id} (${property.property_number}) price: ${calculatedPrice.total_price} THB`);
+        
+        // ✅ ЛОГИРОВАНИЕ РАСЧЕТА (опционально выводить в лог)
+        if (calculatedPrice.calculation_log) {
+          calculatedPrice.calculation_log.forEach((line: string) => logger.debug(line));
+        }
+      } else {
+        logger.warn(`Property ${property.id} (${property.property_number}): NO PRICE CALCULATED`);
+      }
     } else {
       // Если даты не указаны - показываем примерную месячную цену
       const today = new Date();
@@ -1353,19 +1339,28 @@ private async calculatePricesForProperties(
 
     result.push({
       ...property,
-      // Форматируем числа без .00
       bedrooms: property.bedrooms ? Math.round(property.bedrooms) : null,
       bathrooms: property.bathrooms ? Math.round(property.bathrooms) : null,
       sale_price: property.sale_price ? Math.round(property.sale_price) : null,
       year_price: property.year_price ? Math.round(property.year_price) : null,
       calculated_price: calculatedPrice,
-      // Сохраняем информацию о доступных окнах если есть
       available_windows: property.available_windows || [],
       total_available_windows: property.total_available_windows || 0
     });
   }
 
   logger.info(`Price calculation complete for ${result.length} properties`);
+
+  // ✅ СОРТИРУЕМ: объекты с yearly_only_warning в конец
+  result.sort((a, b) => {
+    const aHasWarning = a.calculated_price?.yearly_only_warning || false;
+    const bHasWarning = b.calculated_price?.yearly_only_warning || false;
+    
+    if (aHasWarning && !bHasWarning) return 1;
+    if (!aHasWarning && bHasWarning) return -1;
+    
+    return 0;
+  });
 
   return result;
 }

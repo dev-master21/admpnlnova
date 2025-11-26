@@ -19,8 +19,9 @@ interface CalculatedPrice {
   daily_average: number;
   monthly_equivalent: number;
   breakdown: PriceBreakdown[];
-  pricing_method: 'seasonal' | 'monthly' | 'yearly' | 'mixed';
-  available_periods?: AvailablePeriod[];
+  pricing_method: 'seasonal' | 'monthly' | 'yearly' | 'combined';
+  yearly_only_warning?: boolean;
+  calculation_log?: string[];
 }
 
 interface AvailablePeriod {
@@ -31,246 +32,465 @@ interface AvailablePeriod {
   daily_average: number;
 }
 
-class PriceCalculationService {
-/**
- * ГЛАВНЫЙ МЕТОД - рассчитать цену для объекта на период
- */
-async calculatePrice(
-  propertyId: number,
-  checkIn: string,
-  checkOut: string
-): Promise<CalculatedPrice | null> {
-  try {
-    const start = new Date(checkIn);
-    const end = new Date(checkOut);
-    const nights = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (nights <= 0) {
-      logger.warn(`Invalid nights: ${nights}`);
-      return null;
-    }
-
-    logger.info(`=== CALCULATING PRICE FOR PROPERTY ${propertyId} ===`);
-    logger.info(`Period: ${checkIn} to ${checkOut} (${nights} nights)`);
-
-    // ✅ Проверяем что объект существует
-    const propertyExists = await db.queryOne<any>(
-      'SELECT id, property_number, property_type FROM properties WHERE id = ?',
-      [propertyId]
-    );
-
-    if (!propertyExists) {
-      logger.error(`❌ Property ${propertyId} NOT FOUND in database!`);
-      return null;
-    }
-
-    logger.info(`✓ Property found: #${propertyExists.property_number} (${propertyExists.property_type})`);
-
-    // Загружаем все данные о ценах
-    const [seasonalPrices, monthlyPrices, yearPrice] = await Promise.all([
-      this.getSeasonalPrices(propertyId),
-      this.getMonthlyPrices(propertyId),
-      this.getYearPrice(propertyId)
-    ]);
-
-    logger.info(`=== PROPERTY ${propertyId} PRICING DATA (AFTER CONVERSION) ===`);
-    logger.info(`Seasonal prices count: ${seasonalPrices.length}`);
-    
-    // ✅ Компактное логирование сезонных цен
-    if (seasonalPrices.length > 0) {
-      logger.info(`Seasonal prices summary:`, seasonalPrices.map(p => ({
-        season: p.season_type,
-        dates: `${p.start_date_recurring} to ${p.end_date_recurring}`,
-        price: `${p.price_per_night} THB/night (type: ${typeof p.price_per_night})`,
-        min_nights: p.minimum_nights
-      })));
-    }
-    
-    logger.info(`Monthly prices count: ${monthlyPrices.length}`);
-    
-    // ✅ Компактное логирование месячных цен
-    if (monthlyPrices.length > 0) {
-      logger.info(`Monthly prices summary:`, monthlyPrices.map(p => ({
-        month: p.month_number,
-        price: `${p.price_per_month} THB/month (type: ${typeof p.price_per_month})`,
-        min_days: p.minimum_days
-      })));
-    }
-    
-    logger.info(`Year price: ${yearPrice || 'not set'} ${yearPrice ? `(type: ${typeof yearPrice})` : ''}`);
-
-    // Если вообще нет никаких цен - возвращаем null
-    if (seasonalPrices.length === 0 && monthlyPrices.length === 0 && !yearPrice) {
-      logger.warn(`❌ NO PRICING DATA AVAILABLE for property ${propertyId}`);
-      return null;
-    }
-
-    // Определяем метод расчета
-    if (nights >= 365) {
-      // Годовой контракт
-      logger.info(`📅 Using YEARLY pricing logic for ${nights} nights`);
-      return await this.calculateYearlyPrice(nights, seasonalPrices, monthlyPrices, yearPrice);
-    } else if (nights >= 28) {
-      // Месячная аренда - приоритет месячным ценам
-      logger.info(`📅 Using LONG-TERM pricing logic for ${nights} nights`);
-      return await this.calculateLongTermPrice(start, end, nights, monthlyPrices, seasonalPrices, yearPrice);
-    } else {
-      // Краткосрочная аренда - приоритет сезонным ценам
-      logger.info(`📅 Using SHORT-TERM pricing logic for ${nights} nights`);
-      return await this.calculateShortTermPrice(start, end, nights, seasonalPrices, monthlyPrices);
-    }
-  } catch (error) {
-    logger.error(`❌ Price calculation error for property ${propertyId}:`, error);
-    return null;
-  }
+// ✅ ТИПЫ ПЕРИОДОВ
+enum PeriodType {
+  SHORT_TERM = 'SHORT_TERM',        // 1-26 дней
+  MONTHLY_EXACT = 'MONTHLY_EXACT',  // 27-31 день
+  LONG_TERM = 'LONG_TERM',          // 32-364 дня
+  YEARLY = 'YEARLY'                 // 365+ дней
 }
 
+class PriceCalculationService {
+  /**
+   * ========================================
+   * ГЛАВНЫЙ МЕТОД - рассчитать цену
+   * ========================================
+   */
+  async calculatePrice(
+    propertyId: number,
+    checkIn: string,
+    checkOut: string
+  ): Promise<CalculatedPrice | null> {
+    try {
+      const start = new Date(checkIn);
+      const end = new Date(checkOut);
+      const nights = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (nights <= 0) {
+        logger.warn(`Invalid nights: ${nights}`);
+        return null;
+      }
+
+      const calculationLog: string[] = [];
+      calculationLog.push(`=== РАСЧЕТ ДЛЯ ОБЪЕКТА ${propertyId} ===`);
+      calculationLog.push(`Период: ${checkIn} → ${checkOut} (${nights} ночей)`);
+
+      // Проверяем существование объекта
+      const propertyExists = await db.queryOne<any>(
+        'SELECT id, property_number, property_type FROM properties WHERE id = ?',
+        [propertyId]
+      );
+
+      if (!propertyExists) {
+        logger.error(`❌ Property ${propertyId} NOT FOUND`);
+        return null;
+      }
+
+      calculationLog.push(`Объект: #${propertyExists.property_number} (${propertyExists.property_type})`);
+
+      // Загружаем все данные о ценах
+      const [seasonalPrices, monthlyPrices, yearPrice] = await Promise.all([
+        this.getSeasonalPrices(propertyId),
+        this.getMonthlyPrices(propertyId),
+        this.getYearPrice(propertyId)
+      ]);
+
+      // ✅ Компактное логирование данных о ценах
+      calculationLog.push(`Сезонных цен: ${seasonalPrices.length}`);
+      if (seasonalPrices.length > 0) {
+        calculationLog.push(`  Сезоны: ${seasonalPrices.map(p => 
+          `${p.season_type} (${p.start_date_recurring}→${p.end_date_recurring}: ${p.price_per_night} THB)`
+        ).join(', ')}`);
+      }
+
+      calculationLog.push(`Месячных цен: ${monthlyPrices.length}`);
+      if (monthlyPrices.length > 0) {
+        calculationLog.push(`  Месяцы: ${monthlyPrices.map(p => 
+          `${p.month_number}=${p.price_per_month} THB`
+        ).join(', ')}`);
+      }
+
+      calculationLog.push(`Годовая цена: ${yearPrice ? `${yearPrice} THB/мес` : 'нет'}`);
+
+      // Если вообще нет никаких цен
+      if (seasonalPrices.length === 0 && monthlyPrices.length === 0 && !yearPrice) {
+        logger.warn(`❌ NO PRICING DATA for property ${propertyId}`);
+        return null;
+      }
+
+      // ✅ ОПРЕДЕЛЯЕМ ТИП ПЕРИОДА
+      const periodType = this.determinePeriodType(nights);
+      calculationLog.push(`Тип периода: ${periodType}`);
+
+      // ✅ ОПРЕДЕЛЯЕМ yearly_only_warning
+      const hasOnlyYearPrice = !!(
+        yearPrice && 
+        seasonalPrices.length === 0 && 
+        monthlyPrices.length === 0 && 
+        nights < 365
+      );
+
+      if (hasOnlyYearPrice) {
+        calculationLog.push(`⚠️ ТОЛЬКО годовая цена для периода < 365 дней`);
+      }
+
+      // ✅ ВЫБИРАЕМ МЕТОД РАСЧЕТА ПО ПРИОРИТЕТУ
+      let result: CalculatedPrice | null = null;
+
+      switch (periodType) {
+        case PeriodType.SHORT_TERM:
+          result = await this.calculateShortTerm(
+            start, end, nights, seasonalPrices, monthlyPrices, yearPrice, calculationLog
+          );
+          break;
+
+        case PeriodType.MONTHLY_EXACT:
+          result = await this.calculateMonthlyExact(
+            start, end, nights, monthlyPrices, seasonalPrices, yearPrice, calculationLog
+          );
+          break;
+
+        case PeriodType.LONG_TERM:
+          result = await this.calculateLongTerm(
+            start, end, nights, monthlyPrices, seasonalPrices, yearPrice, calculationLog
+          );
+          break;
+
+        case PeriodType.YEARLY:
+          result = await this.calculateYearly(
+            nights, monthlyPrices, seasonalPrices, yearPrice, calculationLog
+          );
+          break;
+      }
+
+      if (result) {
+        result.yearly_only_warning = hasOnlyYearPrice;
+        result.calculation_log = calculationLog;
+        
+        // Выводим calculation_log в консоль для отладки
+        logger.info(`=== CALCULATION LOG FOR PROPERTY ${propertyId} ===`);
+        calculationLog.forEach((line: string) => logger.info(line));
+      }
+
+      return result;
+    } catch (error) {
+      logger.error(`❌ Price calculation error for property ${propertyId}:`, error);
+      return null;
+    }
+  }
 
   /**
-   * Найти все доступные периоды для заданного количества ночей
+   * ========================================
+   * МЕТОДЫ РАСЧЕТА ПО ТИПАМ ПЕРИОДОВ
+   * ========================================
    */
-async findAvailablePeriods(
-  propertyId: number,
-  nights: number,
-  monthNumber?: number,
-  year?: number
-): Promise<AvailablePeriod[]> {
-  try {
-    logger.info(`Finding available ${nights}-night periods for property ${propertyId}`);
 
-    // Определяем диапазон поиска
-    const searchStart = monthNumber && year 
-      ? new Date(year, monthNumber - 1, 1)
-      : new Date();
-    
-    const searchEnd = monthNumber && year
-      ? new Date(year, monthNumber, 0) // последний день месяца
-      : new Date(new Date().setMonth(new Date().getMonth() + 3)); // 3 месяца вперед
-
-    logger.info(`Search range: ${searchStart.toISOString().split('T')[0]} to ${searchEnd.toISOString().split('T')[0]}`);
-
-    // Получаем все заблокированные даты
-    const blockedDates = await db.query<any>(
-      `SELECT blocked_date 
-       FROM property_calendar 
-       WHERE property_id = ? 
-       AND blocked_date BETWEEN ? AND ?
-       ORDER BY blocked_date`,
-      [propertyId, searchStart.toISOString().split('T')[0], searchEnd.toISOString().split('T')[0]]
-    );
-
-    const blockedSet = new Set(blockedDates.map((d: any) => d.blocked_date));
-
-    // Ищем свободные периоды
-    const availablePeriods: AvailablePeriod[] = [];
-    const currentDate = new Date(searchStart);
-    
-    // ✅ ОПТИМИЗАЦИЯ: Ограничение на количество проверок
-    let checksCount = 0;
-    const MAX_CHECKS = 100; // Не более 100 проверок
-
-    while (currentDate <= searchEnd && checksCount < MAX_CHECKS) {
-      checksCount++;
-      
-      const checkIn = currentDate.toISOString().split('T')[0];
-      const checkOutDate = new Date(currentDate);
-      checkOutDate.setDate(checkOutDate.getDate() + nights);
-      const checkOut = checkOutDate.toISOString().split('T')[0];
-
-      // Проверяем все даты в периоде
-      let isAvailable = true;
-      const testDate = new Date(currentDate);
-      
-      for (let i = 0; i < nights; i++) {
-        const dateStr = testDate.toISOString().split('T')[0];
-        if (blockedSet.has(dateStr)) {
-          isAvailable = false;
-          break;
-        }
-        testDate.setDate(testDate.getDate() + 1);
-      }
-
-      if (isAvailable && checkOutDate <= searchEnd) {
-        // Рассчитываем цену для этого периода
-        const price = await this.calculatePrice(propertyId, checkIn, checkOut);
-        
-        if (price && price.total_price > 0) {
-          availablePeriods.push({
-            check_in: checkIn,
-            check_out: checkOut,
-            nights,
-            total_price: price.total_price,
-            daily_average: price.daily_average
-          });
-        }
-      }
-
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-
-    logger.info(`Found ${availablePeriods.length} available periods after ${checksCount} checks`);
-    
-    // Сортируем по цене (от дешевых к дорогим)
-    availablePeriods.sort((a, b) => a.total_price - b.total_price);
-
-    // ✅ Возвращаем только первые 20 для экономии времени
-    return availablePeriods.slice(0, 20);
-  } catch (error) {
-    logger.error('Find available periods error:', error);
-    return [];
+  /**
+   * Определить тип периода
+   */
+  private determinePeriodType(nights: number): PeriodType {
+    if (nights <= 26) return PeriodType.SHORT_TERM;
+    if (nights >= 27 && nights <= 31) return PeriodType.MONTHLY_EXACT;
+    if (nights >= 32 && nights <= 364) return PeriodType.LONG_TERM;
+    return PeriodType.YEARLY;
   }
-}
 
-/**
- * Расчет для краткосрочной аренды (< 28 дней) - приоритет сезонным ценам
- */
-/**
- * Расчет для краткосрочной аренды (< 28 дней) - приоритет сезонным ценам
- */
-private async calculateShortTermPrice(
-  start: Date,
-  end: Date,
-  nights: number,
-  seasonalPrices: any[],
-  monthlyPrices: any[]
-): Promise<CalculatedPrice | null> {
-  logger.info('Using SHORT-TERM pricing (seasonal priority)');
+  /**
+   * РАСЧЕТ ДЛЯ 1-26 ДНЕЙ (SHORT_TERM)
+   * Приоритет: Сезонные → Месячные → Годовые
+   */
+  private async calculateShortTerm(
+    start: Date,
+    end: Date,
+    nights: number,
+    seasonalPrices: any[],
+    monthlyPrices: any[],
+    yearPrice: number | null,
+    log: string[]
+  ): Promise<CalculatedPrice | null> {
+    log.push(`--- SHORT_TERM (1-26 дней) ---`);
 
-  if (seasonalPrices.length === 0) {
-    logger.warn('No seasonal prices, trying monthly fallback...');
-    
-    if (monthlyPrices.length > 0) {
-      return await this.calculateFromMonthlyPrices(start, end, nights, monthlyPrices);
+    // 1. Пытаемся по сезонным ценам
+    if (seasonalPrices.length > 0) {
+      log.push(`Попытка #1: Сезонные цены`);
+      const result = await this.calculateFromSeasonalPrices(start, end, nights, seasonalPrices, log);
+      if (result) {
+        log.push(`✅ Успешно рассчитано по сезонным ценам`);
+        return result;
+      }
     }
-    
-    logger.error('No pricing data available at all!');
+
+    // 2. Пытаемся по месячным ценам (делим на дни)
+    if (monthlyPrices.length > 0) {
+      log.push(`Попытка #2: Месячные цены (деление на дни)`);
+      const result = await this.calculateFromMonthlyDaily(start, end, nights, monthlyPrices, log);
+      if (result) {
+        log.push(`✅ Успешно рассчитано по месячным ценам`);
+        return result;
+      }
+    }
+
+    // 3. Пытаемся по годовой цене
+    if (yearPrice) {
+      log.push(`Попытка #3: Годовая цена`);
+      const result = this.calculateFromYearPrice(nights, yearPrice, log);
+      log.push(`✅ Успешно рассчитано по годовой цене`);
+      return result;
+    }
+
+    log.push(`❌ Не удалось рассчитать SHORT_TERM`);
     return null;
   }
 
+  /**
+   * РАСЧЕТ ДЛЯ 27-31 ДЕНЬ (MONTHLY_EXACT)
+   * Приоритет: Месячные → Сезонные → Годовые
+   */
+  private async calculateMonthlyExact(
+    start: Date,
+    end: Date,
+    nights: number,
+    monthlyPrices: any[],
+    seasonalPrices: any[],
+    yearPrice: number | null,
+    log: string[]
+  ): Promise<CalculatedPrice | null> {
+    log.push(`--- MONTHLY_EXACT (27-31 день) ---`);
 
-  // Заполняем пробелы в сезонных ценах
-  const completePrices = this.fillSeasonalGaps(seasonalPrices);
+    const month = start.getMonth() + 1;
 
-  let totalPrice = 0;
-  const breakdown: PriceBreakdown[] = [];
-  const currentDate = new Date(start);
-  let currentSeason: string | null = null;
-  let currentSeasonNights = 0;
-  let currentSeasonPrice = 0;
-  let currentPricePerNight = 0;
+    // 1. Пытаемся найти месячную цену
+    if (monthlyPrices.length > 0) {
+      log.push(`Попытка #1: Месячная цена для месяца ${month}`);
+      const monthPrice = monthlyPrices.find(p => p.month_number === month);
+      
+      if (monthPrice) {
+        const totalPrice = monthPrice.price_per_month;
+        log.push(`✅ Найдена месячная цена: ${totalPrice} THB (ПОЛНАЯ, БЕЗ деления)`);
+
+        return {
+          total_price: Math.round(totalPrice),
+          currency: 'THB',
+          nights,
+          daily_average: Math.round(totalPrice / nights),
+          monthly_equivalent: Math.round(totalPrice),
+          breakdown: [{
+            period: `Month ${month}`,
+            nights,
+            price_per_month: Math.round(totalPrice),
+            total: Math.round(totalPrice),
+            month_number: month
+          }],
+          pricing_method: 'monthly'
+        };
+      }
+    }
+
+    // 2. Если есть сезонные и годовая - используем сезонные
+    if (seasonalPrices.length > 0 && yearPrice) {
+      log.push(`Попытка #2: Сезонные цены (есть годовая, но приоритет у сезонных)`);
+      const result = await this.calculateFromSeasonalPrices(start, end, nights, seasonalPrices, log);
+      if (result) {
+        log.push(`✅ Успешно рассчитано по сезонным ценам`);
+        return result;
+      }
+    }
+
+    // 3. Если только сезонные (без годовой)
+    if (seasonalPrices.length > 0) {
+      log.push(`Попытка #3: Сезонные цены (без годовой)`);
+      const result = await this.calculateFromSeasonalPrices(start, end, nights, seasonalPrices, log);
+      if (result) {
+        log.push(`✅ Успешно рассчитано по сезонным ценам`);
+        return result;
+      }
+    }
+
+    // 4. Годовая цена
+    if (yearPrice) {
+      log.push(`Попытка #4: Годовая цена`);
+      const result = this.calculateFromYearPrice(nights, yearPrice, log);
+      log.push(`✅ Успешно рассчитано по годовой цене`);
+      return result;
+    }
+
+    log.push(`❌ Не удалось рассчитать MONTHLY_EXACT`);
+    return null;
+  }
+
+  /**
+   * РАСЧЕТ ДЛЯ 32-364 ДНЕЙ (LONG_TERM)
+   * Приоритет: Месячные (пропорционально) → Сезонные → Годовые
+   */
+  private async calculateLongTerm(
+    start: Date,
+    end: Date,
+    nights: number,
+    monthlyPrices: any[],
+    seasonalPrices: any[],
+    yearPrice: number | null,
+    log: string[]
+  ): Promise<CalculatedPrice | null> {
+    log.push(`--- LONG_TERM (32-364 дня) ---`);
+
+    // 1. Пытаемся по месячным ценам (пропорционально)
+    if (monthlyPrices.length > 0) {
+      log.push(`Попытка #1: Месячные цены (пропорциональный расчет)`);
+      const result = await this.calculateLongTermFromMonthly(start, end, nights, monthlyPrices, log);
+      if (result) {
+        log.push(`✅ Успешно рассчитано по месячным ценам`);
+        return result;
+      }
+    }
+
+    // 2. Если есть сезонные и годовая - используем сезонные
+    if (seasonalPrices.length > 0 && yearPrice) {
+      log.push(`Попытка #2: Сезонные цены (есть годовая, но приоритет у сезонных)`);
+      const result = await this.calculateFromSeasonalPrices(start, end, nights, seasonalPrices, log);
+      if (result) {
+        log.push(`✅ Успешно рассчитано по сезонным ценам`);
+        return result;
+      }
+    }
+
+    // 3. Только сезонные
+    if (seasonalPrices.length > 0) {
+      log.push(`Попытка #3: Сезонные цены (без годовой)`);
+      const result = await this.calculateFromSeasonalPrices(start, end, nights, seasonalPrices, log);
+      if (result) {
+        log.push(`✅ Успешно рассчитано по сезонным ценам`);
+        return result;
+      }
+    }
+
+    // 4. Годовая цена
+    if (yearPrice) {
+      log.push(`Попытка #4: Годовая цена`);
+      const result = this.calculateFromYearPrice(nights, yearPrice, log);
+      log.push(`✅ Успешно рассчитано по годовой цене`);
+      return result;
+    }
+
+    log.push(`❌ Не удалось рассчитать LONG_TERM`);
+    return null;
+  }
+
+  /**
+   * РАСЧЕТ ДЛЯ 365+ ДНЕЙ (YEARLY)
+   */
+  private async calculateYearly(
+    nights: number,
+    monthlyPrices: any[],
+    seasonalPrices: any[],
+    yearPrice: number | null,
+    log: string[]
+  ): Promise<CalculatedPrice | null> {
+    log.push(`--- YEARLY (365+ дней) ---`);
+
+    // 1. year_price
+    if (yearPrice) {
+      log.push(`Попытка #1: Годовая цена`);
+      const monthlyPrice = yearPrice;
+      const yearlyTotal = yearPrice * 12;
+      const totalPrice = (nights / 365) * yearlyTotal;
+
+      log.push(`✅ Месячная цена: ${monthlyPrice} THB`);
+      log.push(`✅ Годовая стоимость: ${yearlyTotal} THB`);
+
+      return {
+        total_price: Math.round(totalPrice),
+        currency: 'THB',
+        nights,
+        daily_average: Math.round(yearlyTotal / 365),
+        monthly_equivalent: Math.round(monthlyPrice),
+        breakdown: [{
+          period: 'yearly_contract',
+          nights,
+          price_per_month: Math.round(monthlyPrice),
+          total: Math.round(totalPrice)
+        }],
+        pricing_method: 'yearly'
+      };
+    }
+
+    // 2. Минимальная месячная * 12
+    if (monthlyPrices.length > 0) {
+      log.push(`Попытка #2: Минимальная месячная цена * 12`);
+      const minMonthlyPrice = Math.min(...monthlyPrices.map((p: any) => p.price_per_month));
+      const yearlyTotal = minMonthlyPrice * 12;
+      const totalPrice = (nights / 365) * yearlyTotal;
+
+      log.push(`✅ Минимальная месячная: ${minMonthlyPrice} THB`);
+
+      return {
+        total_price: Math.round(totalPrice),
+        currency: 'THB',
+        nights,
+        daily_average: Math.round(yearlyTotal / 365),
+        monthly_equivalent: Math.round(minMonthlyPrice),
+        breakdown: [{
+          period: 'yearly_from_monthly',
+          nights,
+          price_per_month: Math.round(minMonthlyPrice),
+          total: Math.round(totalPrice)
+        }],
+        pricing_method: 'monthly'
+      };
+    }
+
+    // 3. Средняя из сезонных
+    if (seasonalPrices.length > 0) {
+      log.push(`Попытка #3: Средняя из сезонных цен`);
+      const avgDailyPrice = this.calculateYearlyAverageFromSeasonal(seasonalPrices);
+      const yearlyTotal = avgDailyPrice * 365;
+      const monthlyEquivalent = yearlyTotal / 12;
+      const totalPrice = (nights / 365) * yearlyTotal;
+
+      log.push(`✅ Средняя дневная: ${avgDailyPrice} THB`);
+
+      return {
+        total_price: Math.round(totalPrice),
+        currency: 'THB',
+        nights,
+        daily_average: Math.round(avgDailyPrice),
+        monthly_equivalent: Math.round(monthlyEquivalent),
+        breakdown: [{
+          period: 'yearly_from_seasonal',
+          nights,
+          price_per_month: Math.round(monthlyEquivalent),
+          total: Math.round(totalPrice)
+        }],
+        pricing_method: 'seasonal'
+      };
+    }
+
+    log.push(`❌ Не удалось рассчитать YEARLY`);
+    return null;
+  }
+
+  /**
+   * ========================================
+   * МЕТОДЫ РАСЧЕТА ПО ИСТОЧНИКАМ ЦЕН
+   * ========================================
+   */
+
+  /**
+   * РАСЧЕТ ПО СЕЗОННЫМ ЦЕНАМ (с обработкой per_night и per_period)
+   */
+  private async calculateFromSeasonalPrices(
+    start: Date,
+    end: Date,
+    nights: number,
+    seasonalPrices: any[],
+    log: string[]
+  ): Promise<CalculatedPrice | null> {
+    log.push(`  → Расчет по сезонным ценам...`);
+
+    let totalPrice = 0;
+    const currentDate = new Date(start);
+    
+    let coveredNights = 0;
+    let uncoveredDays: Date[] = [];
 
     while (currentDate < end) {
       const mmdd = this.getMMDD(currentDate);
-      const season = this.findSeasonForDate(mmdd, completePrices);
-    
+      const season = this.findSeasonForDate(mmdd, seasonalPrices);
+
       if (season) {
-        // ✅ Явно конвертируем в число и проверяем
         const pricePerNight = parseFloat(String(season.price_per_night)) || 0;
-        
-        // ✅ НОВОЕ: Если цена 0 - это "по запросу", пропускаем такие объекты
+
         if (pricePerNight === 0) {
-          logger.warn(`Price on request for date ${mmdd} in season ${season.season_type} - skipping property`);
-          // Возвращаем специальный результат "цена по запросу"
+          log.push(`  ⚠️ Цена по запросу для даты ${mmdd}`);
           return {
             total_price: 0,
             currency: 'THB',
@@ -286,128 +506,248 @@ private async calculateShortTermPrice(
             pricing_method: 'seasonal'
           };
         }
-        
-        totalPrice += pricePerNight;
-        
-        logger.debug(`Date ${mmdd}: season=${season.season_type}, price=${pricePerNight}, total so far: ${totalPrice}`);
-    
-        if (season.season_type === currentSeason && pricePerNight === currentPricePerNight) {
-          currentSeasonNights++;
-          currentSeasonPrice += pricePerNight;
+
+        // ✅ ОБРАБОТКА per_night vs per_period
+        if (season.pricing_type === 'per_period') {
+          // Цена за весь период - нужно вычислить дневную
+          const seasonStart = this.parseRecurringDate(season.start_date_recurring, currentDate.getFullYear());
+          const seasonEnd = this.parseRecurringDate(season.end_date_recurring, currentDate.getFullYear());
+          const seasonDays = this.getDaysBetween(seasonStart, seasonEnd) + 1;
+          const dailyPrice = pricePerNight / seasonDays;
+
+          log.push(`  → ${mmdd}: per_period (${pricePerNight} THB / ${seasonDays} дней = ${dailyPrice.toFixed(2)} THB/день)`);
+          totalPrice += dailyPrice;
         } else {
-          if (currentSeason) {
-            breakdown.push({
-              period: currentSeason,
-              nights: currentSeasonNights,
-              price_per_night: currentPricePerNight,
-              total: currentSeasonPrice,
-              season_type: currentSeason
-            });
-          }
-      
-          currentSeason = season.season_type;
-          currentSeasonNights = 1;
-          currentSeasonPrice = pricePerNight;
-          currentPricePerNight = pricePerNight;
+          // per_night - цена за ночь
+          log.push(`  → ${mmdd}: per_night (${pricePerNight} THB/ночь)`);
+          totalPrice += pricePerNight;
         }
+
+        coveredNights++;
       } else {
-        logger.warn(`No season found for date ${mmdd} - checking all seasons again`);
-        
-        // Дополнительная отладка - выводим все сезоны
-        completePrices.forEach((s: any) => {
-          logger.debug(`  Season: ${s.season_type}, dates: ${s.start_date_recurring} to ${s.end_date_recurring}, price: ${s.price_per_night}`);
-        });
+        log.push(`  ⚠️ Нет сезона для ${mmdd}`);
+        uncoveredDays.push(new Date(currentDate));
       }
-  
+
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
-  // Последний сезон
-  if (currentSeason) {
-    breakdown.push({
-      period: currentSeason,
-      nights: currentSeasonNights,
-      price_per_night: currentPricePerNight,
-      total: currentSeasonPrice,
-      season_type: currentSeason
-    });
-  }
+    // ✅ ОБРАБОТКА НЕДОСТАЮЩИХ ДНЕЙ
+    if (uncoveredDays.length > 0) {
+      log.push(`  ⚠️ Недостающих дней: ${uncoveredDays.length}`);
+      
+      // Находим ближайший сезон и вычисляем его суточную цену
+      const nearestSeasonPrice = this.findNearestSeasonDailyPrice(seasonalPrices, uncoveredDays[0], log);
+      
+      if (nearestSeasonPrice > 0) {
+        const uncoveredTotal = nearestSeasonPrice * uncoveredDays.length;
+        totalPrice += uncoveredTotal;
+        log.push(`  → Применена ближайшая цена: ${nearestSeasonPrice.toFixed(2)} THB/день * ${uncoveredDays.length} = ${uncoveredTotal.toFixed(2)} THB`);
+      } else {
+        log.push(`  ❌ Не удалось найти цену для недостающих дней`);
+        return null;
+      }
+    }
 
-  if (totalPrice === 0) {
-    logger.error(`Total price calculated as 0 for ${nights} nights`);
-    logger.error(`Breakdown:`, JSON.stringify(breakdown, null, 2));
-    return null;
-  }
+    if (totalPrice === 0) {
+      log.push(`  ❌ Итоговая цена = 0`);
+      return null;
+    }
 
-  logger.info(`✓ Short-term price calculated: ${totalPrice} THB`);
-
-  return {
-    total_price: Math.round(totalPrice),
-    currency: 'THB',
-    nights,
-    daily_average: Math.round(totalPrice / nights),
-    monthly_equivalent: Math.round((totalPrice / nights) * 30),
-    breakdown,
-    pricing_method: 'seasonal'
-  };
-}
-
-/**
- * Расчет для долгосрочной аренды (≥ 28 дней) - приоритет месячным ценам
- */
-private async calculateLongTermPrice(
-  start: Date,
-  end: Date,
-  nights: number,
-  monthlyPrices: any[],
-  seasonalPrices: any[],
-  yearPrice: number | null
-): Promise<CalculatedPrice | null> {
-  logger.info('Using LONG-TERM pricing (monthly priority)');
-
-  if (monthlyPrices.length > 0) {
-    // Есть месячные цены - используем их
-    return await this.calculateFromMonthlyPrices(start, end, nights, monthlyPrices);
-  }
-
-  if (yearPrice) {
-    // Есть годовая цена - используем её
-    return await this.calculateFromYearPrice(nights, yearPrice);
-  }
-
-  if (seasonalPrices.length > 0) {
-    // Fallback на сезонные цены
-    logger.info('Falling back to seasonal prices for long-term');
-    return await this.calculateShortTermPrice(start, end, nights, seasonalPrices, []);
-  }
-
-  return null;
-}
-
-/**
- * Расчет годового контракта
- */
-private async calculateYearlyPrice(
-  nights: number,
-  seasonalPrices: any[],
-  monthlyPrices: any[],
-  yearPrice: number | null
-): Promise<CalculatedPrice | null> {
-  logger.info('Using YEARLY contract pricing');
-
-  // Если указана year_price - используем её
-  if (yearPrice) {
-    const monthlyPrice = yearPrice / 12;
-    const totalPrice = (nights / 365) * yearPrice;
+    log.push(`  ✅ Итого: ${totalPrice.toFixed(2)} THB за ${nights} ночей`);
 
     return {
       total_price: Math.round(totalPrice),
       currency: 'THB',
       nights,
-      daily_average: Math.round(yearPrice / 365),
+      daily_average: Math.round(totalPrice / nights),
+      monthly_equivalent: Math.round((totalPrice / nights) * 30),
+      breakdown: [{
+        period: 'seasonal',
+        nights,
+        price_per_night: Math.round(totalPrice / nights),
+        total: Math.round(totalPrice)
+      }],
+      pricing_method: 'seasonal'
+    };
+  }
+
+  /**
+   * НАЙТИ БЛИЖАЙШУЮ СЕЗОННУЮ ЦЕНУ ЗА ДЕНЬ
+   */
+  private findNearestSeasonDailyPrice(
+    seasonalPrices: any[],
+    targetDate: Date,
+    log: string[]
+  ): number {
+    if (seasonalPrices.length === 0) return 0;
+
+    log.push(`  → Поиск ближайшего сезона для ${this.getMMDD(targetDate)}...`);
+
+    // Берем первый доступный сезон
+    const season = seasonalPrices[0];
+    const pricePerNight = parseFloat(String(season.price_per_night)) || 0;
+
+    if (season.pricing_type === 'per_period') {
+      const seasonStart = this.parseRecurringDate(season.start_date_recurring, targetDate.getFullYear());
+      const seasonEnd = this.parseRecurringDate(season.end_date_recurring, targetDate.getFullYear());
+      const seasonDays = this.getDaysBetween(seasonStart, seasonEnd) + 1;
+      const dailyPrice = pricePerNight / seasonDays;
+      log.push(`  → Ближайший сезон: per_period (${pricePerNight} / ${seasonDays} = ${dailyPrice.toFixed(2)} THB/день)`);
+      return dailyPrice;
+    } else {
+      log.push(`  → Ближайший сезон: per_night (${pricePerNight} THB/день)`);
+      return pricePerNight;
+    }
+  }
+
+  /**
+   * РАСЧЕТ ПО МЕСЯЧНЫМ ЦЕНАМ (для SHORT_TERM - деление на дни)
+   */
+  private async calculateFromMonthlyDaily(
+    start: Date,
+    end: Date,
+    nights: number,
+    monthlyPrices: any[],
+    log: string[]
+  ): Promise<CalculatedPrice | null> {
+    log.push(`  → Расчет по месячным ценам (посуточно)...`);
+
+    let totalPrice = 0;
+    const currentDate = new Date(start);
+
+    while (currentDate < end) {
+      const month = currentDate.getMonth() + 1;
+      const monthPrice = monthlyPrices.find(p => p.month_number === month);
+
+      if (monthPrice) {
+        const daysInMonth = new Date(currentDate.getFullYear(), month, 0).getDate();
+        const dailyPrice = monthPrice.price_per_month / daysInMonth;
+        totalPrice += dailyPrice;
+        log.push(`  → Месяц ${month}: ${monthPrice.price_per_month} / ${daysInMonth} = ${dailyPrice.toFixed(2)} THB/день`);
+      } else {
+        log.push(`  ❌ Нет месячной цены для месяца ${month}`);
+        return null;
+      }
+
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    log.push(`  ✅ Итого: ${totalPrice.toFixed(2)} THB`);
+
+    return {
+      total_price: Math.round(totalPrice),
+      currency: 'THB',
+      nights,
+      daily_average: Math.round(totalPrice / nights),
+      monthly_equivalent: Math.round((totalPrice / nights) * 30),
+      breakdown: [{
+        period: 'monthly_daily',
+        nights,
+        total: Math.round(totalPrice)
+      }],
+      pricing_method: 'monthly'
+    };
+  }
+
+  /**
+   * РАСЧЕТ LONG_TERM ПО МЕСЯЧНЫМ ЦЕНАМ (пропорционально)
+   */
+  private async calculateLongTermFromMonthly(
+    start: Date,
+    end: Date,
+    nights: number,
+    monthlyPrices: any[],
+    log: string[]
+  ): Promise<CalculatedPrice | null> {
+    log.push(`  → Расчет long-term по месячным ценам (пропорционально)...`);
+
+    let totalPrice = 0;
+    const breakdown: PriceBreakdown[] = [];
+    const currentDate = new Date(start);
+
+    while (currentDate < end) {
+      const month = currentDate.getMonth() + 1;
+      const year = currentDate.getFullYear();
+      const daysInMonth = new Date(year, month, 0).getDate();
+      
+      // Сколько дней этого месяца входит в период?
+      const monthEnd = new Date(year, month, 0); // Последний день месяца
+      const periodEnd = end > monthEnd ? monthEnd : new Date(end.getTime() - 24 * 60 * 60 * 1000);
+      
+      const daysInPeriod = Math.min(
+        this.getDaysBetween(currentDate, periodEnd) + 1,
+        daysInMonth
+      );
+
+      const monthPrice = monthlyPrices.find(p => p.month_number === month);
+      
+      if (monthPrice) {
+        const proportion = daysInPeriod / daysInMonth;
+        const monthTotal = monthPrice.price_per_month * proportion;
+        totalPrice += monthTotal;
+
+        log.push(`  → Месяц ${month}: ${daysInPeriod}/${daysInMonth} дней * ${monthPrice.price_per_month} = ${monthTotal.toFixed(2)} THB`);
+
+        breakdown.push({
+          period: `Month ${month}`,
+          nights: daysInPeriod,
+          price_per_month: monthPrice.price_per_month,
+          total: Math.round(monthTotal),
+          month_number: month
+        });
+      } else {
+        log.push(`  ❌ Нет месячной цены для месяца ${month}`);
+        return null;
+      }
+
+      // Переходим к следующему месяцу
+      currentDate.setDate(1);
+      currentDate.setMonth(currentDate.getMonth() + 1);
+      if (currentDate >= end) break;
+    }
+
+    log.push(`  ✅ Итого: ${totalPrice.toFixed(2)} THB`);
+
+    return {
+      total_price: Math.round(totalPrice),
+      currency: 'THB',
+      nights,
+      daily_average: Math.round(totalPrice / nights),
+      monthly_equivalent: Math.round(totalPrice / (nights / 30)),
+      breakdown,
+      pricing_method: 'monthly'
+    };
+  }
+
+  /**
+   * РАСЧЕТ ПО ГОДОВОЙ ЦЕНЕ
+   */
+  private calculateFromYearPrice(
+    nights: number,
+    yearPrice: number,
+    log: string[]
+  ): CalculatedPrice {
+    log.push(`  → Расчет по годовой цене...`);
+
+    const monthlyPrice = yearPrice;
+    const yearlyTotal = yearPrice * 12;
+    const pricePerDay = yearlyTotal / 365;
+    const totalPrice = pricePerDay * nights;
+
+    log.push(`  → Месячная цена: ${monthlyPrice} THB`);
+    log.push(`  → Годовая стоимость: ${yearlyTotal} THB`);
+    log.push(`  → Цена за день: ${pricePerDay.toFixed(2)} THB`);
+    log.push(`  ✅ Итого: ${totalPrice.toFixed(2)} THB`);
+
+    return {
+      total_price: Math.round(totalPrice),
+      currency: 'THB',
+      nights,
+      daily_average: Math.round(pricePerDay),
       monthly_equivalent: Math.round(monthlyPrice),
       breakdown: [{
-        period: 'yearly_contract',
+        period: 'from_year_price',
         nights,
         price_per_month: Math.round(monthlyPrice),
         total: Math.round(totalPrice)
@@ -416,231 +756,179 @@ private async calculateYearlyPrice(
     };
   }
 
-  // Если есть месячные цены - берем минимальную × 12
-  if (monthlyPrices.length > 0) {
-    const minMonthlyPrice = Math.min(...monthlyPrices.map((p: any) => p.price_per_month));
-    const yearlyTotal = minMonthlyPrice * 12;
-    const totalPrice = (nights / 365) * yearlyTotal;
-
-    logger.info(`Calculated yearly from monthly: min ${minMonthlyPrice} × 12 = ${yearlyTotal} THB/year`);
-
-    return {
-      total_price: Math.round(totalPrice),
-      currency: 'THB',
-      nights,
-      daily_average: Math.round(yearlyTotal / 365),
-      monthly_equivalent: Math.round(minMonthlyPrice),
-      breakdown: [{
-        period: 'yearly_from_monthly',
-        nights,
-        price_per_month: Math.round(minMonthlyPrice),
-        total: Math.round(totalPrice)
-      }],
-      pricing_method: 'monthly'
-    };
-  }
-
-  // Если есть только сезонные - высчитываем среднюю за год
-  if (seasonalPrices.length > 0) {
-    const avgDailyPrice = this.calculateYearlyAverageFromSeasonal(seasonalPrices);
-    const yearlyTotal = avgDailyPrice * 365;
-    const monthlyEquivalent = yearlyTotal / 12;
-    const totalPrice = (nights / 365) * yearlyTotal;
-
-    logger.info(`Calculated yearly from seasonal: avg ${avgDailyPrice} THB/day = ${yearlyTotal} THB/year`);
-
-    return {
-      total_price: Math.round(totalPrice),
-      currency: 'THB',
-      nights,
-      daily_average: Math.round(avgDailyPrice),
-      monthly_equivalent: Math.round(monthlyEquivalent),
-      breakdown: [{
-        period: 'yearly_from_seasonal',
-        nights,
-        price_per_month: Math.round(monthlyEquivalent),
-        total: Math.round(totalPrice)
-      }],
-      pricing_method: 'seasonal'
-    };
-  }
-
-  return null;
-}
-
   /**
-   * Расчет по месячным ценам с заполнением пробелов
+   * ========================================
+   * НАЙТИ ДОСТУПНЫЕ ПЕРИОДЫ
+   * ========================================
    */
-  private async calculateFromMonthlyPrices(
-    start: Date,
-    end: Date,
+  async findAvailablePeriods(
+    propertyId: number,
     nights: number,
-    monthlyPrices: any[]
-  ): Promise<CalculatedPrice | null> {
-    // Заполняем все 12 месяцев
-    const completePrices = this.fillMonthlyGaps(monthlyPrices);
+    monthNumber?: number,
+    year?: number
+  ): Promise<AvailablePeriod[]> {
+    try {
+      logger.info(`Finding available ${nights}-night periods for property ${propertyId}`);
 
-    const months = nights / 30;
-    const startMonth = start.getMonth() + 1;
-    const endMonth = end.getMonth() + 1;
-
-    // Находим цены для нужных месяцев
-    let totalPrice = 0;
-    const breakdown: PriceBreakdown[] = [];
-
-    const currentDate = new Date(start);
-    while (currentDate < end) {
-      const month = currentDate.getMonth() + 1;
-      const monthPrice = completePrices.find((p: any) => p.month_number === month);
-
-      if (monthPrice) {
-        totalPrice += monthPrice.price_per_month / 30; // цена за день
-      }
-
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-
-    // Группируем по месяцам для breakdown
-    const usedMonths = Array.from(new Set([startMonth, endMonth]));
-    for (const month of usedMonths) {
-      const monthPrice = completePrices.find((p: any) => p.month_number === month);
-      if (monthPrice) {
-        breakdown.push({
-          period: `Month ${month}`,
-          nights: 30,
-          price_per_month: monthPrice.price_per_month,
-          total: monthPrice.price_per_month,
-          month_number: month
-        });
-      }
-    }
-
-    return {
-      total_price: Math.round(totalPrice),
-      currency: 'THB',
-      nights,
-      daily_average: Math.round(totalPrice / nights),
-      monthly_equivalent: Math.round(totalPrice / months),
-      breakdown,
-      pricing_method: 'monthly'
-    };
-  }
-
-  /**
-   * Расчет по годовой цене
-   */
-  private async calculateFromYearPrice(
-    nights: number,
-    yearPrice: number
-  ): Promise<CalculatedPrice> {
-    const pricePerDay = yearPrice / 365;
-    const totalPrice = pricePerDay * nights;
-    const monthlyEquivalent = yearPrice / 12;
-
-    return {
-      total_price: Math.round(totalPrice),
-      currency: 'THB',
-      nights,
-      daily_average: Math.round(pricePerDay),
-      monthly_equivalent: Math.round(monthlyEquivalent),
-      breakdown: [{
-        period: 'from_year_price',
-        nights,
-        price_per_month: Math.round(monthlyEquivalent),
-        total: Math.round(totalPrice)
-      }],
-      pricing_method: 'yearly'
-    };
-  }
-
-  /**
-   * Заполнить пробелы в месячных ценах (брать из предыдущего месяца)
-   */
-  private fillMonthlyGaps(monthlyPrices: any[]): any[] {
-    const complete: any[] = [];
-    let lastPrice: any = null;
-
-    for (let month = 1; month <= 12; month++) {
-      const existing = monthlyPrices.find((p: any) => p.month_number === month);
+      // Определяем диапазон поиска
+      const searchStart = monthNumber && year 
+        ? new Date(year, monthNumber - 1, 1)
+        : new Date();
       
-      if (existing) {
-        complete.push(existing);
-        lastPrice = existing;
-      } else if (lastPrice) {
-        // Берем цену из предыдущего месяца
-        complete.push({
-          ...lastPrice,
-          month_number: month
-        });
+      const searchEnd = monthNumber && year
+        ? new Date(year, monthNumber, 0) // последний день месяца
+        : new Date(new Date().setMonth(new Date().getMonth() + 3)); // 3 месяца вперед
+
+      logger.info(`Search range: ${searchStart.toISOString().split('T')[0]} to ${searchEnd.toISOString().split('T')[0]}`);
+
+      // Получаем все заблокированные даты
+      const blockedDates = await db.query<any>(
+        `SELECT blocked_date 
+         FROM property_calendar 
+         WHERE property_id = ? 
+         AND blocked_date BETWEEN ? AND ?
+         ORDER BY blocked_date`,
+        [propertyId, searchStart.toISOString().split('T')[0], searchEnd.toISOString().split('T')[0]]
+      );
+
+      const blockedSet = new Set(blockedDates.map((d: any) => d.blocked_date));
+
+      // Ищем свободные периоды
+      const availablePeriods: AvailablePeriod[] = [];
+      const currentDate = new Date(searchStart);
+      
+      // ✅ ОПТИМИЗАЦИЯ: Ограничение на количество проверок
+      let checksCount = 0;
+      const MAX_CHECKS = 100; // Не более 100 проверок
+
+      while (currentDate <= searchEnd && checksCount < MAX_CHECKS) {
+        checksCount++;
+        
+        const checkIn = currentDate.toISOString().split('T')[0];
+        const checkOutDate = new Date(currentDate);
+        checkOutDate.setDate(checkOutDate.getDate() + nights);
+        const checkOut = checkOutDate.toISOString().split('T')[0];
+
+        // Проверяем все даты в периоде
+        let isAvailable = true;
+        const testDate = new Date(currentDate);
+        
+        for (let i = 0; i < nights; i++) {
+          const dateStr = testDate.toISOString().split('T')[0];
+          if (blockedSet.has(dateStr)) {
+            isAvailable = false;
+            break;
+          }
+          testDate.setDate(testDate.getDate() + 1);
+        }
+
+        if (isAvailable && checkOutDate <= searchEnd) {
+          // Рассчитываем цену для этого периода
+          const price = await this.calculatePrice(propertyId, checkIn, checkOut);
+          
+          if (price && price.total_price > 0) {
+            availablePeriods.push({
+              check_in: checkIn,
+              check_out: checkOut,
+              nights,
+              total_price: price.total_price,
+              daily_average: price.daily_average
+            });
+          }
+        }
+
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      logger.info(`Found ${availablePeriods.length} available periods after ${checksCount} checks`);
+      
+      // Сортируем по цене (от дешевых к дорогим)
+      availablePeriods.sort((a, b) => a.total_price - b.total_price);
+
+      // ✅ Возвращаем только первые 20 для экономии времени
+      return availablePeriods.slice(0, 20);
+    } catch (error) {
+      logger.error('Find available periods error:', error);
+      return [];
+    }
+  }
+
+  /**
+   * ========================================
+   * ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+   * ========================================
+   */
+  
+  private getDaysBetween(start: Date, end: Date): number {
+    return Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  private getMMDD(date: Date): string {
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${month}-${day}`;
+  }
+
+  private parseRecurringDate(mmdd: string, year: number): Date {
+    const [month, day] = mmdd.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  private findSeasonForDate(mmdd: string, seasonalPrices: any[]): any | null {
+    for (const season of seasonalPrices) {
+      if (this.isDateInSeason(mmdd, season.start_date_recurring, season.end_date_recurring)) {
+        return season;
       }
     }
-
-    logger.info(`Filled monthly prices: ${monthlyPrices.length} → ${complete.length}`);
-    return complete;
+    return null;
   }
 
-  /**
-   * Заполнить пробелы в сезонных ценах
-   */
-  private fillSeasonalGaps(seasonalPrices: any[]): any[] {
-    if (seasonalPrices.length === 0) return [];
+  private isDateInSeason(mmdd: string, start: string, end: string): boolean {
+    const [month, day] = mmdd.split('-').map(Number);
+    const [startMonth, startDay] = start.split('-').map(Number);
+    const [endMonth, endDay] = end.split('-').map(Number);
 
-    // Сортируем по датам
-    const sorted = [...seasonalPrices].sort((a, b) => 
-      a.start_date_recurring.localeCompare(b.start_date_recurring)
-    );
+    const dateValue = month * 100 + day;
+    const startValue = startMonth * 100 + startDay;
+    const endValue = endMonth * 100 + endDay;
 
-    // Если уже покрывает весь год - возвращаем как есть
-    if (this.coversFullYear(sorted)) {
-      return sorted;
+    if (startValue <= endValue) {
+      return dateValue >= startValue && dateValue <= endValue;
+    } else {
+      return dateValue >= startValue || dateValue <= endValue;
     }
-
-    // Заполняем пробелы средней ценой
-    const avgPrice = sorted.reduce((sum, p) => sum + p.price_per_night, 0) / sorted.length;
-
-    logger.info(`Filling seasonal gaps with average price: ${avgPrice} THB/night`);
-
-    return sorted;
   }
 
-  /**
-   * Проверить покрывают ли сезоны весь год
-   */
-  private coversFullYear(seasonalPrices: any[]): boolean {
-    // Упрощенная проверка - если есть хотя бы 2 сезона, считаем что покрывает
-    return seasonalPrices.length >= 2;
-  }
-
-  /**
-   * Рассчитать среднюю цену за год из сезонных цен
-   */
   private calculateYearlyAverageFromSeasonal(seasonalPrices: any[]): number {
     let totalDays = 0;
     let totalPrice = 0;
 
     for (const season of seasonalPrices) {
       const days = this.getDaysInSeason(season.start_date_recurring, season.end_date_recurring);
-      totalDays += days;
-      totalPrice += days * season.price_per_night;
+      const pricePerNight = parseFloat(String(season.price_per_night)) || 0;
+
+      if (season.pricing_type === 'per_period') {
+        const dailyPrice = pricePerNight / days;
+        totalDays += days;
+        totalPrice += days * dailyPrice;
+      } else {
+        totalDays += days;
+        totalPrice += days * pricePerNight;
+      }
     }
 
     return totalDays > 0 ? totalPrice / totalDays : 0;
   }
 
-  /**
-   * Получить количество дней в сезоне
-   */
   private getDaysInSeason(start: string, end: string): number {
     const [startMonth, startDay] = start.split('-').map(Number);
     const [endMonth, endDay] = end.split('-').map(Number);
 
     if (startMonth <= endMonth) {
-      // В пределах года
       const startDate = new Date(2024, startMonth - 1, startDay);
       const endDate = new Date(2024, endMonth - 1, endDay);
       return Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     } else {
-      // Пересекает новый год
       const endYear = new Date(2024, endMonth - 1, endDay);
       const startYear = new Date(2024, startMonth - 1, startDay);
       const yearEnd = new Date(2024, 11, 31);
@@ -654,111 +942,56 @@ private async calculateYearlyPrice(
   }
 
   /**
-   * Найти сезон для конкретной даты
+   * ========================================
+   * ЗАГРУЗКА ЦЕН ИЗ БД
+   * ========================================
    */
-  private findSeasonForDate(mmdd: string, seasonalPrices: any[]): any | null {
-    for (const season of seasonalPrices) {
-      if (this.isDateInSeason(mmdd, season.start_date_recurring, season.end_date_recurring)) {
-        return season;
-      }
-    }
-    return null;
-  }
-
-/**
- * Проверить попадает ли дата в сезон
- */
-private isDateInSeason(mmdd: string, start: string, end: string): boolean {
-  const [month, day] = mmdd.split('-').map(Number);
-  const [startMonth, startDay] = start.split('-').map(Number);
-  const [endMonth, endDay] = end.split('-').map(Number);
-
-  // Создаем числовое представление даты для сравнения (MMDD)
-  const dateValue = month * 100 + day;
-  const startValue = startMonth * 100 + startDay;
-  const endValue = endMonth * 100 + endDay;
-
-  logger.debug(`Checking ${mmdd} (${dateValue}) in range ${start} (${startValue}) to ${end} (${endValue})`);
-
-  if (startValue <= endValue) {
-    // Сезон в пределах одного года (например, март-октябрь или ноябрь-декабрь)
-    const inRange = dateValue >= startValue && dateValue <= endValue;
-    logger.debug(`Same year season: ${inRange}`);
-    return inRange;
-  } else {
-    // Сезон пересекает новый год (например, ноябрь-апрель: 11-01 до 04-30)
-    const inRange = dateValue >= startValue || dateValue <= endValue;
-    logger.debug(`Cross-year season: ${inRange}`);
-    return inRange;
-  }
-}
-
-  /**
-   * Получить MM-DD из даты
-   */
-  private getMMDD(date: Date): string {
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${month}-${day}`;
-  }
-
-/**
- * Загрузить сезонные цены
- */
-private async getSeasonalPrices(propertyId: number): Promise<any[]> {
-  const prices = await db.query<any>(
-    `SELECT season_type, start_date_recurring, end_date_recurring, 
-            price_per_night, minimum_nights, pricing_type
-     FROM property_pricing
-     WHERE property_id = ?
-     ORDER BY start_date_recurring`,
-    [propertyId]
-  );
-
-  // ✅ КРИТИЧЕСКИ ВАЖНО: Конвертируем цены в числа
-  return prices.map((p: any) => ({
-    ...p,
-    price_per_night: parseFloat(p.price_per_night) || 0,
-    minimum_nights: parseInt(p.minimum_nights) || 0
-  }));
-}
-
-/**
- * Загрузить месячные цены
- */
-private async getMonthlyPrices(propertyId: number): Promise<any[]> {
-  const prices = await db.query<any>(
-    `SELECT month_number, price_per_month, minimum_days
-     FROM property_pricing_monthly
-     WHERE property_id = ?
-     ORDER BY month_number`,
-    [propertyId]
-  );
-
-  // ✅ КРИТИЧЕСКИ ВАЖНО: Конвертируем цены в числа
-  return prices.map((p: any) => ({
-    ...p,
-    month_number: parseInt(p.month_number),
-    price_per_month: parseFloat(p.price_per_month) || 0,
-    minimum_days: parseInt(p.minimum_days) || 0
-  }));
-}
-
-/**
- * Загрузить годовую цену
- */
-private async getYearPrice(propertyId: number): Promise<number | null> {
-  const result = await db.queryOne<any>(
-    'SELECT year_price FROM properties WHERE id = ?',
-    [propertyId]
-  );
   
-  // ✅ КРИТИЧЕСКИ ВАЖНО: Конвертируем в число
-  if (!result?.year_price) return null;
-  
-  const yearPrice = parseFloat(result.year_price);
-  return yearPrice > 0 ? yearPrice : null;
-}
+  private async getSeasonalPrices(propertyId: number): Promise<any[]> {
+    const prices = await db.query<any>(
+      `SELECT season_type, start_date_recurring, end_date_recurring, 
+              price_per_night, minimum_nights, pricing_type
+       FROM property_pricing
+       WHERE property_id = ?
+       ORDER BY start_date_recurring`,
+      [propertyId]
+    );
+
+    return prices.map((p: any) => ({
+      ...p,
+      price_per_night: parseFloat(p.price_per_night) || 0,
+      minimum_nights: parseInt(p.minimum_nights) || 0
+    }));
+  }
+
+  private async getMonthlyPrices(propertyId: number): Promise<any[]> {
+    const prices = await db.query<any>(
+      `SELECT month_number, price_per_month, minimum_days
+       FROM property_pricing_monthly
+       WHERE property_id = ?
+       ORDER BY month_number`,
+      [propertyId]
+    );
+
+    return prices.map((p: any) => ({
+      ...p,
+      month_number: parseInt(p.month_number),
+      price_per_month: parseFloat(p.price_per_month) || 0,
+      minimum_days: parseInt(p.minimum_days) || 0
+    }));
+  }
+
+  private async getYearPrice(propertyId: number): Promise<number | null> {
+    const result = await db.queryOne<any>(
+      'SELECT year_price FROM properties WHERE id = ?',
+      [propertyId]
+    );
+    
+    if (!result?.year_price) return null;
+    
+    const yearPrice = parseFloat(result.year_price);
+    return yearPrice > 0 ? yearPrice : null;
+  }
 }
 
 export default new PriceCalculationService();

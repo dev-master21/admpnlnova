@@ -74,7 +74,7 @@ const PropertySearchResults: React.FC<PropertySearchResultsProps> = ({
     return Math.round(price).toLocaleString('ru-RU');
   };
 
-  const renderPriceInfo = (property: any) => {
+const renderPriceInfo = (property: any) => {
     // Для продажи
     if (property.deal_type === 'sale' && property.sale_price) {
       return (
@@ -90,6 +90,7 @@ const PropertySearchResults: React.FC<PropertySearchResultsProps> = ({
     // Для аренды с рассчитанной ценой
     if (property.calculated_price) {
       const price = property.calculated_price;
+      const hasYearlyWarning = price.yearly_only_warning === true;
 
       // Цена по запросу
       if (price.total_price === 0 && price.breakdown?.[0]?.period === 'price_on_request') {
@@ -114,41 +115,72 @@ const PropertySearchResults: React.FC<PropertySearchResultsProps> = ({
 
       if (price.total_price > 0) {
         return (
-          <div className="price-info">
-            <div className="price-main">
-              <DollarOutlined /> {formatPrice(price.total_price)} THB
-            </div>
-            <div className="price-details">
-              <Space split={<Divider type="vertical" />}>
-                <Text type="secondary">
-                  {formatPrice(price.daily_average)} {t('searchResults.thbPerNight')}
-                </Text>
-                <Text type="secondary">
-                  {formatPrice(price.monthly_equivalent)} {t('searchResults.thbPerMonth')}
-                </Text>
-              </Space>
-            </div>
-            {price.nights && (
-              <div className="price-label">
-                {t('searchResults.for')} {price.nights} {t('searchResults.nightsCount', { count: price.nights })}
-              </div>
+          <>
+            {hasYearlyWarning && (
+              <Alert
+                message={t('searchResults.yearlyOnlyWarning')}
+                type="warning"
+                showIcon
+                icon={<WarningOutlined />}
+                style={{ 
+                  marginBottom: 12,
+                  fontSize: 11,
+                  padding: '8px 12px'
+                }}
+                banner
+              />
             )}
-            <div className="pricing-method">
-              <Tag color="blue">
-                {price.pricing_method === 'seasonal' ? t('searchResults.pricingMethods.seasonal') :
-                 price.pricing_method === 'monthly' ? t('searchResults.pricingMethods.monthly') :
-                 price.pricing_method === 'yearly' ? t('searchResults.pricingMethods.yearly') : 
-                 t('searchResults.pricingMethods.combined')}
-              </Tag>
+
+            <div className="price-info" style={hasYearlyWarning ? {
+              background: 'rgba(250, 173, 20, 0.15)',
+              borderColor: 'rgba(250, 173, 20, 0.4)'
+            } : undefined}>
+              <div className="price-main" style={hasYearlyWarning ? { color: '#faad14' } : undefined}>
+                <DollarOutlined /> {formatPrice(price.total_price)} THB
+              </div>
+
+              {hasYearlyWarning && (
+                <div className="price-disclaimer">
+                  <Text type="warning" style={{ fontSize: 10 }}>
+                    ⚠️ {t('searchResults.yearlyPriceDisclaimer')}
+                  </Text>
+                </div>
+              )}
+
+              <div className="price-details">
+                <Space split={<Divider type="vertical" />}>
+                  <Text type="secondary">
+                    {formatPrice(price.daily_average)} {t('searchResults.thbPerNight')}
+                  </Text>
+                  <Text type="secondary">
+                    {formatPrice(price.monthly_equivalent)} {t('searchResults.thbPerMonth')}
+                  </Text>
+                </Space>
+              </div>
+              
+              {price.nights && (
+                <div className="price-label">
+                  {t('searchResults.for')} {price.nights} {t('searchResults.nightsCount', { count: price.nights })}
+                </div>
+              )}
+              
+              <div className="pricing-method">
+                <Tag color={hasYearlyWarning ? "warning" : "blue"}>
+                  {price.pricing_method === 'seasonal' ? t('searchResults.pricingMethods.seasonal') :
+                   price.pricing_method === 'monthly' ? t('searchResults.pricingMethods.monthly') :
+                   price.pricing_method === 'yearly' ? t('searchResults.pricingMethods.yearly') : 
+                   t('searchResults.pricingMethods.combined')}
+                </Tag>
+              </div>
             </div>
-          </div>
+          </>
         );
       }
     }
 
     // Для аренды без рассчитанной цены
     if (property.year_price && property.year_price > 0) {
-      const monthlyPrice = Math.round(property.year_price / 12);
+      const monthlyPrice = Math.round(property.year_price);
       return (
         <div className="price-info">
           <div className="price-main">
@@ -174,7 +206,7 @@ const PropertySearchResults: React.FC<PropertySearchResultsProps> = ({
     );
   };
 
-  const renderPropertyCard = (property: any) => {
+const renderPropertyCard = (property: any) => {
     const hasCalculatedPrice = property.calculated_price && property.calculated_price.nights;
     
     const hasMissingFeatures = property.missing_features && 
@@ -216,7 +248,9 @@ const PropertySearchResults: React.FC<PropertySearchResultsProps> = ({
                 >
                   <div className="calendar-warning-badge">
                     <ExclamationCircleOutlined />
-                    <span>{t('searchResults.checkAvailability')}</span>
+                    <span className="calendar-warning-badge-text">
+                      {t('searchResults.checkAvailability')}
+                    </span>
                   </div>
                 </Tooltip>
               )}
@@ -237,8 +271,16 @@ const PropertySearchResults: React.FC<PropertySearchResultsProps> = ({
       >
         <div className="property-card-content">
           <div className="property-header">
+            {/* ✅ ИСПРАВЛЕНО: Правильное отображение номера */}
             <Title level={5} className="property-title">
-              {property.property_name || property.property_number}
+              <span className="property-name">
+                {property.property_name || `Property #${property.property_number}`}
+              </span>
+              {property.property_number && property.property_name && (
+                <span className="property-number-badge">
+                  #{property.property_number}
+                </span>
+              )}
             </Title>
             <Space>
               <Tag color={property.deal_type === 'sale' ? 'green' : 'blue'}>

@@ -313,8 +313,9 @@ class PropertySearchService {
       // Месячная аренда
       price = await this.getMonthlyPrice(property.id, params.dates?.check_in);
       
-      if (!price && property.year_price) {
-        price = property.year_price / 12;
+if (!price && property.year_price) {
+        // ✅ year_price в БД - это уже МЕСЯЧНАЯ цена
+        price = property.year_price;
       }
 
       totalCost = price * (duration.months || 1);
