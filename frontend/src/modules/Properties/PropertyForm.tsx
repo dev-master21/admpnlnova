@@ -136,6 +136,16 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
       setDealType(property.deal_type);
       setGoogleMapsLink(property.google_maps_link || '');
       
+      // ✅ КРИТИЧЕСКИ ВАЖНО: Сохраняем месячные цены в aiTempData
+      // Это гарантирует, что при сохранении объекта месячные цены не потеряются
+      console.log('Loading monthly pricing from DB:', property.monthly_pricing);
+      setAiTempData({
+        monthlyPricing: property.monthly_pricing || [],
+        blockedDates: [],
+        photosFromGoogleDrive: null
+      });
+      
+      // Парсим features
       let parsedFeatures = {};
       if (property.features) {
         try {
@@ -168,9 +178,17 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
           }
         } catch (e) {
           console.error('Error parsing features:', e);
+          parsedFeatures = {
+            property: [],
+            outdoor: [],
+            rental: [],
+            location: [],
+            views: []
+          };
         }
       }
 
+      // Парсим translations
       const translations: any = {
         ru: { description: '' },
         en: { description: '' },
@@ -200,10 +218,61 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
       }
 
       console.log('Loaded translations:', translations);
+      console.log('Loaded monthly pricing:', property.monthly_pricing);
 
+      // Устанавливаем все значения в форму
       form.setFieldsValue({
-        ...property,
+        property_number: property.property_number || '',
+        property_name: property.property_name || '',
+        complex_name: property.complex_name || '',
+        deal_type: property.deal_type,
+        property_type: property.property_type,
+        region: property.region || '',
+        address: property.address || '',
+        google_maps_link: property.google_maps_link || '',
+        latitude: property.latitude,
+        longitude: property.longitude,
+        bedrooms: property.bedrooms,
+        bathrooms: property.bathrooms,
+        indoor_area: property.indoor_area,
+        outdoor_area: property.outdoor_area,
+        plot_size: property.plot_size,
+        floors: property.floors,
+        floor: property.floor,
+        penthouse_floors: property.penthouse_floors,
+        construction_year: property.construction_year,
+        construction_month: property.construction_month,
+        furniture_status: property.furniture_status,
+        parking_spaces: property.parking_spaces,
+        pets_allowed: property.pets_allowed,
+        pets_custom: property.pets_custom,
+        building_ownership: property.building_ownership,
+        land_ownership: property.land_ownership,
+        ownership_type: property.ownership_type,
+        sale_price: property.sale_price,
+        year_price: property.year_price,
+        minimum_nights: property.minimum_nights,
+        ics_calendar_url: property.ics_calendar_url,
+        video_url: property.video_url,
+        status: property.status,
+        owner_name: property.owner_name,
+        owner_phone: property.owner_phone,
+        owner_email: property.owner_email,
+        owner_telegram: property.owner_telegram,
+        owner_instagram: property.owner_instagram,
+        owner_notes: property.owner_notes,
+        sale_commission_type: property.sale_commission_type,
+        sale_commission_value: property.sale_commission_value,
+        rent_commission_type: property.rent_commission_type,
+        rent_commission_value: property.rent_commission_value,
+        renovation_type: property.renovation_type,
         renovation_date: property.renovation_date ? dayjs(property.renovation_date) : null,
+        rental_includes: property.rental_includes,
+        deposit_type: property.deposit_type,
+        deposit_amount: property.deposit_amount,
+        electricity_rate: property.electricity_rate,
+        water_rate: property.water_rate,
+        distance_to_beach: property.distance_to_beach,
         features: parsedFeatures,
         translations: translations,
         seasonalPricing: property.pricing || []
@@ -1392,6 +1461,14 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
                         : (aiTempData.monthlyPricing || [])
                     }
                     viewMode={isViewMode}
+                    onChange={(monthlyPricing) => {
+                      // ✅ НОВЫЙ ОБРАБОТЧИК: Обновляем aiTempData при изменении месячных цен
+                      console.log('PropertyForm: Received monthly pricing update:', monthlyPricing);
+                      setAiTempData(prev => ({
+                        ...prev,
+                        monthlyPricing: monthlyPricing
+                      }));
+                    }}
                   />
                 </>
               )}

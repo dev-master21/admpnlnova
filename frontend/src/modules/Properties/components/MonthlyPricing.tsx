@@ -20,9 +20,15 @@ interface MonthlyPricingProps {
   propertyId: number;
   initialPricing?: MonthlyPrice[];
   viewMode?: boolean;
+  onChange?: (pricing: MonthlyPrice[]) => void; // ✅ НОВЫЙ ПРОП
 }
 
-const MonthlyPricing = ({ propertyId, initialPricing = [], viewMode = false }: MonthlyPricingProps) => {
+const MonthlyPricing = ({ 
+  propertyId, 
+  initialPricing = [], 
+  viewMode = false,
+  onChange // ✅ НОВЫЙ ПРОП
+}: MonthlyPricingProps) => {
   const { t } = useTranslation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -53,6 +59,36 @@ const MonthlyPricing = ({ propertyId, initialPricing = [], viewMode = false }: M
     }
   }, [initialPricing, form]);
 
+  // ✅ НОВАЯ ФУНКЦИЯ: Извлекает текущие данные из формы и вызывает onChange
+  const notifyParentOfChanges = () => {
+    if (!onChange) return;
+
+    const values = form.getFieldsValue();
+    const monthlyPricing: MonthlyPrice[] = [];
+    
+    for (let i = 1; i <= 12; i++) {
+      const price = values[`price_${i}`];
+      if (price && price > 0) {
+        monthlyPricing.push({
+          month_number: i,
+          price_per_month: price,
+          minimum_days: values[`days_${i}`] || null
+        });
+      }
+    }
+
+    console.log('MonthlyPricing: Notifying parent of changes:', monthlyPricing);
+    onChange(monthlyPricing);
+  };
+
+  // ✅ ОБРАБОТЧИК изменения полей формы
+  const handleFieldChange = () => {
+    // Небольшая задержка, чтобы дождаться обновления формы
+    setTimeout(() => {
+      notifyParentOfChanges();
+    }, 0);
+  };
+
   const handleSave = async () => {
     if (!propertyId || propertyId === 0) {
       message.warning(t('monthlyPricing.saveAfterCreate'));
@@ -78,6 +114,9 @@ const MonthlyPricing = ({ propertyId, initialPricing = [], viewMode = false }: M
 
       await propertiesApi.updateMonthlyPricing(propertyId, monthlyPricing);
       message.success(t('monthlyPricing.pricesUpdated'));
+      
+      // ✅ Уведомляем родителя об изменениях после сохранения
+      notifyParentOfChanges();
     } catch (error: any) {
       message.error(error.response?.data?.message || t('monthlyPricing.errorUpdating'));
     } finally {
@@ -90,11 +129,15 @@ const MonthlyPricing = ({ propertyId, initialPricing = [], viewMode = false }: M
       [`price_${monthNumber}`]: undefined,
       [`days_${monthNumber}`]: undefined
     });
+    // ✅ Уведомляем родителя об изменениях
+    handleFieldChange();
   };
 
   const handleClearAll = () => {
     form.resetFields();
     message.info(t('monthlyPricing.allPricesCleared'));
+    // ✅ Уведомляем родителя об изменениях
+    handleFieldChange();
   };
 
   return (
@@ -132,7 +175,11 @@ const MonthlyPricing = ({ propertyId, initialPricing = [], viewMode = false }: M
         style={{ marginBottom: 24 }}
       />
 
-      <Form form={form} layout="vertical">
+      <Form 
+        form={form} 
+        layout="vertical"
+        onValuesChange={handleFieldChange} // ✅ СЛУШАЕМ все изменения в форме
+      >
         <Row gutter={[16, 16]}>
           {months.map(month => (
             <Col xs={24} sm={12} md={8} lg={6} key={month.number}>
