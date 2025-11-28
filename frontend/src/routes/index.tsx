@@ -12,8 +12,11 @@ import RolesList from '@/modules/Roles/RolesList';
 import RoleForm from '@/modules/Roles/RoleForm';
 import FileManager from '@/modules/FileManager/FileManager';
 import Profile from '../pages/Profile/Profile';
+import OwnerLogin from '@/modules/OwnerPortal/OwnerLogin';
+import OwnerDashboard from '@/modules/OwnerPortal/OwnerDashboard';
+import OwnerPricingPage from '@/modules/OwnerPortal/OwnerPricingPage';
+import OwnerCalendarPage from '@/modules/OwnerPortal/OwnerCalendarPage';
 
-// Модуль договоров
 import Agreements from '@/modules/Agreements';
 import AgreementDetail from '@/modules/Agreements/AgreementDetail';
 import AgreementTemplates from '@/modules/Agreements/Templates';
@@ -24,19 +27,16 @@ import SignAgreement from '@/modules/Agreements/Public/SignAgreement';
 import AgreementVerify from '@/modules/Agreements/Public/AgreementVerify';
 import AgreementPrint from '@/modules/Agreements/AgreementPrint';
 
-// Модуль финансовых документов
 import FinancialDocuments from '@/modules/FinancialDocuments';
 import InvoiceDetail from '@/modules/FinancialDocuments/InvoiceDetail';
 import ReceiptDetail from '@/modules/FinancialDocuments/ReceiptDetail';
 import InvoiceVerify from '@/modules/FinancialDocuments/Public/InvoiceVerify';
 import ReceiptVerify from '@/modules/FinancialDocuments/Public/ReceiptVerify';
 
-// Модуль заявок
 import { RequestsList } from '@/modules/Requests';
 import ChatHistory from '@/modules/Requests/Public/ChatHistory';
 import ClientRequest from '@/modules/Requests/Public/ClientRequest';
 
-// Модуль управления ботом
 import BotSettings from '@/modules/BotSettings/BotSettings';
 
 interface ProtectedRouteProps {
@@ -82,11 +82,17 @@ const AppRoutes = () => {
       <Route path="/invoice-verify/:uuid" element={<InvoiceVerify />} />
       <Route path="/receipt-verify/:uuid" element={<ReceiptVerify />} />
       
+      {/* Публичные роуты владельцев */}
+      <Route path="/owner/:token" element={<OwnerLogin />} />
+      <Route path="/owner/dashboard" element={<OwnerDashboard />} />
+      <Route path="/owner/property/:propertyId/pricing" element={<OwnerPricingPage />} />
+      <Route path="/owner/property/:propertyId/calendar" element={<OwnerCalendarPage />} />
+      
       {/* Публичные страницы заявок */}
       <Route path="/request/chat/:chatUuid" element={<ChatHistory />} />
       <Route path="/request/client/:uuid" element={<ClientRequest />} />
 
-      {/* ✅ ИСПРАВЛЕНО: Все защищенные роуты внутри MainLayout */}
+      {/* Защищенные роуты */}
       <Route
         path="/"
         element={
@@ -96,8 +102,6 @@ const AppRoutes = () => {
         }
       >
         <Route index element={<Dashboard />} />
-
-        {/* ✅ ДОБАВЛЕНО: Profile внутри MainLayout */}
         <Route path="profile" element={<Profile />} />
 
         {/* Объекты */}
@@ -164,7 +168,6 @@ const AppRoutes = () => {
             }
           />
 
-          {/* Шаблоны договоров */}
           <Route path="templates">
             <Route
               index
@@ -215,7 +218,6 @@ const AppRoutes = () => {
             }
           />
           
-          {/* Управление ботом (только для super admin) */}
           <Route
             path="bot-settings"
             element={

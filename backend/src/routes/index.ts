@@ -13,6 +13,7 @@ import financialDocumentsRoutes from './financialDocuments.routes';
 import propertySearchRoutes from './propertySearch.routes';
 import contactsRoutes from './contacts.routes';
 import integrationsRoutes from './integrations.routes';
+import propertyOwnersRoutes from './propertyOwners.routes';
 
 const router = Router();
 
@@ -29,5 +30,6 @@ router.use('/financial-documents', financialDocumentsRoutes);
 router.use('/property-search', propertySearchRoutes);
 router.use('/contacts', contactsRoutes);
 router.use('/integrations', integrationsRoutes);
+router.use('/property-owners', propertyOwnersRoutes);
 
 export default router;

@@ -27,7 +27,8 @@ import {
   InfoCircleOutlined,
   EnvironmentOutlined,
   EyeOutlined,
-  RobotOutlined
+  RobotOutlined,
+  UserOutlined
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -49,6 +50,7 @@ import UtilitiesForm from './components/UtilitiesForm';
 import AIDescriptionGenerator from './components/AIDescriptionGenerator';
 import TranslationsEditor from './components/TranslationsEditor';
 import AIPropertyCreationModal from './components/AIPropertyCreationModal';
+import OwnerAccessModal from './components/OwnerAccessModal';
 
 const { Paragraph } = Typography;
 const { TextArea } = Input;
@@ -64,7 +66,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
   const [form] = Form.useForm();
   
   const { canEditProperty, canViewPropertyOwner, canChangePropertyStatus } = useAuthStore();
-  
   const [loading, setLoading] = useState(false);
   const [detectingCoords, setDetectingCoords] = useState(false);
   const [activeTab, setActiveTab] = useState('basic');
@@ -75,6 +76,7 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
   const [hasCoordinatesForCurrentLink, setHasCoordinatesForCurrentLink] = useState(true);
   const [aiModalVisible, setAiModalVisible] = useState(false);
   const [fillingFromAI, setFillingFromAI] = useState(false);
+  const [ownerAccessModalVisible, setOwnerAccessModalVisible] = useState(false);
   const [aiTempData, setAiTempData] = useState<{
     monthlyPricing?: any[];
     blockedDates?: any[];
@@ -844,6 +846,7 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
                     <Select.Option value="rawai">{t('properties.regions.rawai')}</Select.Option>
                     <Select.Option value="patong">{t('properties.regions.patong')}</Select.Option>
                     <Select.Option value="kata">{t('properties.regions.kata')}</Select.Option>
+                    <Select.Option value="chalong">{t('properties.regions.chalong')}</Select.Option>
                     <Select.Option value="naiharn">{t('properties.regions.naiharn')}</Select.Option>
                     <Select.Option value="phukettown">{t('properties.regions.phukettown')}</Select.Option>
                     <Select.Option value="maikhao">{t('properties.regions.maikhao')}</Select.Option>
@@ -1167,51 +1170,66 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
             </Row>
           </Tabs.TabPane>
 
-          {showOwnerTab && (
-            <Tabs.TabPane tab={t('properties.tabs.owner')} key="owner">
-              <Space direction="vertical" style={{ width: '100%' }} size="large">
-                <Card title={t('properties.ownerInfo')} size="small">
-                  <Row gutter={16}>
-                    <Col xs={24} sm={12}>
-                      <Form.Item name="owner_name" label={t('properties.ownerName')}>
-                        <Input />
-                      </Form.Item>
-                    </Col>
+{showOwnerTab && (
+  <Tabs.TabPane tab={t('properties.tabs.owner')} key="owner">
+    <Space direction="vertical" style={{ width: '100%' }} size="large">
+      <Card title={t('properties.ownerInfo')} size="small">
+        <Row gutter={16}>
+          <Col xs={24} sm={12}>
+            <Form.Item name="owner_name" label={t('properties.ownerName')}>
+              <Input />
+            </Form.Item>
+          </Col>
 
-                    <Col xs={24} sm={12}>
-                      <Form.Item name="owner_phone" label={t('properties.ownerPhone')}>
-                        <Input />
-                      </Form.Item>
-                    </Col>
+          <Col xs={24} sm={12}>
+            <Form.Item name="owner_phone" label={t('properties.ownerPhone')}>
+              <Input />
+            </Form.Item>
+          </Col>
 
-                    <Col xs={24} sm={12}>
-                      <Form.Item name="owner_email" label={t('properties.ownerEmail')}>
-                        <Input type="email" />
-                      </Form.Item>
-                    </Col>
+          <Col xs={24} sm={12}>
+            <Form.Item name="owner_email" label={t('properties.ownerEmail')}>
+              <Input type="email" />
+            </Form.Item>
+          </Col>
 
-                    <Col xs={24} sm={12}>
-                      <Form.Item name="owner_telegram" label={t('properties.ownerTelegram')}>
-                        <Input placeholder="@username" />
-                      </Form.Item>
-                    </Col>
+          <Col xs={24} sm={12}>
+            <Form.Item name="owner_telegram" label={t('properties.ownerTelegram')}>
+              <Input placeholder="@username" />
+            </Form.Item>
+          </Col>
 
-                    <Col xs={24} sm={12}>
-                      <Form.Item name="owner_instagram" label={t('properties.ownerInstagram')}>
-                        <Input placeholder="@username" />
-                      </Form.Item>
-                    </Col>
+          <Col xs={24} sm={12}>
+            <Form.Item name="owner_instagram" label={t('properties.ownerInstagram')}>
+              <Input placeholder="@username" />
+            </Form.Item>
+          </Col>
 
-                    <Col xs={24}>
-                      <Form.Item name="owner_notes" label={t('properties.ownerNotes')}>
-                        <TextArea rows={4} placeholder={t('properties.form.ownerNotesPlaceholder')} />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                </Card>
-              </Space>
-            </Tabs.TabPane>
+          <Col xs={24}>
+            <Form.Item name="owner_notes" label={t('properties.ownerNotes')}>
+              <TextArea rows={4} placeholder={t('properties.form.ownerNotesPlaceholder')} />
+            </Form.Item>
+          </Col>
+
+          {/* Кнопка создания доступа для владельца - ДОБАВИТЬ */}
+          {isEdit && form.getFieldValue('owner_name') && !isViewMode && (
+            <Col xs={24}>
+              <Button
+                type="dashed"
+                icon={<UserOutlined />}
+                onClick={() => setOwnerAccessModalVisible(true)}
+                block
+                size="large"
+              >
+                {t('properties.ownerAccess.createButton')}
+              </Button>
+            </Col>
           )}
+        </Row>
+      </Card>
+    </Space>
+  </Tabs.TabPane>
+)}
 
           <Tabs.TabPane tab={t('properties.tabs.translations')} key="translations">
             {isEdit && !isViewMode && (
@@ -1570,6 +1588,11 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         visible={aiModalVisible}
         onCancel={() => setAiModalVisible(false)}
         onSuccess={handleAISuccess}
+      />
+      <OwnerAccessModal
+        visible={ownerAccessModalVisible}
+        onClose={() => setOwnerAccessModalVisible(false)}
+        ownerName={form.getFieldValue('owner_name') || ''}
       />
     </Card>
   );

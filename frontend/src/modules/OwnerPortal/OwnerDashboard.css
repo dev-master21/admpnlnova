@@ -1,0 +1,775 @@
+/* frontend/src/modules/OwnerPortal/OwnerDashboard.css */
+
+/* ========== LAYOUT ========== */
+.owner-dashboard {
+  min-height: 100vh;
+  background: #f0f2f5 !important;
+}
+
+/* ========== HEADER ========== */
+.dashboard-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  padding: 0 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: 64px;
+  line-height: 64px;
+}
+
+.dashboard-header.mobile {
+  padding: 0 16px;
+  height: 56px;
+  line-height: 56px;
+}
+
+.header-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 100%;
+}
+
+/* Header Logo */
+.header-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-icon {
+  font-size: 24px;
+  color: #fff !important;
+}
+
+.logo-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.logo-title {
+  color: #fff !important;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.logo-subtitle {
+  color: rgba(255, 255, 255, 0.7) !important;
+  font-size: 12px;
+}
+
+/* Header Actions */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.language-select {
+  width: 120px;
+}
+
+.header-button {
+  height: 36px;
+}
+
+/* Mobile Header */
+.mobile-logo-icon {
+  font-size: 24px;
+  color: #fff !important;
+}
+
+.mobile-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-language-select {
+  width: 70px;
+}
+
+.mobile-language-select .ant-select-selector {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.mobile-language-select .ant-select-selection-item {
+  color: #fff !important;
+  font-weight: 500;
+}
+
+.mobile-language-select .ant-select-arrow {
+  color: #fff !important;
+}
+
+.mobile-icon-button {
+  color: #fff !important;
+  font-size: 18px;
+}
+
+.mobile-icon-button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* ========== CONTENT ========== */
+.dashboard-content {
+  padding: 24px;
+  min-height: calc(100vh - 64px);
+  background: #f0f2f5 !important;
+}
+
+/* ✅ ИСПРАВЛЕНО: добавлен padding по краям */
+.content-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 8px;
+}
+
+.page-title {
+  margin-bottom: 24px;
+  font-size: 28px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.85) !important;
+}
+
+/* Loading & Empty States */
+.loading-container {
+  text-align: center;
+  padding: 80px 0;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  background: #fff !important;
+}
+
+.empty-icon {
+  font-size: 64px;
+  color: #d9d9d9 !important;
+  margin-bottom: 16px;
+  display: block;
+}
+
+.empty-state h4 {
+  color: rgba(0, 0, 0, 0.85) !important;
+}
+
+.empty-state .ant-typography {
+  color: rgba(0, 0, 0, 0.45) !important;
+}
+
+/* ========== PROPERTY CARD ========== */
+.property-card {
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #fff !important;
+}
+
+.property-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  transform: translateY(-4px);
+}
+
+.property-card .ant-card-body {
+  padding: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Property Media */
+.property-media {
+  position: relative;
+  width: 100%;
+  height: 200px;
+  background: #f5f5f5 !important;
+  overflow: hidden;
+}
+
+.property-photo {
+  width: 100%;
+  height: 200px;
+  overflow: hidden;
+  background: #000 !important;
+}
+
+.property-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.property-card:hover .property-photo img {
+  transform: scale(1.05);
+}
+
+.property-no-photo {
+  width: 100%;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%) !important;
+  color: #bfbfbf !important;
+  font-size: 48px;
+}
+
+/* Property Carousel */
+.property-carousel {
+  height: 200px;
+}
+
+.property-carousel .slick-slide > div {
+  height: 200px;
+}
+
+.carousel-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.4) !important;
+  color: #fff !important;
+  border: none;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+}
+
+.carousel-arrow:hover {
+  background: rgba(0, 0, 0, 0.6) !important;
+  color: #fff !important;
+}
+
+.carousel-arrow-left {
+  left: 10px;
+}
+
+.carousel-arrow-right {
+  right: 10px;
+}
+
+.custom-dots {
+  bottom: 8px !important;
+}
+
+.custom-dots li button {
+  background: rgba(255, 255, 255, 0.5) !important;
+  height: 4px !important;
+}
+
+.custom-dots li.slick-active button {
+  background: #fff !important;
+  width: 20px !important;
+}
+
+/* Property Content */
+.property-content {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  background: #fff !important;
+}
+
+/* Property Header */
+.property-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.property-title {
+  margin: 0 !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  flex: 1;
+  line-height: 1.4;
+  color: rgba(0, 0, 0, 0.85) !important;
+}
+
+.deal-type-tag {
+  flex-shrink: 0;
+  margin: 0;
+  font-size: 11px;
+  padding: 2px 8px;
+  line-height: 18px;
+}
+
+.property-number {
+  width: fit-content;
+  font-size: 11px;
+  margin: 0;
+  background: #f0f0f0 !important;
+  color: rgba(0, 0, 0, 0.85) !important;
+  border: 1px solid #d9d9d9 !important;
+}
+
+/* Property Rooms */
+.property-rooms {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.65) !important;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.room-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(0, 0, 0, 0.65) !important;
+}
+
+.room-icon {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45) !important;
+}
+
+.room-text {
+  white-space: nowrap;
+  color: rgba(0, 0, 0, 0.65) !important;
+}
+
+.room-separator {
+  color: rgba(0, 0, 0, 0.25) !important;
+  margin: 0 4px;
+}
+
+/* Completeness Section */
+.completeness-section {
+  padding: 8px 0;
+}
+
+.completeness-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.completeness-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.85) !important;
+  white-space: nowrap;
+}
+
+.info-button {
+  padding: 0 !important;
+  height: auto !important;
+  min-width: auto !important;
+  font-size: 14px;
+  color: #1890ff !important;
+}
+
+.completeness-value {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.completeness-progress {
+  margin: 0;
+}
+
+/* Occupancy Section */
+.occupancy-section {
+  min-height: 40px;
+  display: flex;
+  align-items: flex-start;
+  padding: 4px 0;
+}
+
+.occupancy-status-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.occupancy-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.occupancy-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.occupancy-icon.success {
+  color: #52c41a !important;
+}
+
+.occupancy-icon.error {
+  color: #ff4d4f !important;
+}
+
+.occupancy-text {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.65) !important;
+  white-space: nowrap;
+}
+
+.occupancy-dates {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.45) !important;
+  padding-left: 20px;
+}
+
+/* Property Actions */
+.property-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+/* ========== COMPLETENESS MODAL ========== */
+.completeness-modal-content {
+  padding: 8px 0;
+}
+
+.modal-property-info {
+  margin-bottom: 16px;
+}
+
+.modal-property-info h5 {
+  margin-bottom: 12px;
+  color: rgba(0, 0, 0, 0.85) !important;
+}
+
+/* ✅ ИСПРАВЛЕНО: тёмная подложка для missing fields */
+.missing-fields-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.missing-fields-header .anticon {
+  color: #faad14 !important;
+  font-size: 16px;
+}
+
+.missing-fields-header .ant-typography {
+  color: rgba(0, 0, 0, 0.85) !important;
+  font-weight: 600;
+}
+
+.missing-fields-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ✅ ИСПРАВЛЕНО: тёмная подложка и светлый текст */
+.missing-field-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #d48806 !important;
+  border-left: 4px solid #ad6800 !important;
+  border-radius: 6px;
+  transition: all 0.3s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.missing-field-item:hover {
+  background: #ad6800 !important;
+  transform: translateX(4px);
+}
+
+.field-name {
+  font-size: 14px;
+  color: #fff !important;
+  font-weight: 500;
+}
+
+.all-filled-state {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.all-filled-state .anticon {
+  font-size: 64px;
+  color: #52c41a !important;
+  margin-bottom: 16px;
+  display: block;
+}
+
+.all-filled-state h4 {
+  color: #52c41a !important;
+  margin-bottom: 8px;
+}
+
+.all-filled-state .ant-typography {
+  color: rgba(0, 0, 0, 0.45) !important;
+}
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 768px) {
+  .dashboard-content {
+    padding: 16px 12px;
+  }
+
+  .content-container {
+    padding: 0 4px;
+  }
+
+  .page-title {
+    font-size: 22px;
+    margin-bottom: 16px;
+  }
+
+  .property-media,
+  .property-photo,
+  .property-no-photo {
+    height: 180px;
+  }
+
+  .property-content {
+    padding: 12px;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 576px) {
+  .dashboard-content {
+    padding: 12px 8px;
+  }
+
+  .content-container {
+    padding: 0 2px;
+  }
+
+  .page-title {
+    font-size: 20px;
+  }
+
+  .property-media,
+  .property-photo,
+  .property-no-photo {
+    height: 160px;
+  }
+
+  .carousel-arrow {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+}
+
+/* ========== ANIMATIONS ========== */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.property-card {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+/* ========== DARK MODE OVERRIDES ========== */
+@media (prefers-color-scheme: dark) {
+  .owner-dashboard {
+    background: #141414 !important;
+  }
+  
+  .dashboard-content {
+    background: #141414 !important;
+  }
+  
+  .property-card {
+    background: #1f1f1f !important;
+    border: 1px solid #303030 !important;
+  }
+  
+  .property-content {
+    background: #1f1f1f !important;
+  }
+  
+  .property-title {
+    color: rgba(255, 255, 255, 0.85) !important;
+  }
+  
+  .property-number {
+    background: #2a2a2a !important;
+    color: rgba(255, 255, 255, 0.85) !important;
+    border-color: #434343 !important;
+  }
+  
+  .room-item,
+  .room-text {
+    color: rgba(255, 255, 255, 0.65) !important;
+  }
+  
+  .room-icon {
+    color: rgba(255, 255, 255, 0.45) !important;
+  }
+  
+  .room-separator {
+    color: rgba(255, 255, 255, 0.25) !important;
+  }
+  
+  .completeness-label {
+    color: rgba(255, 255, 255, 0.85) !important;
+  }
+  
+  .occupancy-text {
+    color: rgba(255, 255, 255, 0.65) !important;
+  }
+  
+  .occupancy-dates {
+    color: rgba(255, 255, 255, 0.45) !important;
+  }
+  
+  .page-title {
+    color: rgba(255, 255, 255, 0.85) !important;
+  }
+  
+  .empty-state {
+    background: #1f1f1f !important;
+    border: 1px solid #303030 !important;
+  }
+  
+  .empty-state h4 {
+    color: rgba(255, 255, 255, 0.85) !important;
+  }
+  
+  .empty-state .ant-typography {
+    color: rgba(255, 255, 255, 0.45) !important;
+  }
+  
+  /* Modal в тёмной теме */
+  .modal-property-info h5 {
+    color: rgba(255, 255, 255, 0.85) !important;
+  }
+  
+  .missing-fields-header .ant-typography {
+    color: rgba(255, 255, 255, 0.85) !important;
+  }
+  
+  /* ✅ Тёмная подложка остаётся тёмной даже в dark mode */
+  .missing-field-item {
+    background: #ad6800 !important;
+    border-left-color: #873800 !important;
+  }
+  
+  .missing-field-item:hover {
+    background: #873800 !important;
+  }
+}
+/* ✅ ЗАПОЛНЕННЫЕ ПОЛЯ (ЗЕЛЁНЫМ) */
+.filled-fields-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.filled-fields-header .anticon {
+  color: #52c41a !important;
+  font-size: 16px;
+}
+
+.filled-fields-header .ant-typography {
+  color: rgba(0, 0, 0, 0.85) !important;
+  font-weight: 600;
+}
+
+.filled-fields-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filled-field-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #52c41a !important;
+  border-left: 4px solid #389e0d !important;
+  border-radius: 6px;
+  transition: all 0.3s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.filled-field-item:hover {
+  background: #389e0d !important;
+  transform: translateX(4px);
+}
+
+.filled-field-item .field-name {
+  font-size: 14px;
+  color: #fff !important;
+  font-weight: 500;
+}
+
+.filled-field-item .field-weight {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9) !important;
+  font-weight: 600;
+  white-space: nowrap;
+  margin-left: 12px;
+}
+
+/* ✅ ОБНОВЛЕНО: добавлен weight для незаполненных */
+.missing-field-item .field-weight {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9) !important;
+  font-weight: 600;
+  white-space: nowrap;
+  margin-left: 12px;
+}
+
+/* Dark mode для заполненных полей */
+@media (prefers-color-scheme: dark) {
+  .filled-fields-header .ant-typography {
+    color: rgba(255, 255, 255, 0.85) !important;
+  }
+  
+  .filled-field-item {
+    background: #389e0d !important;
+    border-left-color: #237804 !important;
+  }
+  
+  .filled-field-item:hover {
+    background: #237804 !important;
+  }
+}

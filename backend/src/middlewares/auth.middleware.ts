@@ -3,6 +3,7 @@ import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../types';
 import { verifyAccessToken } from '../utils/jwt';
 import db from '../config/database';
+import jwt from 'jsonwebtoken';
 
 export const authenticate = async (
   req: AuthRequest,
@@ -182,4 +183,188 @@ export const requireSuperAdmin = (
   }
 
   next();
+};
+
+/**
+ * Middleware для проверки авторизации владельца недвижимости
+ */
+export const authenticateOwner = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(401).json({
+        success: false,
+        message: 'Токен не предоставлен'
+      });
+      return;
+    }
+
+    const token = authHeader.substring(7);
+    
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    } catch (error) {
+      res.status(401).json({
+        success: false,
+        message: 'Недействительный токен'
+      });
+      return;
+    }
+
+    // Проверяем что это токен владельца
+    if (decoded.type !== 'owner') {
+      res.status(403).json({
+        success: false,
+        message: 'Доступ запрещён'
+      });
+      return;
+    }
+
+    // Получаем информацию о владельце
+    const owner = await db.queryOne<any>(
+      `SELECT id, owner_name, is_active 
+       FROM property_owners 
+       WHERE id = ? AND is_active = 1`,
+      [decoded.id]
+    );
+
+    if (!owner) {
+      res.status(401).json({
+        success: false,
+        message: 'Владелец не найден или доступ деактивирован'
+      });
+      return;
+    }
+
+    // Добавляем информацию о владельце в request
+    (req as any).owner = owner;
+    next();
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Ошибка аутентификации'
+    });
+  }
+};
+
+/**
+ * Middleware для проверки прав владельца на редактирование объекта
+ */
+export const canOwnerEditProperty = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id: propertyId } = req.params;
+    const ownerName = (req as any).owner?.owner_name;
+
+    if (!ownerName) {
+      res.status(401).json({
+        success: false,
+        message: 'Не авторизован'
+      });
+      return;
+    }
+
+    // Проверяем что объект принадлежит владельцу
+    const property = await db.queryOne<any>(
+      'SELECT id, owner_name FROM properties WHERE id = ? AND deleted_at IS NULL',
+      [propertyId]
+    );
+
+    if (!property) {
+      res.status(404).json({
+        success: false,
+        message: 'Объект не найден'
+      });
+      return;
+    }
+
+    if (property.owner_name !== ownerName) {
+      res.status(403).json({
+        success: false,
+        message: 'У вас нет прав на редактирование этого объекта'
+      });
+      return;
+    }
+
+    next();
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Ошибка проверки прав'
+    });
+  }
+};
+
+/**
+ * Универсальный middleware для авторизации админа или владельца
+ * Используется для эндпоинтов, к которым должны иметь доступ оба типа пользователей
+ */
+export const authenticateAdminOrOwner = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({
+      success: false,
+      message: 'Токен не предоставлен'
+    });
+    return;
+  }
+
+  const token = authHeader.substring(7);
+  
+  try {
+    const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    
+    if (decoded.type === 'owner') {
+      // Это токен владельца
+      return authenticateOwner(req, res, next);
+    } else {
+      // Это токен админа
+      return authenticate(req, res, next);
+    }
+  } catch (error) {
+    res.status(401).json({
+      success: false,
+      message: 'Недействительный токен'
+    });
+    return;
+  }
+};
+
+/**
+ * Универсальный middleware для проверки прав на редактирование объекта
+ * Работает для админов и владельцев
+ */
+export const canEditPropertyUniversal = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  // Если это владелец
+  if ((req as any).owner) {
+    return canOwnerEditProperty(req, res, next);
+  }
+  
+  // Если это админ
+  if (req.admin) {
+    return canEditProperty(req, res, next);
+  }
+  
+  res.status(401).json({
+    success: false,
+    message: 'Не авторизован'
+  });
 };

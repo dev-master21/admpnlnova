@@ -5,7 +5,9 @@ import {
   authenticate, 
   requirePermission,
   canEditProperty,
-  requireSuperAdmin
+  requireSuperAdmin,
+  authenticateAdminOrOwner,
+  canEditPropertyUniversal
 } from '../middlewares/auth.middleware';
 import { 
   uploadPropertyPhotos, 
@@ -117,90 +119,85 @@ router.put(
   propertiesController.updateVideo.bind(propertiesController)
 );
 
-// Цены
+// Цены (доступно админам и владельцам)
 router.get(
   '/:id/pricing-details', 
-  authenticate, 
-  requirePermission('properties.read'),
+  authenticateAdminOrOwner,
   propertiesController.getPricingDetails.bind(propertiesController)
 );
 
 router.put(
   '/:id/monthly-pricing',
-  authenticate,
-  canEditProperty,
+  authenticateAdminOrOwner,
+  canEditPropertyUniversal,
   propertiesController.updateMonthlyPricing.bind(propertiesController)
 );
 
-// Календарь
+// Календарь (доступно админам и владельцам)
 router.get(
   '/:id/calendar', 
-  authenticate, 
-  requirePermission('properties.read'),
+  authenticateAdminOrOwner,
   propertiesController.getCalendar.bind(propertiesController)
 );
 
 router.post(
   '/:id/calendar/block',
-  authenticate,
-  canEditProperty,
+  authenticateAdminOrOwner,
+  canEditPropertyUniversal,
   propertiesController.addBlockedPeriod.bind(propertiesController)
 );
 
 router.delete(
   '/:id/calendar/block',
-  authenticate,
-  canEditProperty,
+  authenticateAdminOrOwner,
+  canEditPropertyUniversal,
   propertiesController.removeBlockedDates.bind(propertiesController)
 );
 
 router.get(
   '/:id/ics',
-  authenticate,
-  requirePermission('properties.read'),
+  authenticateAdminOrOwner,
   propertiesController.getICSInfo.bind(propertiesController)
 );
 
-// Внешние календари
+// Внешние календари (доступно админам и владельцам)
 router.post(
   '/:id/external-calendars/analyze',
-  authenticate,
-  requirePermission('properties.read'),
+  authenticateAdminOrOwner,
   propertiesController.analyzeExternalCalendars.bind(propertiesController)
 );
 
 router.post(
   '/:id/external-calendars/sync',
-  authenticate,
-  canEditProperty,
+  authenticateAdminOrOwner,
+  canEditPropertyUniversal,
   propertiesController.syncExternalCalendars.bind(propertiesController)
 );
 
 router.get(
   '/:id/external-calendars',
-  authenticate,
-  requirePermission('properties.read'),
+  authenticateAdminOrOwner,
   propertiesController.getExternalCalendars.bind(propertiesController)
 );
 
 router.post(
   '/:id/external-calendars',
-  authenticate,
-  canEditProperty,
+  authenticateAdminOrOwner,
+  canEditPropertyUniversal,
   propertiesController.addExternalCalendar.bind(propertiesController)
 );
 
 router.patch(
   '/:id/external-calendars/:calendarId/toggle',
-  authenticate,
-  canEditProperty,
+  authenticateAdminOrOwner,
+  canEditPropertyUniversal,
   propertiesController.toggleExternalCalendar.bind(propertiesController)
 );
 
 router.delete(
   '/:id/external-calendars/:calendarId',
-  authenticate,
-  canEditProperty,
+  authenticateAdminOrOwner,
+  canEditPropertyUniversal,
   propertiesController.removeExternalCalendar.bind(propertiesController)
 );
 

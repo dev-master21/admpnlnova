@@ -192,9 +192,12 @@ const AgreementDetail = () => {
     }
   };
 
-  const handleSimpleContentChange = (content: string) => {
-    setEditedContent(content);
-  };
+const handleSimpleContentChange = (content: string) => {
+  setEditedContent(content);
+  // Конвертируем HTML в structure
+  const newStructure = convertHtmlToStructure(content);
+  setEditedStructure(newStructure);
+};
 
   const handleSaveEdit = async () => {
     if (!agreement) return;
@@ -214,6 +217,119 @@ const AgreementDetail = () => {
       setSaving(false);
     }
   };
+// Конвертация HTML в structure
+const convertHtmlToStructure = (html: string): string => {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    
+    const structure: any = {
+      title: 'LEASE AGREEMENT',
+      city: 'Phuket',
+      date: new Date().toISOString(),
+      nodes: []
+    };
+
+    // Извлекаем title
+    const h1 = doc.querySelector('h1');
+    if (h1) {
+      structure.title = h1.textContent?.trim() || 'LEASE AGREEMENT';
+    }
+
+    // Парсим контент
+    let sectionCounter = 1;
+    let currentSection: any = null;
+    const bodyChildren = Array.from(doc.body.children);
+
+    bodyChildren.forEach((element) => {
+      const tagName = element.tagName.toLowerCase();
+      const content = element.textContent?.trim() || '';
+
+      if (tagName === 'h1') return;
+
+      if (tagName === 'h2') {
+        if (currentSection) {
+          structure.nodes.push(currentSection);
+        }
+        currentSection = {
+          id: `section-${Date.now()}-${sectionCounter}`,
+          type: 'section',
+          content: content,
+          number: sectionCounter.toString(),
+          children: []
+        };
+        sectionCounter++;
+      } else if ((tagName === 'h3' || tagName === 'p') && currentSection) {
+        if (tagName === 'h3') {
+          const subsectionNum = currentSection.children.filter((c: any) => c.type === 'subsection').length + 1;
+          currentSection.children.push({
+            id: `subsection-${Date.now()}-${Math.random()}`,
+            type: 'subsection',
+            content: content.replace(/^\d+(\.\d+)*\.\s*/, ''),
+            number: `${currentSection.number}.${subsectionNum}`,
+            level: 1
+          });
+        } else if (content) {
+          currentSection.children.push({
+            id: `paragraph-${Date.now()}-${Math.random()}`,
+            type: 'paragraph',
+            content: content
+          });
+        }
+      } else if (tagName === 'ul' && currentSection) {
+        const items: string[] = [];
+        element.querySelectorAll('li').forEach((li) => {
+          const itemText = li.textContent?.trim();
+          if (itemText) items.push(itemText);
+        });
+        if (items.length > 0) {
+          currentSection.children.push({
+            id: `bulletlist-${Date.now()}-${Math.random()}`,
+            type: 'bulletList',
+            items: items
+          });
+        }
+      }
+    });
+
+    if (currentSection) {
+      structure.nodes.push(currentSection);
+    }
+
+    if (structure.nodes.length === 0) {
+      const plainText = doc.body.textContent?.trim() || '';
+      if (plainText) {
+        structure.nodes = [{
+          id: `section-${Date.now()}`,
+          type: 'section',
+          content: 'DOCUMENT CONTENT',
+          number: '1',
+          children: [{
+            id: `paragraph-${Date.now()}`,
+            type: 'paragraph',
+            content: plainText
+          }]
+        }];
+      }
+    }
+
+    return JSON.stringify(structure);
+  } catch (error) {
+    console.error('Error converting HTML to structure:', error);
+    return JSON.stringify({
+      title: 'LEASE AGREEMENT',
+      city: 'Phuket',
+      date: new Date().toISOString(),
+      nodes: [{
+        id: `section-${Date.now()}`,
+        type: 'section',
+        content: 'CONTENT',
+        number: '1',
+        children: []
+      }]
+    });
+  }
+};
 
   const handleCancelEdit = () => {
     Modal.confirm({

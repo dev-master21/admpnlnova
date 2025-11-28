@@ -1,5 +1,6 @@
 // frontend/src/api/properties.api.ts
 import api from './axios';
+import { getApiClient } from '@/utils/apiClient';
 
 export interface Property {
   id: number;
@@ -23,12 +24,12 @@ export interface Property {
 }
 
 export interface PriceMarkup {
-  type: 'percent' | 'fixed'; // процент или фиксированная сумма в батах
-  value: number; // значение
+  type: 'percent' | 'fixed';
+  value: number;
 }
 
 export interface PropertyPricesInfo {
-  dealType: 'rent' | 'sale' | 'both'; // ✅ Добавляем deal_type
+  dealType: 'rent' | 'sale' | 'both';
   yearlyPrice: number | null;
   seasonalPrices: Array<{
     id: number;
@@ -60,14 +61,14 @@ export interface PropertiesResponse {
   };
 }
 
-// ✅ НОВЫЙ ТИП
 export interface MonthlyPrice {
   month_number: number;
   price_per_month: number;
-  minimum_days?: number;
+  minimum_days?: number | null;
 }
 
 export const propertiesApi = {
+  // Методы, которые ВСЕГДА используют admin API
   getAll: (params?: {
     page?: number;
     limit?: number;
@@ -78,11 +79,17 @@ export const propertiesApi = {
     owner_name?: string;
   }) => api.get<PropertiesResponse>('/properties', { params }),
 
-  getById: (id: number) => api.get(`/properties/${id}`),
+  getById: (id: number) => {
+    const client = getApiClient();
+    return client.get(`/properties/${id}`);
+  },
 
   create: (data: any) => api.post('/properties', data),
 
-  update: (id: number, data: any) => api.put(`/properties/${id}`, data),
+  update: (id: number, data: any) => {
+    const client = getApiClient();
+    return client.put(`/properties/${id}`, data);
+  },
 
   delete: (id: number) => api.delete(`/properties/${id}`),
 
@@ -90,7 +97,6 @@ export const propertiesApi = {
 
   getUniqueOwners: () => api.get<{ success: boolean; data: string[] }>('/properties/owners/unique'),
 
-  // Скачать фотографии
   downloadPhotos: (propertyId: number, photoIds?: number[]) => 
     api.post(`/properties/${propertyId}/photos/download`, 
       { photoIds }, 
@@ -139,7 +145,6 @@ export const propertiesApi = {
   deletePhoto: (propertyId: number, photoId: number) => 
     api.delete(`/properties/${propertyId}/photos/${photoId}`),
 
-
   updatePhotosOrder: (id: number, updates: any[]) => 
     api.put(`/properties/${id}/photos/reorder`, { updates }),
 
@@ -162,7 +167,6 @@ export const propertiesApi = {
       };
     }>('/property-search/calculate-beach-distance', { latitude, longitude }),
     
-  // VR Panoramas
   getVRPanoramas: (propertyId: number) => 
     api.get(`/properties/${propertyId}/vr-panoramas`),
 
@@ -174,28 +178,83 @@ export const propertiesApi = {
   deleteVRPanorama: (panoramaId: number) => 
     api.delete(`/properties/vr-panoramas/${panoramaId}`),
 
-  // Управление календарём занятости
-  addBlockedPeriod: (propertyId: number, data: { start_date: string; end_date: string; reason?: string }) =>
-    api.post(`/properties/${propertyId}/calendar/block`, data),
-  
-  removeBlockedDates: (propertyId: number, dates: string[]) =>
-    api.delete(`/properties/${propertyId}/calendar/block`, { data: { dates } }),
-  
-  getICSInfo: (propertyId: number) =>
-    api.get(`/properties/${propertyId}/ics`),
+  // ✅ Методы с getApiClient() для работы и админов, и владельцев
+  getPricingDetails: (id: number) => {
+    const client = getApiClient();
+    return client.get(`/properties/${id}/pricing-details`);
+  },
 
-  // Получить детальную информацию по ценам
-  getPricingDetails: (id: number) => 
-    api.get(`/properties/${id}/pricing-details`),
+  updatePricingDetails: (id: number, data: any) => {
+    const client = getApiClient();
+    return client.put(`/properties/${id}/pricing-details`, data);
+  },
 
-  // ✅ НОВОЕ: Обновить месячные цены
-  updateMonthlyPricing: (id: number, monthlyPricing: MonthlyPrice[]) =>
-    api.put(`/properties/${id}/monthly-pricing`, { monthlyPricing }),
+  getMonthlyPricing: (id: number) => {
+    const client = getApiClient();
+    return client.get(`/properties/${id}/monthly-pricing`);
+  },
 
-  // Получить календарь занятости
-  getCalendar: (id: number, params?: { start_date?: string; end_date?: string }) => 
-    api.get(`/properties/${id}/calendar`, { params }),
+  updateMonthlyPricing: (id: number, monthlyPricing: MonthlyPrice[]) => {
+    const client = getApiClient();
+    return client.put(`/properties/${id}/monthly-pricing`, { monthlyPricing });
+  },
+
+  getCalendar: (id: number, params?: { start_date?: string; end_date?: string }) => {
+    const client = getApiClient();
+    return client.get(`/properties/${id}/calendar`, { params });
+  },
+
+  addBlockedPeriod: (propertyId: number, data: { start_date: string; end_date: string; reason?: string }) => {
+    const client = getApiClient();
+    return client.post(`/properties/${propertyId}/calendar/block`, data);
+  },
   
+  removeBlockedDates: (propertyId: number, dates: string[]) => {
+    const client = getApiClient();
+    return client.delete(`/properties/${propertyId}/calendar/block`, { data: { dates } });
+  },
+  
+  getICSInfo: (propertyId: number) => {
+    const client = getApiClient();
+    return client.get(`/properties/${propertyId}/ics`);
+  },
+
+  getExternalCalendars: (propertyId: number) => {
+    const client = getApiClient();
+    return client.get(`/properties/${propertyId}/external-calendars`);
+  },
+
+  addExternalCalendar: (propertyId: number, data: { calendar_name: string; ics_url: string }) => {
+    const client = getApiClient();
+    return client.post(`/properties/${propertyId}/external-calendars`, data);
+  },
+
+  removeExternalCalendar: (propertyId: number, calendarId: number, removeDates: boolean) => {
+    const client = getApiClient();
+    return client.delete(`/properties/${propertyId}/external-calendars/${calendarId}`, {
+      data: { remove_dates: removeDates }
+    });
+  },
+
+  toggleExternalCalendar: (propertyId: number, calendarId: number, isEnabled: boolean) => {
+    const client = getApiClient();
+    return client.patch(`/properties/${propertyId}/external-calendars/${calendarId}/toggle`, {
+      is_enabled: isEnabled
+    });
+  },
+
+  analyzeExternalCalendars: (propertyId: number, calendarIds: number[]) => {
+    const client = getApiClient();
+    return client.post(`/properties/${propertyId}/external-calendars/analyze`, {
+      calendar_ids: calendarIds
+    });
+  },
+
+  syncExternalCalendars: (propertyId: number) => {
+    const client = getApiClient();
+    return client.post(`/properties/${propertyId}/external-calendars/sync`);
+  },
+
   updateVRPanoramasOrder: (propertyId: number, panoramas: any[]) => 
     api.put(`/properties/${propertyId}/vr-panoramas/order`, { panoramas }),
 
@@ -214,39 +273,12 @@ export const propertiesApi = {
     });
   },
 
-  // Управление внешними календарями
-  getExternalCalendars: (propertyId: number) =>
-    api.get(`/properties/${propertyId}/external-calendars`),
-
-  addExternalCalendar: (propertyId: number, data: { calendar_name: string; ics_url: string }) =>
-    api.post(`/properties/${propertyId}/external-calendars`, data),
-
-  removeExternalCalendar: (propertyId: number, calendarId: number, removeDates: boolean) =>
-    api.delete(`/properties/${propertyId}/external-calendars/${calendarId}`, {
-      data: { remove_dates: removeDates }
-    }),
-
-  toggleExternalCalendar: (propertyId: number, calendarId: number, isEnabled: boolean) =>
-    api.patch(`/properties/${propertyId}/external-calendars/${calendarId}/toggle`, {
-      is_enabled: isEnabled
-    }),
-
-  analyzeExternalCalendars: (propertyId: number, calendarIds: number[]) =>
-    api.post(`/properties/${propertyId}/external-calendars/analyze`, {
-      calendar_ids: calendarIds
-    }),
-
-  syncExternalCalendars: (propertyId: number) =>
-    api.post(`/properties/${propertyId}/external-calendars/sync`),
-
-  // AI Generation
   checkAIGenerationReadiness: (id: number) => 
     api.get(`/properties/${id}/ai-generation/readiness`),
   
   generateAIDescription: (id: number, additionalPrompt?: string) => 
     api.post(`/properties/${id}/ai-generation/generate`, { additionalPrompt }),
 
-  // AI создание объекта
   createWithAI: (text: string) =>
     api.post('/properties/create-with-ai', { text }),
   

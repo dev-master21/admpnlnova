@@ -1,5 +1,5 @@
 // frontend/src/components/DocumentEditor/DocumentEditor.tsx
-import { useState, useEffect, forwardRef } from 'react';
+import { useState, useEffect, forwardRef, useRef } from 'react';
 import styled from 'styled-components';
 import { 
   FiPlus, 
@@ -623,6 +623,7 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
     const [editingNode, setEditingNode] = useState<string | null>(null);
     const [showAddMenu, setShowAddMenu] = useState<string | null>(null);
     const [pages, setPages] = useState<PageContent[]>([]);
+    const editInputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
     
     const [contextMenu, setContextMenu] = useState<{ 
       show: boolean; 
@@ -730,6 +731,24 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
       document.addEventListener('mouseup', handleTextSelection);
       return () => document.removeEventListener('mouseup', handleTextSelection);
     }, [isEditing]);
+
+    // Фокус на редактируемом элементе БЕЗ прокрутки
+    useEffect(() => {
+      if (editingNode && editInputRef.current) {
+        // Сохраняем текущую позицию прокрутки
+        const scrollY = window.scrollY;
+        const scrollX = window.scrollX;
+        
+        // Фокусируем элемент
+        editInputRef.current.focus();
+        if ('select' in editInputRef.current) {
+          editInputRef.current.select();
+        }
+        
+        // Восстанавливаем позицию прокрутки
+        window.scrollTo(scrollX, scrollY);
+      }
+    }, [editingNode]);
 
     // IMPROVED PAGINATION LOGIC
     const splitContentIntoPages = () => {
@@ -1154,17 +1173,28 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
           <SectionHeader isEditing={isEditing} data-node-id={node.id}>
             {editingNode === node.id ? (
               <input
+                ref={editInputRef as React.RefObject<HTMLInputElement>}
                 type="text"
                 value={node.content}
                 onChange={(e) => updateNode(node.id, e.target.value)}
                 onBlur={() => setEditingNode(null)}
-                onKeyDown={(e) => e.key === 'Enter' && setEditingNode(null)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    setEditingNode(null);
+                  }
+                }}
                 style={{ background: 'transparent', border: 'none', color: 'inherit', width: '100%', outline: 'none' }}
-                autoFocus
               />
             ) : (
               <span 
-                onClick={() => isEditing && setEditingNode(node.id)}
+                onClick={(e) => {
+                  if (!isEditing) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setEditingNode(node.id);
+                }}
+                style={{ pointerEvents: 'auto', display: 'inline-block', width: '100%' }}
                 dangerouslySetInnerHTML={{ __html: node.content }}
               />
             )}
@@ -1177,17 +1207,28 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
               <NumberSpan>{node.number}.</NumberSpan>
               {editingNode === node.id ? (
                 <input
+                  ref={editInputRef as React.RefObject<HTMLInputElement>}
                   type="text"
                   value={node.content}
                   onChange={(e) => updateNode(node.id, e.target.value)}
                   onBlur={() => setEditingNode(null)}
-                  onKeyDown={(e) => e.key === 'Enter' && setEditingNode(null)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      setEditingNode(null);
+                    }
+                  }}
                   style={{ background: 'transparent', border: 'none', width: '90%', outline: 'none' }}
-                  autoFocus
                 />
               ) : (
                 <span 
-                  onClick={() => isEditing && setEditingNode(node.id)}
+                  onClick={(e) => {
+                    if (!isEditing) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setEditingNode(node.id);
+                  }}
+                  style={{ pointerEvents: 'auto', display: 'inline-block' }}
                   dangerouslySetInnerHTML={{ __html: node.content }}
                 />
               )}
@@ -1199,15 +1240,21 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
           <Paragraph isEditing={isEditing} data-node-id={node.id}>
             {editingNode === node.id ? (
               <textarea
+                ref={editInputRef as React.RefObject<HTMLTextAreaElement>}
                 value={node.content}
                 onChange={(e) => updateNode(node.id, e.target.value)}
                 onBlur={() => setEditingNode(null)}
                 style={{ background: 'transparent', border: 'none', width: '100%', minHeight: '50px', outline: 'none', resize: 'vertical' }}
-                autoFocus
               />
             ) : (
               <span 
-                onClick={() => isEditing && setEditingNode(node.id)}
+                onClick={(e) => {
+                  if (!isEditing) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setEditingNode(node.id);
+                }}
+                style={{ pointerEvents: 'auto', display: 'inline-block', width: '100%' }}
                 dangerouslySetInnerHTML={{ __html: node.content }}
               />
             )}
@@ -1220,23 +1267,29 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
               <li key={index} style={{ position: 'relative' }}>
                 {editingNode === `${node.id}-item-${index}` ? (
                   <input
+                    ref={editInputRef as React.RefObject<HTMLInputElement>}
                     type="text"
                     value={item}
                     onChange={(e) => updateBulletItem(node.id, index, e.target.value)}
                     onBlur={() => setEditingNode(null)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
+                        e.preventDefault();
                         setEditingNode(null);
                         addBulletItem(node.id, index);
                       }
                     }}
                     style={{ background: 'transparent', border: 'none', width: '100%', outline: 'none' }}
-                    autoFocus
                   />
                 ) : (
                   <BulletItemEditable
                     isEditing={isEditing}
-                    onClick={() => isEditing && setEditingNode(`${node.id}-item-${index}`)}
+                    onClick={(e) => {
+                      if (!isEditing) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setEditingNode(`${node.id}-item-${index}`);
+                    }}
                     data-node-id={node.id}
                     dangerouslySetInnerHTML={{ __html: item }}
                   />
@@ -1245,7 +1298,11 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
                   <BulletControls>
                     <BulletButton
                       variant="add"
-                      onClick={() => addBulletItem(node.id, index)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        addBulletItem(node.id, index);
+                      }}
                       title="Add item"
                     >
                       <FiPlus size={8} />
@@ -1253,7 +1310,11 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
                     {node.items && node.items.length > 1 && (
                       <BulletButton
                         variant="remove"
-                        onClick={() => removeBulletItem(node.id, index)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          removeBulletItem(node.id, index);
+                        }}
                         title="Remove item"
                       >
                         <FiX size={8} />
@@ -1270,7 +1331,11 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
           <EditControls>
             <EditButton
               variant="add"
-              onClick={() => setShowAddMenu(showAddMenu === node.id ? null : node.id)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowAddMenu(showAddMenu === node.id ? null : node.id);
+              }}
               title="Add element"
               className="add-button"
             >
@@ -1278,7 +1343,11 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
             </EditButton>
             <EditButton
               variant="remove"
-              onClick={() => removeNode(node.id)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                removeNode(node.id);
+              }}
               title="Remove"
             >
               <FiX size={14} />
@@ -1416,16 +1485,25 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
                   <Title isEditing={true}>
                     {editingNode === 'title' ? (
                       <input
+                        ref={editInputRef as React.RefObject<HTMLInputElement>}
                         type="text"
                         value={structure.title}
                         onChange={(e) => setStructure({ ...structure, title: e.target.value })}
                         onBlur={() => setEditingNode(null)}
-                        onKeyDown={(e) => e.key === 'Enter' && setEditingNode(null)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            setEditingNode(null);
+                          }
+                        }}
                         style={{ background: 'transparent', border: 'none', width: '100%', textAlign: 'center', outline: 'none' }}
-                        autoFocus
                       />
                     ) : (
-                      <span onClick={() => setEditingNode('title')}>
+                      <span onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEditingNode('title');
+                      }}>
                         {structure.title}
                       </span>
                     )}
@@ -1435,17 +1513,26 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
                     <span>
                       City: {editingNode === 'city' ? (
                         <input
+                          ref={editInputRef as React.RefObject<HTMLInputElement>}
                           type="text"
                           value={structure.city}
                           onChange={(e) => setStructure({ ...structure, city: e.target.value })}
                           onBlur={() => setEditingNode(null)}
-                          onKeyDown={(e) => e.key === 'Enter' && setEditingNode(null)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              setEditingNode(null);
+                            }
+                          }}
                           style={{ background: 'transparent', border: 'none', width: '100px', outline: 'none' }}
-                          autoFocus
                         />
                       ) : (
                         <span 
-                          onClick={() => setEditingNode('city')}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setEditingNode('city');
+                          }}
                           style={{ cursor: 'text' }}
                         >
                           {structure.city}
@@ -1461,7 +1548,11 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
                     <div style={{ textAlign: 'center', marginTop: '10mm' }}>
                       <EditButton
                         variant="add"
-                        onClick={() => addNode(null, 'section')}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          addNode(null, 'section');
+                        }}
                         style={{ width: '40px', height: '40px' }}
                         title="Add new section"
                       >
