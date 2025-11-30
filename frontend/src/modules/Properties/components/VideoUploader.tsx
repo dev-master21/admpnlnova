@@ -1,26 +1,41 @@
 // frontend/src/modules/Properties/components/VideoUploader.tsx
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import {
   Card,
+  Stack,
+  Group,
   Button,
+  Text,
   Progress,
-  List,
-  Space,
-  message,
-  Popconfirm,
-  Input,
+  Badge,
   Modal,
-  Form,
-  Tooltip
-} from 'antd';
+  TextInput,
+  Textarea,
+  Paper,
+  ActionIcon,
+  ThemeIcon,
+  Tooltip,
+  Center,
+  Box,
+  Image,
+  FileButton,
+  Divider,
+  Alert
+} from '@mantine/core';
 import {
-  UploadOutlined,
-  DeleteOutlined,
-  EditOutlined,
-  PlayCircleOutlined,
-  DownloadOutlined
-} from '@ant-design/icons';
+  IconUpload,
+  IconTrash,
+  IconEdit,
+  IconPlayerPlay,
+  IconDownload,
+  IconVideo,
+  IconX,
+  IconCheck,
+  IconInfoCircle
+} from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
+import { notifications } from '@mantine/notifications';
+import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { propertiesApi } from '@/api/properties.api';
 
 interface Video {
@@ -42,15 +57,23 @@ interface VideoUploaderProps {
 
 const VideoUploader = ({ propertyId, videos = [], onUpdate, viewMode = false }: VideoUploaderProps) => {
   const { t } = useTranslation();
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editingVideo, setEditingVideo] = useState<Video | null>(null);
-  const [form] = Form.useForm();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
+  const [editModalOpened, { open: openEditModal, close: closeEditModal }] = useDisclosure(false);
+  const [editingVideo, setEditingVideo] = useState<Video | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  
+  const [playerModalOpened, { open: openPlayerModal, close: closePlayerModal }] = useDisclosure(false);
   const [playingVideo, setPlayingVideo] = useState<Video | null>(null);
-  const [playerModalVisible, setPlayerModalVisible] = useState(false);
+  
+  // Модальное окно для удаления
+  const [deleteModalOpened, { open: openDeleteModal, close: closeDeleteModal }] = useDisclosure(false);
+  const [deletingVideo, setDeletingVideo] = useState<Video | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -60,13 +83,17 @@ const VideoUploader = ({ propertyId, videos = [], onUpdate, viewMode = false }: 
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+  const handleFileSelect = async (files: File[]) => {
     if (files.length === 0) return;
 
     const invalidFiles = files.filter(file => !file.type.startsWith('video/'));
     if (invalidFiles.length > 0) {
-      message.error(t('videoUploader.invalidFiles', { files: invalidFiles.map(f => f.name).join(', ') }));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('videoUploader.invalidFiles', { files: invalidFiles.map(f => f.name).join(', ') }),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
       return;
     }
 
@@ -83,55 +110,99 @@ const VideoUploader = ({ propertyId, videos = [], onUpdate, viewMode = false }: 
         setUploadProgress(progress);
       });
 
-      message.success(t('videoUploader.videosUploaded', { count: files.length }));
+      notifications.show({
+        title: t('common.success'),
+        message: t('videoUploader.videosUploaded', { count: files.length }),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
       onUpdate();
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('videoUploader.errorUploading'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('videoUploader.errorUploading'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     } finally {
       setUploading(false);
       setUploadProgress(0);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  const handleDelete = async (videoId: number) => {
+  const handleDeleteConfirm = async () => {
+    if (!deletingVideo) return;
+    
+    setDeleting(true);
+    closeDeleteModal();
+
     try {
-      await propertiesApi.deleteVideo(propertyId, videoId);
-      message.success(t('common.deleteSuccess'));
+      await propertiesApi.deleteVideo(propertyId, deletingVideo.id);
+      notifications.show({
+        title: t('common.success'),
+        message: t('common.deleteSuccess'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
       onUpdate();
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('errors.generic'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('errors.generic'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
+    } finally {
+      setDeleting(false);
+      setDeletingVideo(null);
     }
   };
 
   const handleEdit = (video: Video) => {
     setEditingVideo(video);
-    form.setFieldsValue({
-      title: video.title,
-      description: video.description
-    });
-    setEditModalVisible(true);
+    setEditTitle(video.title || '');
+    setEditDescription(video.description || '');
+    openEditModal();
   };
 
   const handleSaveEdit = async () => {
+    if (!editingVideo) return;
+
     try {
-      const values = await form.validateFields();
-      await propertiesApi.updateVideo(propertyId, editingVideo!.id, values);
-      message.success(t('common.saveSuccess'));
-      setEditModalVisible(false);
+      await propertiesApi.updateVideo(propertyId, editingVideo.id, {
+        title: editTitle,
+        description: editDescription
+      });
+      
+      notifications.show({
+        title: t('common.success'),
+        message: t('common.saveSuccess'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
+      
+      closeEditModal();
+      setEditingVideo(null);
+      setEditTitle('');
+      setEditDescription('');
       onUpdate();
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('errors.generic'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('errors.generic'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     }
   };
 
   const handlePlayVideo = (video: Video) => {
     setPlayingVideo(video);
-    setPlayerModalVisible(true);
+    openPlayerModal();
   };
 
   const handleClosePlayer = () => {
-    setPlayerModalVisible(false);
+    closePlayerModal();
     setTimeout(() => {
       setPlayingVideo(null);
     }, 300);
@@ -144,236 +215,379 @@ const VideoUploader = ({ propertyId, videos = [], onUpdate, viewMode = false }: 
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    message.success(t('videoUploader.videoDownloading'));
+    
+    notifications.show({
+      title: t('common.success'),
+      message: t('videoUploader.videoDownloading'),
+      color: 'blue',
+      icon: <IconDownload size={18} />
+    });
   };
 
   return (
-    <Card 
-      title={t('videoUploader.title')}
-      extra={
-        !viewMode && (
-          <Button
-            type="primary"
-            icon={<UploadOutlined />}
-            onClick={() => fileInputRef.current?.click()}
-            loading={uploading}
-            disabled={uploading}
-          >
-            {t('videoUploader.uploadVideo')}
-          </Button>
-        )
-      }
-    >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="video/*"
-        multiple
-        style={{ display: 'none' }}
-        onChange={handleFileSelect}
-      />
+    <Stack gap="lg">
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="lg">
+          {/* Header */}
+          <Group justify="space-between">
+            <Group gap="sm">
+              <ThemeIcon size="lg" radius="md" variant="light" color="grape">
+                <IconVideo size={20} />
+              </ThemeIcon>
+              <div>
+                <Text fw={600} size="lg">
+                  {t('videoUploader.title')}
+                </Text>
+                {videos.length > 0 && (
+                  <Text size="sm" c="dimmed">
+                    {t('videoUploader.videoCount', { count: videos.length })}
+                  </Text>
+                )}
+              </div>
+            </Group>
 
-      {uploading && (
-        <div style={{ marginBottom: 24 }}>
-          <Progress percent={uploadProgress} status="active" />
-          <p style={{ textAlign: 'center', marginTop: 8, color: '#666' }}>
-            {t('videoUploader.uploadingProgress', { percent: uploadProgress })}
-          </p>
-        </div>
-      )}
-
-      {videos.length === 0 && !uploading && (
-        <div style={{ 
-          textAlign: 'center', 
-          padding: '40px 0',
-          color: '#999'
-        }}>
-          <PlayCircleOutlined style={{ fontSize: 48, marginBottom: 16 }} />
-          <p>{t('videoUploader.noVideos')}</p>
-          <p style={{ fontSize: 12 }}>
-            {t('videoUploader.supportedFormats')}<br />
-            {t('videoUploader.maxSize')}
-          </p>
-        </div>
-      )}
-
-      {videos.length > 0 && (
-        <List
-          dataSource={videos}
-          renderItem={(video) => (
-            <List.Item
-              actions={[
-                <Tooltip title={t('videoUploader.downloadVideo')} key="download">
+            {!viewMode && (
+              <FileButton onChange={handleFileSelect} accept="video/*" multiple>
+                {(props) => (
                   <Button
-                    type="text"
-                    icon={<DownloadOutlined />}
-                    onClick={() => handleDownloadVideo(video)}
-                    disabled={false}
-                  />
-                </Tooltip>,
-                ...(!viewMode ? [
-                  <Tooltip title={t('videoUploader.edit')} key="edit">
-                    <Button
-                      type="text"
-                      icon={<EditOutlined />}
-                      onClick={() => handleEdit(video)}
-                    />
-                  </Tooltip>,
-                  <Popconfirm
-                    key="delete"
-                    title={t('common.confirmDelete')}
-                    onConfirm={() => handleDelete(video.id)}
-                    okText={t('common.yes')}
-                    cancelText={t('common.no')}
+                    {...props}
+                    variant="gradient"
+                    gradient={{ from: 'grape', to: 'pink', deg: 90 }}
+                    leftSection={<IconUpload size={18} />}
+                    disabled={uploading}
+                    size={isMobile ? 'sm' : 'md'}
                   >
-                    <Tooltip title={t('common.delete')}>
-                      <Button
-                        type="text"
-                        danger
-                        icon={<DeleteOutlined />}
-                      />
-                    </Tooltip>
-                  </Popconfirm>
-                ] : [])
-              ]}
-            >
-              <List.Item.Meta
-                avatar={
-                  <div
-                    style={{
-                      position: 'relative',
-                      width: 120,
-                      height: 68,
-                      cursor: 'pointer',
-                      borderRadius: 4,
-                      overflow: 'hidden'
-                    }}
-                    onClick={() => handlePlayVideo(video)}
-                  >
-                    {video.thumbnail_url ? (
-                      <img
-                        src={`https://novaestate.company${video.thumbnail_url}`}
-                        alt={t('videoUploader.thumbnailAlt')}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover'
-                        }}
-                      />
-                    ) : (
-                      <video
-                        src={`https://novaestate.company${video.video_url}`}
-                        style={{ 
-                          width: '100%', 
-                          height: '100%', 
-                          objectFit: 'cover'
-                        }}
-                      />
-                    )}
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        background: 'rgba(0, 0, 0, 0.7)',
-                        borderRadius: '50%',
-                        width: 40,
-                        height: 40,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.3s'
-                      }}
-                      className="play-button-overlay"
-                    >
-                      <PlayCircleOutlined 
-                        style={{ 
-                          fontSize: 24, 
-                          color: 'white'
-                        }} 
-                      />
-                    </div>
-                  </div>
-                }
-                title={video.title || t('videoUploader.noTitle')}
-                description={
-                  <Space direction="vertical" size={0}>
-                    <span>{video.description || t('videoUploader.noDescription')}</span>
-                    <span style={{ fontSize: 12, color: '#999' }}>
-                      {formatFileSize(video.file_size)}
-                    </span>
-                  </Space>
-                }
-              />
-            </List.Item>
-          )}
-        />
-      )}
+                    {isMobile ? t('videoUploader.upload') : t('videoUploader.uploadVideo')}
+                  </Button>
+                )}
+              </FileButton>
+            )}
+          </Group>
 
+          {/* Upload Progress */}
+          {uploading && (
+            <Paper p="md" radius="md" withBorder>
+              <Stack gap="sm">
+                <Progress 
+                  value={uploadProgress} 
+                  size="lg" 
+                  radius="xl"
+                  striped
+                  animated
+                  color="grape"
+                />
+                <Text size="sm" ta="center" c="dimmed">
+                  {t('videoUploader.uploadingProgress', { percent: uploadProgress })}
+                </Text>
+              </Stack>
+            </Paper>
+          )}
+
+          {/* Info Alert */}
+          {!viewMode && videos.length === 0 && !uploading && (
+            <Alert icon={<IconInfoCircle size={18} />} color="blue" variant="light">
+              <Text size="sm">
+                {t('videoUploader.supportedFormats')}
+              </Text>
+              <Text size="sm">
+                {t('videoUploader.maxSize')}
+              </Text>
+            </Alert>
+          )}
+
+          <Divider />
+
+          {/* Empty State */}
+          {videos.length === 0 && !uploading && (
+            <Paper p="xl" radius="md" withBorder>
+              <Center>
+                <Stack align="center" gap="md">
+                  <ThemeIcon size={80} radius="xl" variant="light" color="gray">
+                    <IconVideo size={40} />
+                  </ThemeIcon>
+                  <Text size="lg" c="dimmed" ta="center">
+                    {t('videoUploader.noVideos')}
+                  </Text>
+                </Stack>
+              </Center>
+            </Paper>
+          )}
+
+          {/* Videos List */}
+          {videos.length > 0 && (
+            <Stack gap="md">
+              {videos.map((video) => (
+                <Paper key={video.id} p="md" radius="md" withBorder>
+                  <Group align="flex-start" wrap="nowrap" gap="md">
+                    {/* Video Thumbnail */}
+                    <Box
+                      pos="relative"
+                      style={{
+                        width: isMobile ? 100 : 160,
+                        height: isMobile ? 56 : 90,
+                        minWidth: isMobile ? 100 : 160,
+                        cursor: 'pointer',
+                        borderRadius: 8,
+                        overflow: 'hidden'
+                      }}
+                      onClick={() => handlePlayVideo(video)}
+                    >
+                      {video.thumbnail_url ? (
+                        <Image
+                          src={`https://novaestate.company${video.thumbnail_url}`}
+                          alt={t('videoUploader.thumbnailAlt')}
+                          height="100%"
+                          fit="cover"
+                        />
+                      ) : (
+                        <video
+                          src={`https://novaestate.company${video.video_url}`}
+                          style={{ 
+                            width: '100%', 
+                            height: '100%', 
+                            objectFit: 'cover'
+                          }}
+                        />
+                      )}
+                      
+                      {/* Play Button Overlay */}
+                      <Center
+                        style={{
+                          position: 'absolute',
+                          top: '50%',
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          background: 'rgba(0, 0, 0, 0.7)',
+                          borderRadius: '50%',
+                          width: 40,
+                          height: 40,
+                          transition: 'all 0.3s',
+                          opacity: 0.8
+                        }}
+                        className="play-button-overlay"
+                      >
+                        <IconPlayerPlay 
+                          size={24}
+                          style={{ color: 'white' }}
+                        />
+                      </Center>
+                    </Box>
+
+                    {/* Video Info */}
+                    <Stack gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                      <Text fw={600} size={isMobile ? 'sm' : 'md'} lineClamp={1}>
+                        {video.title || t('videoUploader.noTitle')}
+                      </Text>
+                      
+                      {video.description && (
+                        <Text size="sm" c="dimmed" lineClamp={2}>
+                          {video.description}
+                        </Text>
+                      )}
+                      
+                      <Group gap="xs">
+                        <Badge variant="light" color="grape" size={isMobile ? 'sm' : 'md'}>
+                          {formatFileSize(video.file_size)}
+                        </Badge>
+                      </Group>
+                    </Stack>
+
+                    {/* Action Buttons */}
+                    <Group gap="xs" wrap="nowrap">
+                      <Tooltip label={t('videoUploader.downloadVideo')}>
+                        <ActionIcon
+                          variant="light"
+                          color="blue"
+                          size={isMobile ? 'md' : 'lg'}
+                          onClick={() => handleDownloadVideo(video)}
+                        >
+                          <IconDownload size={isMobile ? 16 : 18} />
+                        </ActionIcon>
+                      </Tooltip>
+
+                      {!viewMode && (
+                        <>
+                          <Tooltip label={t('videoUploader.edit')}>
+                            <ActionIcon
+                              variant="light"
+                              color="grape"
+                              size={isMobile ? 'md' : 'lg'}
+                              onClick={() => handleEdit(video)}
+                            >
+                              <IconEdit size={isMobile ? 16 : 18} />
+                            </ActionIcon>
+                          </Tooltip>
+
+                          <Tooltip label={t('common.delete')}>
+                            <ActionIcon
+                              variant="light"
+                              color="red"
+                              size={isMobile ? 'md' : 'lg'}
+                              onClick={() => {
+                                setDeletingVideo(video);
+                                openDeleteModal();
+                              }}
+                              loading={deleting && deletingVideo?.id === video.id}
+                            >
+                              <IconTrash size={isMobile ? 16 : 18} />
+                            </ActionIcon>
+                          </Tooltip>
+                        </>
+                      )}
+                    </Group>
+                  </Group>
+                </Paper>
+              ))}
+            </Stack>
+          )}
+        </Stack>
+      </Card>
+
+      {/* Delete Confirmation Modal */}
       <Modal
-        title={t('videoUploader.editVideoTitle')}
-        open={editModalVisible}
-        onOk={handleSaveEdit}
-        onCancel={() => setEditModalVisible(false)}
-        okText={t('common.save')}
-        cancelText={t('common.cancel')}
+        opened={deleteModalOpened}
+        onClose={() => {
+          closeDeleteModal();
+          setDeletingVideo(null);
+        }}
+        title={t('common.confirmDelete')}
+        centered
       >
-        <Form form={form} layout="vertical">
-          <Form.Item name="title" label={t('videoUploader.titleLabel')}>
-            <Input placeholder={t('videoUploader.titlePlaceholder')} />
-          </Form.Item>
-          <Form.Item name="description" label={t('videoUploader.descriptionLabel')}>
-            <Input.TextArea rows={4} placeholder={t('videoUploader.descriptionPlaceholder')} />
-          </Form.Item>
-        </Form>
+        <Stack gap="md">
+          <Text>{t('videoUploader.confirmDeleteVideo')}</Text>
+          <Group justify="flex-end">
+            <Button
+              variant="subtle"
+              onClick={() => {
+                closeDeleteModal();
+                setDeletingVideo(null);
+              }}
+            >
+              {t('common.no')}
+            </Button>
+            <Button color="red" onClick={handleDeleteConfirm} loading={deleting}>
+              {t('common.yes')}
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
 
+      {/* Edit Modal */}
       <Modal
-        title={playingVideo?.title || t('videoUploader.playingVideo')}
-        open={playerModalVisible}
-        onCancel={handleClosePlayer}
-        footer={null}
-        width={800}
+        opened={editModalOpened}
+        onClose={() => {
+          closeEditModal();
+          setEditingVideo(null);
+          setEditTitle('');
+          setEditDescription('');
+        }}
+        title={
+          <Group gap="sm">
+            <ThemeIcon size="lg" radius="md" variant="light" color="grape">
+              <IconEdit size={20} />
+            </ThemeIcon>
+            <Text fw={600}>{t('videoUploader.editVideoTitle')}</Text>
+          </Group>
+        }
         centered
-        destroyOnClose
+        size="md"
+      >
+        <Stack gap="md">
+          <TextInput
+            label={t('videoUploader.titleLabel')}
+            placeholder={t('videoUploader.titlePlaceholder')}
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.currentTarget.value)}
+            styles={{
+              input: { fontSize: '16px' }
+            }}
+          />
+
+          <Textarea
+            label={t('videoUploader.descriptionLabel')}
+            placeholder={t('videoUploader.descriptionPlaceholder')}
+            value={editDescription}
+            onChange={(e) => setEditDescription(e.currentTarget.value)}
+            minRows={4}
+            maxRows={8}
+            autosize
+            styles={{
+              input: { fontSize: '16px' }
+            }}
+          />
+
+          <Group justify="flex-end">
+            <Button
+              variant="subtle"
+              onClick={() => {
+                closeEditModal();
+                setEditingVideo(null);
+                setEditTitle('');
+                setEditDescription('');
+              }}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="gradient"
+              gradient={{ from: 'grape', to: 'pink', deg: 90 }}
+              onClick={handleSaveEdit}
+            >
+              {t('common.save')}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Player Modal */}
+      <Modal
+        opened={playerModalOpened}
+        onClose={handleClosePlayer}
+        title={playingVideo?.title || t('videoUploader.playingVideo')}
+        size={isMobile ? 'full' : 'xl'}
+        centered
+        styles={{
+          body: { padding: 0 }
+        }}
       >
         {playingVideo && (
-          <div style={{ position: 'relative', paddingTop: '56.25%' }}>
-            <video
-              controls
-              autoPlay
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                backgroundColor: '#000'
-              }}
-              src={`https://novaestate.company${playingVideo.video_url}`}
-            >
-              {t('videoUploader.browserNotSupported')}
-            </video>
-          </div>
-        )}
-        {playingVideo?.description && (
-          <p style={{ marginTop: 16, color: '#999' }}>
-            {playingVideo.description}
-          </p>
+          <Stack gap={0}>
+            <Box pos="relative" style={{ paddingTop: '56.25%' }}>
+              <video
+                controls
+                autoPlay
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  backgroundColor: '#000'
+                }}
+                src={`https://novaestate.company${playingVideo.video_url}`}
+              >
+                {t('videoUploader.browserNotSupported')}
+              </video>
+            </Box>
+            
+            {playingVideo.description && (
+              <Box p="md">
+                <Text size="sm" c="dimmed">
+                  {playingVideo.description}
+                </Text>
+              </Box>
+            )}
+          </Stack>
         )}
       </Modal>
 
       <style>{`
-        .play-button-overlay {
-          opacity: 0.8;
-        }
         .play-button-overlay:hover {
-          opacity: 1;
-          transform: translate(-50%, -50%) scale(1.1);
+          opacity: 1 !important;
+          transform: translate(-50%, -50%) scale(1.1) !important;
         }
       `}</style>
-    </Card>
+    </Stack>
   );
 };
 

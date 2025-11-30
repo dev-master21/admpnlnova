@@ -3,37 +3,53 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Card,
   Button,
-  Space,
-  message,
-  Input,
-  Spin,
-  Empty,
-  Tag,
-  Divider,
+  Stack,
+  Group,
+  Text,
+  Textarea,
   Tabs,
   Badge,
-  List,
   Avatar,
   Tooltip,
-  Modal,
-  Select
-} from 'antd';
+  Select,
+  ThemeIcon,
+  Paper,
+  Divider,
+  ActionIcon,
+  Center,
+  Loader,
+  SegmentedControl,
+  ScrollArea,
+  Alert,
+  Container
+} from '@mantine/core';
 import {
-  SearchOutlined,
-  RobotOutlined,
-  FilterOutlined,
-  HistoryOutlined,
-  ReloadOutlined,
-  UserOutlined,
-  CustomerServiceOutlined,
-  DeleteOutlined,
-  EyeOutlined,
-  SendOutlined,
-  WarningOutlined,
-  CloseOutlined
-} from '@ant-design/icons';
+  IconSearch,
+  IconRobot,
+  IconFilter,
+  IconHistory,
+  IconRefresh,
+  IconUser,
+  IconHeadset,
+  IconTrash,
+  IconEye,
+  IconSend,
+  IconAlertTriangle,
+  IconBrain,
+  IconMessage,
+  IconChevronRight,
+  IconMessageCircle,
+  IconClock,
+  IconArrowLeft,
+  IconMessagePlus,
+  IconCheck,
+  IconInfoCircle
+} from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { notifications } from '@mantine/notifications';
+import { modals } from '@mantine/modals';
+import { useMediaQuery } from '@mantine/hooks';
 import { propertySearchApi, SearchFilters, PropertySearchResult, AIConversation } from '@/api/propertySearch.api';
 import { useAuthStore } from '@/store/authStore';
 import PropertySearchResults from './components/PropertySearchResults';
@@ -42,29 +58,32 @@ import MapSearchModal from './components/MapSearchModal';
 import AIInterpretationModal from './components/AIInterpretationModal';
 import AdvancedSearch from './components/AdvancedSearch';
 import dayjs from 'dayjs';
-import './PropertySearch.css';
-
-const { TextArea } = Input;
-const { TabPane } = Tabs;
 
 const PropertySearch = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { hasPermission } = useAuthStore();
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
+  // Проверка прав доступа
   useEffect(() => {
     if (!hasPermission('properties.read')) {
-      message.error(t('propertySearch.noAccess'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('propertySearch.noAccess'),
+        color: 'red',
+        icon: <IconAlertTriangle size={18} />
+      });
       navigate('/');
     }
   }, [hasPermission, navigate, t]);
 
-  const [activeTab, setActiveTab] = useState<'search' | 'history' | 'conversations'>('search');
+  // States
+  const [activeTab, setActiveTab] = useState<string>('search');
   const [searchMode, setSearchMode] = useState<'ai' | 'manual'>('ai');
   const [aiMode, setAiMode] = useState<'property_search' | 'client_agent'>('property_search');
   const [loading, setLoading] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
 
   const [aiQuery, setAiQuery] = useState('');
   const [currentConversationId, setCurrentConversationId] = useState<number | null>(null);
@@ -89,15 +108,7 @@ const PropertySearch = () => {
   const [mapModalVisible, setMapModalVisible] = useState(false);
   const [historyRefresh, setHistoryRefresh] = useState(0);
 
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
+  // Effects
   useEffect(() => {
     if (activeTab === 'conversations') {
       loadConversations();
@@ -112,6 +123,7 @@ const PropertySearch = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // API Handlers
   const loadConversations = async () => {
     setConversationsLoading(true);
     try {
@@ -121,7 +133,12 @@ const PropertySearch = () => {
       });
       setConversations(data.data.conversations);
     } catch (error: any) {
-      message.error(t('propertySearch.errorLoadingConversations'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('propertySearch.errorLoadingConversations'),
+        color: 'red',
+        icon: <IconAlertTriangle size={18} />
+      });
     } finally {
       setConversationsLoading(false);
     }
@@ -136,9 +153,19 @@ const PropertySearch = () => {
       setConversationMessages(data.data.messages);
       setActiveTab('search');
       
-      message.success(t('propertySearch.conversationLoaded'));
+      notifications.show({
+        title: t('common.success'),
+        message: t('propertySearch.conversationLoaded'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
     } catch (error: any) {
-      message.error(t('propertySearch.errorLoadingConversation'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('propertySearch.errorLoadingConversation'),
+        color: 'red',
+        icon: <IconAlertTriangle size={18} />
+      });
     } finally {
       setLoading(false);
     }
@@ -147,14 +174,24 @@ const PropertySearch = () => {
   const deleteConversation = async (conversationId: number) => {
     try {
       await propertySearchApi.deleteConversation(conversationId);
-      message.success(t('propertySearch.conversationDeleted'));
+      notifications.show({
+        title: t('common.success'),
+        message: t('propertySearch.conversationDeleted'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
       loadConversations();
       
       if (currentConversationId === conversationId) {
         handleNewConversation();
       }
     } catch (error: any) {
-      message.error(t('propertySearch.errorDeletingConversation'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('propertySearch.errorDeletingConversation'),
+        color: 'red',
+        icon: <IconAlertTriangle size={18} />
+      });
     }
   };
 
@@ -170,13 +207,19 @@ const PropertySearch = () => {
 
   const handleAISearch = async () => {
     if (!aiQuery.trim()) {
-      message.warning(t('propertySearch.enterQueryText'));
+      notifications.show({
+        title: t('common.warning'),
+        message: t('propertySearch.enterQueryText'),
+        color: 'yellow',
+        icon: <IconAlertTriangle size={18} />
+      });
       return;
     }
 
     setLoading(true);
     try {
       const { data } = await propertySearchApi.searchWithAI(aiQuery, currentConversationId || undefined);
+      
       setRequestedFeatures(data.data.requested_features || []);
       setMustHaveFeatures(data.data.must_have_features || []);
       setCurrentConversationId(data.data.conversationId);
@@ -192,53 +235,60 @@ const PropertySearch = () => {
       setHistoryRefresh(prev => prev + 1);
       setAiQuery('');
 
-      message.success(t('propertySearch.foundProperties', { 
-        count: data.data.total, 
-        time: (data.data.execution_time_ms / 1000).toFixed(2) 
-      }));
+      notifications.show({
+        title: t('common.success'),
+        message: t('propertySearch.foundProperties', { 
+          count: data.data.total, 
+          time: (data.data.execution_time_ms / 1000).toFixed(2) 
+        }),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
 
+      // Low confidence warning
       if (data.data.interpretation.confidence < 0.7) {
-        Modal.warning({
+        modals.openConfirmModal({
           title: (
-            <Space style={{ color: '#ffffff' }}>
-              <WarningOutlined style={{ color: '#faad14' }} />
-              <span style={{ color: '#ffffff' }}>{t('propertySearch.lowConfidence')}</span>
-            </Space>
+            <Group gap="sm">
+              <ThemeIcon size="lg" color="yellow" variant="light">
+                <IconAlertTriangle size={20} />
+              </ThemeIcon>
+              <Text fw={600}>{t('propertySearch.lowConfidence')}</Text>
+            </Group>
           ),
-          content: (
-            <div style={{ color: '#ffffff', lineHeight: 1.8 }}>
-              <p style={{ color: '#ffffff', marginBottom: 12 }}>
-                {t('propertySearch.lowConfidenceDescription')}
-              </p>
-              <p style={{ color: '#ffffff', marginBottom: 12 }}>
-                <strong style={{ color: '#faad14' }}>{t('propertySearch.reason')}:</strong>{' '}
-                <span style={{ color: '#ffffff' }}>{data.data.interpretation.reasoning}</span>
-              </p>
-              <p style={{ color: '#ffffff', marginBottom: 0 }}>
-                {t('propertySearch.lowConfidenceRecommendation')}
-              </p>
-            </div>
+          children: (
+            <Stack gap="md">
+              <Text size="sm">{t('propertySearch.lowConfidenceDescription')}</Text>
+              
+              <Alert icon={<IconInfoCircle size={16} />} color="yellow" variant="light">
+                <Text size="sm" fw={500}>{t('propertySearch.reason')}:</Text>
+                <Text size="sm">{data.data.interpretation.reasoning}</Text>
+              </Alert>
+
+              <Text size="sm">{t('propertySearch.lowConfidenceRecommendation')}</Text>
+            </Stack>
           ),
-          okText: t('propertySearch.understood'),
-          width: 500,
-          okButtonProps: {
-            style: { background: '#1890ff', borderColor: '#1890ff', color: '#ffffff' }
+          labels: { 
+            confirm: t('propertySearch.understood'), 
+            cancel: t('common.cancel')
           },
-          style: { top: 100 },
-          className: 'low-confidence-modal',
-          modalRender: (modal) => (
-            <div style={{ 
-              background: '#1f1f1f',
-              borderRadius: 8,
-              overflow: 'hidden'
-            }}>
-              {modal}
-            </div>
-          )
+          confirmProps: { 
+            variant: 'gradient', 
+            gradient: { from: 'yellow', to: 'orange' } 
+          },
+          cancelProps: {
+            style: { display: 'none' } // Скрываем кнопку отмены
+          },
+          centered: true
         });
       }
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('propertySearch.errorAISearch'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('propertySearch.errorAISearch'),
+        color: 'red',
+        icon: <IconAlertTriangle size={18} />
+      });
     } finally {
       setLoading(false);
     }
@@ -246,7 +296,12 @@ const PropertySearch = () => {
 
   const handleClientAgentChat = async () => {
     if (!aiQuery.trim()) {
-      message.warning(t('propertySearch.enterMessageText'));
+      notifications.show({
+        title: t('common.warning'),
+        message: t('propertySearch.enterMessageText'),
+        color: 'yellow',
+        icon: <IconAlertTriangle size={18} />
+      });
       return;
     }
 
@@ -269,9 +324,20 @@ const PropertySearch = () => {
       }
       
       setAiQuery('');
-      message.success(t('propertySearch.responseReceived'));
+      
+      notifications.show({
+        title: t('common.success'),
+        message: t('propertySearch.responseReceived'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('propertySearch.errorAIChat'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('propertySearch.errorAIChat'),
+        color: 'red',
+        icon: <IconAlertTriangle size={18} />
+      });
     } finally {
       setLoading(false);
     }
@@ -289,12 +355,22 @@ const PropertySearch = () => {
       setRequestedFeatures(data.data.requested_features || []);
       setMustHaveFeatures(data.data.must_have_features || []);
 
-      message.success(t('propertySearch.foundProperties', { 
-        count: data.data.total, 
-        time: (data.data.execution_time_ms / 1000).toFixed(2) 
-      }));
+      notifications.show({
+        title: t('common.success'),
+        message: t('propertySearch.foundProperties', { 
+          count: data.data.total, 
+          time: (data.data.execution_time_ms / 1000).toFixed(2) 
+        }),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('propertySearch.errorSearch'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('propertySearch.errorSearch'),
+        color: 'red',
+        icon: <IconAlertTriangle size={18} />
+      });
     } finally {
       setLoading(false);
     }
@@ -319,114 +395,183 @@ const PropertySearch = () => {
       map_search: mapData
     }));
     setMapModalVisible(false);
-    message.success(t('propertySearch.mapZoneSet'));
+    notifications.show({
+      title: t('common.success'),
+      message: t('propertySearch.mapZoneSet'),
+      color: 'green',
+      icon: <IconCheck size={18} />
+    });
   };
 
-  const renderChatHistory = () => (
-    <div className="chat-history">
-      {conversationMessages.length === 0 ? (
-        <Empty 
-          description={
-            aiMode === 'property_search' 
-              ? t('propertySearch.startDialogWithAI')
-              : t('propertySearch.startCommunicationWithClient')
-          }
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-        />
-      ) : (
-        <div className="chat-messages">
+  // Render Functions
+  const renderChatHistory = () => {
+    if (conversationMessages.length === 0) {
+      return (
+        <Center p="xl">
+          <Stack align="center" gap="md">
+            <ThemeIcon size={80} radius="xl" variant="light" color={aiMode === 'property_search' ? 'blue' : 'teal'}>
+              {aiMode === 'property_search' ? <IconRobot size={40} /> : <IconHeadset size={40} />}
+            </ThemeIcon>
+            <Text c="dimmed" size="sm" ta="center">
+              {aiMode === 'property_search' 
+                ? t('propertySearch.startDialogWithAI')
+                : t('propertySearch.startCommunicationWithClient')}
+            </Text>
+          </Stack>
+        </Center>
+      );
+    }
+
+    return (
+      <ScrollArea h={isMobile ? 400 : 500} offsetScrollbars>
+        <Stack gap="md" p="md">
           {conversationMessages.map((msg, index) => (
-            <div 
-              key={index} 
-              className={`chat-message ${msg.role === 'user' ? 'user-message' : 'assistant-message'}`}
+            <Group
+              key={index}
+              align="flex-start"
+              gap="sm"
+              style={{
+                flexDirection: msg.role === 'user' ? 'row-reverse' : 'row'
+              }}
             >
-              <div className="message-avatar">
-                {msg.role === 'user' ? (
-                  <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
-                ) : (
-                  <Avatar icon={<RobotOutlined />} style={{ backgroundColor: '#52c41a' }} />
-                )}
-              </div>
-              <div className="message-content">
-                <div className="message-text">{msg.content}</div>
-                <div className="message-time">
+              <Avatar
+                size="md"
+                radius="xl"
+                variant="gradient"
+                gradient={msg.role === 'user' 
+                  ? { from: 'blue', to: 'cyan', deg: 135 }
+                  : { from: 'teal', to: 'green', deg: 135 }
+                }
+              >
+                {msg.role === 'user' ? <IconUser size={20} /> : <IconRobot size={20} />}
+              </Avatar>
+
+              <Paper
+                p="md"
+                radius="md"
+                shadow="sm"
+                style={{
+                  maxWidth: isMobile ? '75%' : '70%',
+                  background: msg.role === 'user'
+                    ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                    : 'var(--mantine-color-dark-6)',
+                  color: msg.role === 'user' ? 'white' : 'inherit'
+                }}
+              >
+                <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+                  {msg.content}
+                </Text>
+                <Text 
+                  size="xs" 
+                  c={msg.role === 'user' ? 'rgba(255,255,255,0.7)' : 'dimmed'} 
+                  mt="xs"
+                >
                   {dayjs(msg.created_at).format('HH:mm')}
-                </div>
-              </div>
-            </div>
+                </Text>
+              </Paper>
+            </Group>
           ))}
           <div ref={chatEndRef} />
-        </div>
-      )}
-    </div>
-  );
+        </Stack>
+      </ScrollArea>
+    );
+  };
 
   const renderAISearch = () => (
-    <Card className="ai-search-card">
-      <Space direction="vertical" style={{ width: '100%' }} size="large">
-        <div className="ai-header">
-          <div className="ai-mode-switch">
-            <Button.Group>
-              <Button
-                type={aiMode === 'property_search' ? 'primary' : 'default'}
-                icon={<SearchOutlined />}
-                onClick={() => {
-                  setAiMode('property_search');
-                  handleNewConversation();
-                }}
+    <Stack gap="lg">
+      {/* AI Mode Selector */}
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="md">
+          <Group justify="space-between" wrap="nowrap">
+            <Group gap="sm">
+              <ThemeIcon 
+                size="xl" 
+                radius="md" 
+                variant="gradient" 
+                gradient={aiMode === 'property_search' 
+                  ? { from: 'blue', to: 'cyan' }
+                  : { from: 'teal', to: 'green' }
+                }
               >
-                {t('propertySearch.propertySearch')}
-              </Button>
-              <Button
-                type={aiMode === 'client_agent' ? 'primary' : 'default'}
-                icon={<CustomerServiceOutlined />}
-                onClick={() => {
-                  setAiMode('client_agent');
-                  handleNewConversation();
-                }}
-              >
-                {t('propertySearch.clientAgent')}
-              </Button>
-            </Button.Group>
-          </div>
+                {aiMode === 'property_search' ? <IconSearch size={24} /> : <IconHeadset size={24} />}
+              </ThemeIcon>
+              <div>
+                <Text fw={600} size="lg">
+                  {aiMode === 'property_search' 
+                    ? t('propertySearch.aiPropertySearch')
+                    : t('propertySearch.clientAgentMode')}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  {aiMode === 'property_search'
+                    ? t('propertySearch.aiSearchDescription')
+                    : t('propertySearch.clientAgentDescription')}
+                </Text>
+              </div>
+            </Group>
 
-          <div className="ai-info">
-            <RobotOutlined style={{ fontSize: 32, color: '#1890ff' }} />
-            <h3>
-              {aiMode === 'property_search' 
-                ? t('propertySearch.aiPropertySearch')
-                : t('propertySearch.clientAgentMode')}
-            </h3>
-            <p>
-              {aiMode === 'property_search'
-                ? t('propertySearch.aiSearchDescription')
-                : t('propertySearch.clientAgentDescription')}
-            </p>
-          </div>
-
-          {currentConversationId && (
-            <div className="conversation-controls">
-              <Space>
-                <Tag color="blue">
-                  {t('propertySearch.conversationNumber', { id: currentConversationId })}
-                </Tag>
-                <Button
-                  size="small"
-                  icon={<CloseOutlined />}
+            {currentConversationId && (
+              <Tooltip label={t('propertySearch.newConversation')}>
+                <ActionIcon
+                  variant="light"
+                  color="red"
+                  size="lg"
                   onClick={handleNewConversation}
                 >
-                  {t('propertySearch.newConversation')}
-                </Button>
-              </Space>
-            </div>
+                  <IconMessagePlus size={20} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+          </Group>
+
+          <SegmentedControl
+            value={aiMode}
+            onChange={(value: string) => {
+              setAiMode(value as 'property_search' | 'client_agent');
+              handleNewConversation();
+            }}
+            data={[
+              {
+                value: 'property_search',
+                label: (
+                  <Group gap="xs" justify="center">
+                    <IconSearch size={16} />
+                    <span>{t('propertySearch.propertySearch')}</span>
+                  </Group>
+                )
+              },
+              {
+                value: 'client_agent',
+                label: (
+                  <Group gap="xs" justify="center">
+                    <IconHeadset size={16} />
+                    <span>{t('propertySearch.clientAgent')}</span>
+                  </Group>
+                )
+              }
+            ]}
+            fullWidth={isMobile}
+            color={aiMode === 'property_search' ? 'blue' : 'teal'}
+          />
+
+          {currentConversationId && (
+            <Alert icon={<IconMessageCircle size={16} />} color="blue" variant="light">
+              <Text size="sm">
+                {t('propertySearch.conversationNumber', { id: currentConversationId })}
+              </Text>
+            </Alert>
           )}
-        </div>
+        </Stack>
+      </Card>
 
+      {/* Chat History */}
+      <Card shadow="sm" padding={0} radius="md" withBorder>
         {renderChatHistory()}
+      </Card>
 
-        <div className="chat-input-container">
-          <TextArea
-            rows={isMobile ? 3 : 2}
+      {/* Chat Input */}
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="md">
+          <Textarea
             placeholder={
               aiMode === 'property_search'
                 ? t('propertySearch.searchPlaceholder')
@@ -434,206 +579,319 @@ const PropertySearch = () => {
             }
             value={aiQuery}
             onChange={(e) => setAiQuery(e.target.value)}
-            onPressEnter={(e) => {
-              if (!e.shiftKey) {
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 aiMode === 'property_search' ? handleAISearch() : handleClientAgentChat();
               }
             }}
             disabled={loading}
-            className="chat-input"
+            minRows={isMobile ? 3 : 2}
+            maxRows={6}
+            autosize
+            styles={{
+              input: {
+                fontSize: '16px'
+              }
+            }}
           />
-          
+
           <Button
-            type="primary"
-            icon={<SendOutlined />}
+            variant="gradient"
+            gradient={aiMode === 'property_search' 
+              ? { from: 'blue', to: 'cyan' }
+              : { from: 'teal', to: 'green' }
+            }
+            size="lg"
+            fullWidth
+            leftSection={<IconSend size={20} />}
             onClick={aiMode === 'property_search' ? handleAISearch : handleClientAgentChat}
             loading={loading}
-            size="large"
-            className="send-button"
           >
             {t('propertySearch.send')}
           </Button>
-        </div>
+        </Stack>
+      </Card>
 
-        {aiInterpretation && aiMode === 'property_search' && (
-          <Card
-            size="small"
-            title={
-              <Space>
-                <RobotOutlined />
-                {t('propertySearch.aiInterpretation')}
-                <Badge
-                  count={`${Math.round(aiInterpretation.confidence * 100)}%`}
-                  style={{
-                    backgroundColor: aiInterpretation.confidence > 0.8 ? '#52c41a' : '#faad14'
-                  }}
-                />
-              </Space>
-            }
-            extra={
+      {/* AI Interpretation */}
+      {aiInterpretation && aiMode === 'property_search' && (
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="md">
+            <Group justify="space-between">
+              <Group gap="sm">
+                <ThemeIcon size="lg" radius="md" variant="light" color="violet">
+                  <IconBrain size={20} />
+                </ThemeIcon>
+                <div>
+                  <Text fw={600}>{t('propertySearch.aiInterpretation')}</Text>
+                  <Badge
+                    size="sm"
+                    variant="gradient"
+                    gradient={
+                      aiInterpretation.confidence > 0.8
+                        ? { from: 'teal', to: 'green' }
+                        : { from: 'yellow', to: 'orange' }
+                    }
+                  >
+                    {Math.round(aiInterpretation.confidence * 100)}% {t('propertySearch.confidence')}
+                  </Badge>
+                </div>
+              </Group>
+
               <Button
-                type="link"
-                size="small"
+                variant="subtle"
+                size="xs"
                 onClick={() => setShowInterpretation(true)}
+                rightSection={<IconChevronRight size={14} />}
               >
                 {t('propertySearch.details')}
               </Button>
-            }
-            className="interpretation-card"
-          >
-            <p><strong>{t('propertySearch.queryUnderstanding')}:</strong> {aiInterpretation.reasoning}</p>
-          </Card>
-        )}
-      </Space>
-    </Card>
+            </Group>
+
+            <Text size="sm" c="dimmed">
+              <strong>{t('propertySearch.queryUnderstanding')}:</strong> {aiInterpretation.reasoning}
+            </Text>
+          </Stack>
+        </Card>
+      )}
+    </Stack>
   );
 
   const renderConversations = () => (
-    <Card 
-      className="conversations-list-card"
-      title={
-        <Space>
-          <HistoryOutlined />
-          {aiMode === 'property_search' ? t('propertySearch.searchDialogs') : t('propertySearch.clientDialogs')}
-        </Space>
-      }
-      extra={
-        <Button
-          icon={<ReloadOutlined />}
-          onClick={loadConversations}
-          loading={conversationsLoading}
-        >
-          {t('propertySearch.refresh')}
-        </Button>
-      }
-    >
-      <Spin spinning={conversationsLoading}>
-        {conversations.length === 0 ? (
-          <Empty description={t('propertySearch.noConversations')} />
-        ) : (
-          <List
-            dataSource={conversations}
-            renderItem={(conv) => (
-              <List.Item
-                key={conv.id}
-                actions={[
-                  <Tooltip title={t('propertySearch.continueDialog')}>
-                    <Button
-                      type="link"
-                      icon={<EyeOutlined />}
+    <Stack gap="lg">
+      {/* Header with Mode Selector */}
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Group justify="space-between">
+          <Group gap="sm">
+            <ThemeIcon size="lg" radius="md" variant="gradient" gradient={{ from: 'violet', to: 'grape' }}>
+              <IconHistory size={20} />
+            </ThemeIcon>
+            <div>
+              <Text fw={600}>
+                {aiMode === 'property_search' ? t('propertySearch.searchDialogs') : t('propertySearch.clientDialogs')}
+              </Text>
+              <Text size="xs" c="dimmed">
+                {conversations.length} {t('propertySearch.total')}
+              </Text>
+            </div>
+          </Group>
+
+          <Group gap="xs">
+            <Select
+              value={aiMode}
+              onChange={(value: string | null) => {
+                if (value) {
+                  setAiMode(value as 'property_search' | 'client_agent');
+                  loadConversations();
+                }
+              }}
+              data={[
+                { value: 'property_search', label: t('propertySearch.propertySearch') },
+                { value: 'client_agent', label: t('propertySearch.clientAgent') }
+              ]}
+              leftSection={<IconFilter size={16} />}
+              styles={{ input: { width: isMobile ? '140px' : '180px' } }}
+            />
+
+            <Tooltip label={t('propertySearch.refresh')}>
+              <ActionIcon
+                variant="light"
+                color="blue"
+                size="lg"
+                onClick={loadConversations}
+                loading={conversationsLoading}
+              >
+                <IconRefresh size={18} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        </Group>
+      </Card>
+
+      {/* Conversations List */}
+      {conversationsLoading ? (
+        <Center p="xl">
+          <Loader size="xl" variant="dots" />
+        </Center>
+      ) : conversations.length === 0 ? (
+        <Center p="xl">
+          <Stack align="center" gap="md">
+            <ThemeIcon size={80} radius="xl" variant="light" color="gray">
+              <IconHistory size={40} />
+            </ThemeIcon>
+            <Text c="dimmed" size="sm">{t('propertySearch.noConversations')}</Text>
+          </Stack>
+        </Center>
+      ) : (
+        <Stack gap="md">
+          {conversations.map((conv) => (
+            <Card
+              key={conv.id}
+              shadow="sm"
+              padding="lg"
+              radius="md"
+              withBorder
+              style={{
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                cursor: 'pointer'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(121, 80, 242, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '';
+              }}
+            >
+              <Group justify="space-between" wrap="nowrap" align="flex-start">
+                <Group gap="md" align="flex-start" style={{ flex: 1, minWidth: 0 }}>
+                  <Avatar
+                    size="lg"
+                    radius="md"
+                    variant="gradient"
+                    gradient={conv.mode === 'property_search' 
+                      ? { from: 'blue', to: 'cyan' }
+                      : { from: 'teal', to: 'green' }
+                    }
+                  >
+                    {conv.mode === 'property_search' ? <IconSearch size={24} /> : <IconHeadset size={24} />}
+                  </Avatar>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Group gap="xs" mb={4}>
+                      <Text fw={600} size="sm" lineClamp={1}>
+                        {conv.title || t('propertySearch.conversationId', { id: conv.id })}
+                      </Text>
+                      <Badge size="sm" variant="light" color="blue">
+                        {conv.messages_count} {t('propertySearch.messages')}
+                      </Badge>
+                    </Group>
+
+                    <Text size="xs" c="dimmed" lineClamp={2} mb={8}>
+                      <strong>{t('propertySearch.firstMessage')}:</strong> {conv.first_message}
+                    </Text>
+
+                    <Group gap="xs">
+                      <IconClock size={12} />
+                      <Text size="xs" c="dimmed">
+                        {t('propertySearch.updated')}: {dayjs(conv.updated_at).format('DD.MM.YYYY HH:mm')}
+                      </Text>
+                    </Group>
+                  </div>
+                </Group>
+
+                <Group gap="xs" wrap="nowrap">
+                  <Tooltip label={t('propertySearch.continueDialog')}>
+                    <ActionIcon
+                      variant="light"
+                      color="blue"
+                      size="lg"
                       onClick={() => loadConversation(conv.id)}
                     >
-                      {t('propertySearch.open')}
-                    </Button>
-                  </Tooltip>,
-                  <Tooltip title={t('propertySearch.deleteDialog')}>
-                    <Button
-                      type="link"
-                      danger
-                      icon={<DeleteOutlined />}
+                      <IconEye size={18} />
+                    </ActionIcon>
+                  </Tooltip>
+
+                  <Tooltip label={t('propertySearch.deleteDialog')}>
+                    <ActionIcon
+                      variant="light"
+                      color="red"
+                      size="lg"
                       onClick={() => {
-                        Modal.confirm({
+                        modals.openConfirmModal({
                           title: t('propertySearch.deleteDialogConfirm'),
-                          content: t('propertySearch.cannotUndo'),
-                          okText: t('propertySearch.delete'),
-                          cancelText: t('propertySearch.cancel'),
-                          okButtonProps: { danger: true },
-                          onOk: () => deleteConversation(conv.id)
+                          children: <Text size="sm">{t('propertySearch.cannotUndo')}</Text>,
+                          labels: { confirm: t('propertySearch.delete'), cancel: t('propertySearch.cancel') },
+                          confirmProps: { color: 'red' },
+                          onConfirm: () => deleteConversation(conv.id)
                         });
                       }}
-                    />
+                    >
+                      <IconTrash size={18} />
+                    </ActionIcon>
                   </Tooltip>
-                ]}
-              >
-                <List.Item.Meta
-                  avatar={
-                    <Avatar 
-                      icon={conv.mode === 'property_search' ? <SearchOutlined /> : <CustomerServiceOutlined />}
-                      style={{ 
-                        backgroundColor: conv.mode === 'property_search' ? '#1890ff' : '#52c41a' 
-                      }}
-                    />
-                  }
-                  title={
-                    <Space>
-                      <span>{conv.title || t('propertySearch.conversationId', { id: conv.id })}</span>
-                      <Tag color="blue">{conv.messages_count} {t('propertySearch.messages')}</Tag>
-                    </Space>
-                  }
-                  description={
-                    <div>
-                      <div style={{ marginBottom: 4 }}>
-                        <strong>{t('propertySearch.firstMessage')}:</strong> {conv.first_message?.substring(0, 100)}
-                        {conv.first_message?.length > 100 && '...'}
-                      </div>
-                      <div style={{ fontSize: 12, color: '#888' }}>
-                        {t('propertySearch.updated')}: {dayjs(conv.updated_at).format('DD.MM.YYYY HH:mm')}
-                      </div>
-                    </div>
-                  }
-                />
-              </List.Item>
-            )}
-          />
-        )}
-      </Spin>
-    </Card>
+                </Group>
+              </Group>
+            </Card>
+          ))}
+        </Stack>
+      )}
+    </Stack>
   );
 
   return (
-    <div className="property-search-container">
-      <Card
-        title={
-          <Space>
-            <SearchOutlined />
-            {t('propertySearch.title')}
-          </Space>
-        }
-        extra={
-          <Button onClick={() => navigate('/properties')}>
-            {t('propertySearch.backToList')}
-          </Button>
-        }
-      >
-        <Tabs
-          activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as 'search' | 'history' | 'conversations')}
-          size={isMobile ? 'small' : 'large'}
-        >
-          <TabPane
-            tab={
-              <span>
-                <SearchOutlined />
-                {t('propertySearch.search')}
-              </span>
-            }
-            key="search"
-          >
-            <div className="search-mode-toggle">
-              <Button.Group style={{ width: isMobile ? '100%' : 'auto' }}>
-                <Button
-                  type={searchMode === 'ai' ? 'primary' : 'default'}
-                  icon={<RobotOutlined />}
-                  onClick={() => setSearchMode('ai')}
-                  style={{ width: isMobile ? '50%' : 'auto' }}
-                >
-                  {t('propertySearch.aiSearch')}
-                </Button>
-                <Button
-                  type={searchMode === 'manual' ? 'primary' : 'default'}
-                  icon={<FilterOutlined />}
-                  onClick={() => setSearchMode('manual')}
-                  style={{ width: isMobile ? '50%' : 'auto' }}
-                >
-                  {t('propertySearch.advanced')}
-                </Button>
-              </Button.Group>
-            </div>
+    <Container size="xl" p={isMobile ? 'sm' : 'md'}>
+      <Stack gap="lg">
+        {/* Header */}
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Group justify="space-between" wrap="nowrap">
+            <Group gap="sm">
+              <ThemeIcon size="xl" radius="md" variant="gradient" gradient={{ from: 'violet', to: 'grape' }}>
+                <IconSearch size={28} />
+              </ThemeIcon>
+              <div>
+                <Text fw={600} size="xl">{t('propertySearch.title')}</Text>
+                <Text size="xs" c="dimmed">{t('propertySearch.subtitle')}</Text>
+              </div>
+            </Group>
 
-            <Divider />
+            <Button
+              variant="light"
+              leftSection={<IconArrowLeft size={18} />}
+              onClick={() => navigate('/properties')}
+            >
+              {isMobile ? null : t('propertySearch.backToList')}
+            </Button>
+          </Group>
+        </Card>
 
-            <Spin spinning={loading}>
+        {/* Main Content */}
+        <Tabs value={activeTab} onChange={(value) => setActiveTab(value || 'search')} keepMounted={false}>
+          <Tabs.List grow={isMobile}>
+            <Tabs.Tab value="search" leftSection={<IconSearch size={16} />}>
+              {t('propertySearch.search')}
+            </Tabs.Tab>
+            <Tabs.Tab value="conversations" leftSection={<IconMessage size={16} />}>
+              {t('propertySearch.dialogs')}
+            </Tabs.Tab>
+            <Tabs.Tab value="history" leftSection={<IconHistory size={16} />}>
+              {t('propertySearch.searchHistory')}
+            </Tabs.Tab>
+          </Tabs.List>
+
+          <Tabs.Panel value="search" pt="lg">
+            <Stack gap="lg">
+              {/* Search Mode Toggle */}
+              <SegmentedControl
+                value={searchMode}
+                onChange={(value: string) => setSearchMode(value as 'ai' | 'manual')}
+                data={[
+                  {
+                    value: 'ai',
+                    label: (
+                      <Group gap="xs" justify="center">
+                        <IconRobot size={16} />
+                        <span>{t('propertySearch.aiSearch')}</span>
+                      </Group>
+                    )
+                  },
+                  {
+                    value: 'manual',
+                    label: (
+                      <Group gap="xs" justify="center">
+                        <IconFilter size={16} />
+                        <span>{t('propertySearch.advanced')}</span>
+                      </Group>
+                    )
+                  }
+                ]}
+                fullWidth
+                color="violet"
+                size="md"
+              />
+
+              {/* Content based on search mode */}
               {searchMode === 'ai' ? (
                 renderAISearch()
               ) : (
@@ -646,67 +904,39 @@ const PropertySearch = () => {
                   mapSearchActive={!!filters.map_search}
                 />
               )}
-            </Spin>
 
-            {searchResults.length > 0 && (
-              <>
-                <Divider />
-                <PropertySearchResults
-                  properties={searchResults}
-                  executionTime={executionTime}
-                  onViewProperty={(id) => navigate(`/properties/view/${id}`)}
-                  requestedFeatures={requestedFeatures}
-                  mustHaveFeatures={mustHaveFeatures}
-                />
-              </>
-            )}
+              {/* Search Results */}
+              {searchResults.length > 0 && (
+                <>
+                  <Divider />
+                  <PropertySearchResults
+                    properties={searchResults}
+                    executionTime={executionTime}
+                    onViewProperty={(id) => navigate(`/properties/view/${id}`)}
+                    requestedFeatures={requestedFeatures}
+                    mustHaveFeatures={mustHaveFeatures}
+                  />
+                </>
+              )}
 
-            {searchResults.length === 0 && !loading && searchMode === 'manual' && (
-              <Empty
-                description={t('propertySearch.startSearchToSeeResults')}
-                style={{ marginTop: 40 }}
-              />
-            )}
-          </TabPane>
+              {searchResults.length === 0 && !loading && searchMode === 'manual' && (
+                <Center p="xl">
+                  <Stack align="center" gap="md">
+                    <ThemeIcon size={80} radius="xl" variant="light" color="gray">
+                      <IconSearch size={40} />
+                    </ThemeIcon>
+                    <Text c="dimmed" size="sm">{t('propertySearch.startSearchToSeeResults')}</Text>
+                  </Stack>
+                </Center>
+              )}
+            </Stack>
+          </Tabs.Panel>
 
-          <TabPane
-            tab={
-              <span>
-                <HistoryOutlined />
-                {t('propertySearch.dialogs')}
-              </span>
-            }
-            key="conversations"
-          >
-            <div className="ai-mode-selector" style={{ marginBottom: 16 }}>
-              <Select
-                value={aiMode}
-                onChange={(value) => {
-                  setAiMode(value);
-                  loadConversations();
-                }}
-                style={{ width: 250 }}
-              >
-                <Select.Option value="property_search">
-                  <SearchOutlined /> {t('propertySearch.propertySearch')}
-                </Select.Option>
-                <Select.Option value="client_agent">
-                  <CustomerServiceOutlined /> {t('propertySearch.clientAgent')}
-                </Select.Option>
-              </Select>
-            </div>
+          <Tabs.Panel value="conversations" pt="lg">
             {renderConversations()}
-          </TabPane>
+          </Tabs.Panel>
 
-          <TabPane
-            tab={
-              <span>
-                <HistoryOutlined />
-                {t('propertySearch.searchHistory')}
-              </span>
-            }
-            key="history"
-          >
+          <Tabs.Panel value="history" pt="lg">
             <PropertySearchHistory
               refreshTrigger={historyRefresh}
               onLoadSearch={(log: any, properties: any[]) => {
@@ -741,18 +971,29 @@ const PropertySearch = () => {
                 
                 setActiveTab('search');
                 
-                message.success(t('propertySearch.loadedFromHistory', { count: properties.length }));
+                notifications.show({
+                  title: t('common.success'),
+                  message: t('propertySearch.loadedFromHistory', { count: properties.length }),
+                  color: 'green',
+                  icon: <IconCheck size={18} />
+                });
               }}
               onNavigateToChat={(conversationId: number) => {
                 loadConversation(conversationId);
                 setActiveTab('search');
-                message.success(t('propertySearch.conversationLoaded'));
+                notifications.show({
+                  title: t('common.success'),
+                  message: t('propertySearch.conversationLoaded'),
+                  color: 'green',
+                  icon: <IconCheck size={18} />
+                });
               }}
             />
-          </TabPane>
+          </Tabs.Panel>
         </Tabs>
-      </Card>
+      </Stack>
 
+      {/* Modals */}
       <MapSearchModal
         visible={mapModalVisible}
         onClose={() => setMapModalVisible(false)}
@@ -765,7 +1006,7 @@ const PropertySearch = () => {
         onClose={() => setShowInterpretation(false)}
         interpretation={aiInterpretation}
       />
-    </div>
+    </Container>
   );
 };
 

@@ -3,37 +3,50 @@ import { useState, useEffect } from 'react';
 import {
   Card,
   Button,
-  Space,
-  Input,
+  Stack,
+  Group,
+  Text,
+  TextInput,
   Select,
-  DatePicker,
-  InputNumber,
+  NumberInput,
   Checkbox,
-  Collapse,
-  Row,
-  Col,
-  Divider,
-  Radio,
-  Tag,
-  Tooltip,
+  Accordion,
+  SegmentedControl,
   Badge,
-  Typography
-} from 'antd';
+  MultiSelect,
+  Grid,
+  ThemeIcon,
+  Tooltip,
+  ActionIcon,
+  Alert,
+  Box
+} from '@mantine/core';
+import DatePicker from 'react-datepicker'; // ✅ React DatePicker
+import 'react-datepicker/dist/react-datepicker.css'; // ✅ Стили
 import {
-  SearchOutlined,
-  ReloadOutlined,
-  EnvironmentOutlined,
-  FilterOutlined,
-  DeleteOutlined
-} from '@ant-design/icons';
+  IconSearch,
+  IconRefresh,
+  IconMapPin,
+  IconFilter,
+  IconTrash,
+  IconBed,
+  IconBath,
+  IconCurrencyBaht,
+  IconCalendar,
+  IconSparkles,
+  IconRuler,
+  IconStairs,
+  IconHammer,
+  IconShield,
+  IconChevronDown,
+  IconChevronUp,
+  IconInfoCircle,
+  IconX
+} from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
+import { useMediaQuery } from '@mantine/hooks';
 import { PROPERTY_FEATURES } from '../constants/features';
 import dayjs from 'dayjs';
-import './AdvancedSearch.css';
-
-const { RangePicker } = DatePicker;
-const { Panel } = Collapse;
-const { Text } = Typography;
 
 interface AdvancedSearchProps {
   onSearch: (filters: any) => void;
@@ -52,6 +65,20 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
   initialFilters = {},
 }) => {
   const { t } = useTranslation();
+  const isMobile = useMediaQuery('(max-width: 768px)');
+
+  // Feature expansion states
+  const [showAllProperty, setShowAllProperty] = useState(false);
+  const [showAllOutdoor, setShowAllOutdoor] = useState(false);
+  const [showAllViews, setShowAllViews] = useState(false);
+  const [showAllLocation, setShowAllLocation] = useState(false);
+  const [showAllRental, setShowAllRental] = useState(false);
+
+  const FEATURES_PER_PAGE = 10;
+
+  // Date states for react-datepicker
+  const [fixedDateRange, setFixedDateRange] = useState<[Date | null, Date | null]>([null, null]);
+  const [flexibleDateRange, setFlexibleDateRange] = useState<[Date | null, Date | null]>([null, null]);
 
   const [filters, setFilters] = useState<any>({
     deal_type: initialFilters.deal_type,
@@ -101,6 +128,22 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
   const [dateMode, setDateMode] = useState<'fixed' | 'flexible'>('fixed');
   const [featureSearch, setFeatureSearch] = useState('');
 
+  // Initialize date ranges from initialFilters
+  useEffect(() => {
+    if (initialFilters.dates?.check_in && initialFilters.dates?.check_out) {
+      setFixedDateRange([
+        new Date(initialFilters.dates.check_in),
+        new Date(initialFilters.dates.check_out)
+      ]);
+    }
+    if (initialFilters.flexible_dates?.search_window_start && initialFilters.flexible_dates?.search_window_end) {
+      setFlexibleDateRange([
+        new Date(initialFilters.flexible_dates.search_window_start),
+        new Date(initialFilters.flexible_dates.search_window_end)
+      ]);
+    }
+  }, [initialFilters]);
+
   useEffect(() => {
     if (initialFilters.map_search) {
       setFilters((prev: any) => ({
@@ -141,6 +184,8 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
     setBathroomsMode('exact');
     setDateMode('fixed');
     setFeatureSearch('');
+    setFixedDateRange([null, null]);
+    setFlexibleDateRange([null, null]);
     onReset();
   };
 
@@ -227,1202 +272,1172 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
     }
   };
 
-  return (
-    <Card className="advanced-search-card">
-      <Collapse
-        defaultActiveKey={['main', 'budget', 'dates']}
-        expandIconPosition="right"
-        className="advanced-search-collapse"
-      >
-        <Panel 
-          header={
-            <Space>
-              <FilterOutlined />
-              <strong>{t('propertySearch.advancedSearch.mainParameters')}</strong>
-            </Space>
-          } 
-          key="main"
-        >
-          <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={12} md={6}>
-                <label className="filter-label">{t('propertySearch.advancedSearch.dealType')}</label>
-                <Select
-                  placeholder={t('propertySearch.advancedSearch.selectType')}
-                  value={filters.deal_type}
-                  onChange={(value) => updateFilter('deal_type', value)}
-                  allowClear
-                  style={{ width: '100%' }}
-                  className="dark-select"
-                  options={[
-                    { value: 'sale', label: `🏛️ ${t('properties.dealTypes.sale')}` },
-                    { value: 'rent', label: `🏠 ${t('properties.dealTypes.rent')}` },
-                    { value: 'both', label: `🔄 ${t('propertySearch.advancedSearch.any')}` }
-                  ]}
-                />
-              </Col>
+  const renderFeatureCategory = (
+    categoryKey: string,
+    features: string[],
+    showAll: boolean,
+    setShowAll: (value: boolean) => void
+  ) => {
+    const filteredFeatures = filterFeaturesBySearch(features);
+    const displayedFeatures = showAll ? filteredFeatures : filteredFeatures.slice(0, FEATURES_PER_PAGE);
+    const hasMore = filteredFeatures.length > FEATURES_PER_PAGE;
 
-              <Col xs={24} sm={12} md={6}>
-                <label className="filter-label">{t('properties.propertyType')}</label>
-                <Select
-                  placeholder={t('propertySearch.advancedSearch.selectType')}
-                  value={filters.property_type}
-                  onChange={(value) => updateFilter('property_type', value)}
-                  allowClear
-                  style={{ width: '100%' }}
-                  className="dark-select"
-                  options={[
-                    { value: 'villa', label: `🏰 ${t('properties.propertyTypes.villa')}` },
-                    { value: 'condo', label: `🏢 ${t('properties.propertyTypes.condo')}` },
-                    { value: 'apartment', label: `🏠 ${t('properties.propertyTypes.apartment')}` },
-                    { value: 'house', label: `🏡 ${t('properties.propertyTypes.house')}` },
-                    { value: 'penthouse', label: `🌆 ${t('properties.propertyTypes.penthouse')}` }
-                  ]}
-                />
-              </Col>
+    const selectedCount = features.filter(f => 
+      filters.features?.includes(f) || filters.must_have_features?.includes(f)
+    ).length;
 
-              <Col xs={24} sm={12} md={6}>
-                <label className="filter-label">{t('properties.complexName')}</label>
-                <Input
-                  placeholder={t('propertySearch.advancedSearch.complexPlaceholder')}
-                  value={filters.complex_name}
-                  onChange={(e) => updateFilter('complex_name', e.target.value)}
-                  allowClear
-                  className="dark-input"
-                />
-              </Col>
+    return (
+      <Card shadow="sm" padding="md" radius="md" withBorder>
+        <Stack gap="md">
+          <Group justify="space-between">
+            <Text fw={600} size="sm">{t(`propertySearch.advancedSearch.${categoryKey}`)}</Text>
+            {selectedCount > 0 && (
+              <Badge size="sm" variant="filled" color="violet">
+                {selectedCount}
+              </Badge>
+            )}
+          </Group>
 
-              <Col xs={24} sm={12} md={6}>
-                <label className="filter-label">{t('propertySearch.advancedSearch.furniture')}</label>
-                <Select
-                  placeholder={t('propertySearch.advancedSearch.any')}
-                  value={filters.furniture}
-                  onChange={(value) => updateFilter('furniture', value)}
-                  allowClear
-                  style={{ width: '100%' }}
-                  className="dark-select"
-                  options={[
-                    { value: 'fullyFurnished', label: `✅ ${t('propertySearch.advancedSearch.fullyFurnished')}` },
-                    { value: 'partiallyFurnished', label: `⚡ ${t('propertySearch.advancedSearch.partiallyFurnished')}` },
-                    { value: 'unfurnished', label: `❌ ${t('propertySearch.advancedSearch.unfurnished')}` }
-                  ]}
-                />
-              </Col>
-            </Row>
-
-            <Row gutter={[16, 16]}>
-              <Col xs={24}>
-                <label className="filter-label">{t('propertySearch.advancedSearch.regionsMultiple')}</label>
-                <Select
-                  mode="multiple"
-                  placeholder={t('propertySearch.advancedSearch.selectRegions')}
-                  value={filters.regions}
-                  onChange={(value) => updateFilter('regions', value)}
-                  allowClear
-                  style={{ width: '100%' }}
-                  maxTagCount="responsive"
-                  className="dark-select"
-                  options={[
-                    { value: 'bangtao', label: `🏖️ ${t('properties.regions.bangtao')}` },
-                    { value: 'kamala', label: `🌴 ${t('properties.regions.kamala')}` },
-                    { value: 'surin', label: `🏄 ${t('properties.regions.surin')}` },
-                    { value: 'layan', label: `🌊 ${t('properties.regions.layan')}` },
-                    { value: 'kata', label: `⛱️ ${t('properties.regions.kata')}` },
-                    { value: 'karon', label: `🏝️ ${t('properties.regions.karon')}` },
-                    { value: 'patong', label: `🎉 ${t('properties.regions.patong')}` },
-                    { value: 'rawai', label: `⚓ ${t('properties.regions.rawai')}` },
-                    { value: 'naiharn', label: `🌅 ${t('properties.regions.naiharn')}` },
-                    { value: 'maikhao', label: `🦅 ${t('properties.regions.maikhao')}` },
-                    { value: 'yamu', label: `🌳 ${t('properties.regions.yamu')}` }
-                  ]}
-                />
-              </Col>
-            </Row>
-
-            <Row gutter={[16, 16]}>
-              <Col xs={12} sm={8} md={6}>
-                <Checkbox
-                  checked={filters.parking}
-                  onChange={(e) => updateFilter('parking', e.target.checked ? true : undefined)}
-                  className="dark-checkbox"
-                >
-                  {t('propertySearch.advancedSearch.withParking')}
-                </Checkbox>
-              </Col>
-
-              <Col xs={12} sm={8} md={6}>
-                <Checkbox
-                  checked={filters.pets}
-                  onChange={(e) => updateFilter('pets', e.target.checked ? true : undefined)}
-                  className="dark-checkbox"
-                >
-                  {t('propertySearch.advancedSearch.withPets')}
-                </Checkbox>
-              </Col>
-
-              <Col xs={24} sm={8} md={12}>
-                <Button
-                  icon={<EnvironmentOutlined />}
-                  onClick={onMapSearch}
-                  block
-                  style={{ 
-                    background: filters.map_search ? 'rgba(24, 144, 255, 0.2)' : undefined,
-                    borderColor: filters.map_search ? '#1890ff' : undefined,
-                    color: filters.map_search ? '#1890ff' : undefined
+          <Group gap="xs">
+            {displayedFeatures.map(feature => {
+              const isMustHave = filters.must_have_features?.includes(feature);
+              const isDesired = filters.features?.includes(feature);
+              
+              return (
+                <Badge
+                  key={feature}
+                  size="lg"
+                  variant={isMustHave ? 'filled' : isDesired ? 'light' : 'outline'}
+                  color={isMustHave ? 'red' : isDesired ? 'blue' : 'gray'}
+                  style={{
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    userSelect: 'none'
+                  }}
+                  onClick={() => {
+                    if (isMustHave) {
+                      toggleFeature(feature, true);
+                    } else if (isDesired) {
+                      toggleFeature(feature, false);
+                      toggleFeature(feature, true);
+                    } else {
+                      toggleFeature(feature, false);
+                    }
                   }}
                 >
-                  {filters.map_search
-                    ? t('propertySearch.advancedSearch.radiusKm', { radius: filters.map_search.radius_km })
-                    : t('propertySearch.advancedSearch.searchOnMap')}
-                </Button>
-                {filters.map_search && (
+                  {t(`properties.features.${feature}`, { defaultValue: feature })}
+                </Badge>
+              );
+            })}
+          </Group>
+
+          {hasMore && (
+            <Button
+              variant="subtle"
+              size="xs"
+              onClick={() => setShowAll(!showAll)}
+              rightSection={showAll ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
+            >
+              {showAll 
+                ? t('propertySearch.advancedSearch.showLess')
+                : t('propertySearch.advancedSearch.showMore', { count: filteredFeatures.length - FEATURES_PER_PAGE })
+              }
+            </Button>
+          )}
+        </Stack>
+      </Card>
+    );
+  };
+
+  return (
+    <Stack gap="lg">
+      <Accordion 
+        multiple 
+        defaultValue={['main', 'budget', 'dates']}
+        variant="separated"
+        radius="md"
+      >
+        {/* Main Parameters */}
+        <Accordion.Item value="main">
+          <Accordion.Control
+            icon={
+              <ThemeIcon size="lg" radius="md" variant="light" color="blue">
+                <IconFilter size={20} />
+              </ThemeIcon>
+            }
+          >
+            <Text fw={600}>{t('propertySearch.advancedSearch.mainParameters')}</Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Stack gap="md">
+              <Grid gutter="md">
+                <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+                  <Select
+                    label={t('propertySearch.advancedSearch.dealType')}
+                    placeholder={t('propertySearch.advancedSearch.selectType')}
+                    value={filters.deal_type}
+                    onChange={(value) => updateFilter('deal_type', value)}
+                    clearable
+                    data={[
+                      { value: 'sale', label: t('properties.dealTypes.sale') },
+                      { value: 'rent', label: t('properties.dealTypes.rent') },
+                      { value: 'both', label: t('propertySearch.advancedSearch.any') }
+                    ]}
+                    styles={{ input: { fontSize: '16px' } }}
+                  />
+                </Grid.Col>
+
+                <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+                  <Select
+                    label={t('properties.propertyType')}
+                    placeholder={t('propertySearch.advancedSearch.selectType')}
+                    value={filters.property_type}
+                    onChange={(value) => updateFilter('property_type', value)}
+                    clearable
+                    data={[
+                      { value: 'villa', label: t('properties.propertyTypes.villa') },
+                      { value: 'condo', label: t('properties.propertyTypes.condo') },
+                      { value: 'apartment', label: t('properties.propertyTypes.apartment') },
+                      { value: 'house', label: t('properties.propertyTypes.house') },
+                      { value: 'penthouse', label: t('properties.propertyTypes.penthouse') }
+                    ]}
+                    styles={{ input: { fontSize: '16px' } }}
+                  />
+                </Grid.Col>
+
+                <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+                  <TextInput
+                    label={t('properties.complexName')}
+                    placeholder={t('propertySearch.advancedSearch.complexPlaceholder')}
+                    value={filters.complex_name}
+                    onChange={(e) => updateFilter('complex_name', e.target.value)}
+                    styles={{ input: { fontSize: '16px' } }}
+                  />
+                </Grid.Col>
+
+                <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+                  <Select
+                    label={t('propertySearch.advancedSearch.furniture')}
+                    placeholder={t('propertySearch.advancedSearch.any')}
+                    value={filters.furniture}
+                    onChange={(value) => updateFilter('furniture', value)}
+                    clearable
+                    data={[
+                      { value: 'fullyFurnished', label: t('propertySearch.advancedSearch.fullyFurnished') },
+                      { value: 'partiallyFurnished', label: t('propertySearch.advancedSearch.partiallyFurnished') },
+                      { value: 'unfurnished', label: t('propertySearch.advancedSearch.unfurnished') }
+                    ]}
+                    styles={{ input: { fontSize: '16px' } }}
+                  />
+                </Grid.Col>
+              </Grid>
+
+              <MultiSelect
+                label={t('propertySearch.advancedSearch.regionsMultiple')}
+                placeholder={t('propertySearch.advancedSearch.selectRegions')}
+                value={filters.regions}
+                onChange={(value) => updateFilter('regions', value)}
+                clearable
+                searchable
+                data={[
+                  { value: 'bangtao', label: t('properties.regions.bangtao') },
+                  { value: 'kamala', label: t('properties.regions.kamala') },
+                  { value: 'surin', label: t('properties.regions.surin') },
+                  { value: 'layan', label: t('properties.regions.layan') },
+                  { value: 'kata', label: t('properties.regions.kata') },
+                  { value: 'karon', label: t('properties.regions.karon') },
+                  { value: 'patong', label: t('properties.regions.patong') },
+                  { value: 'rawai', label: t('properties.regions.rawai') },
+                  { value: 'naiharn', label: t('properties.regions.naiharn') },
+                  { value: 'maikhao', label: t('properties.regions.maikhao') },
+                  { value: 'yamu', label: t('properties.regions.yamu') }
+                ]}
+                styles={{ input: { fontSize: '16px' } }}
+              />
+
+              <Grid gutter="md">
+                <Grid.Col span={{ base: 6, sm: 4 }}>
+                  <Checkbox
+                    label={t('propertySearch.advancedSearch.withParking')}
+                    checked={filters.parking}
+                    onChange={(e) => updateFilter('parking', e.currentTarget.checked ? true : undefined)}
+                  />
+                </Grid.Col>
+
+                <Grid.Col span={{ base: 6, sm: 4 }}>
+                  <Checkbox
+                    label={t('propertySearch.advancedSearch.withPets')}
+                    checked={filters.pets}
+                    onChange={(e) => updateFilter('pets', e.currentTarget.checked ? true : undefined)}
+                  />
+                </Grid.Col>
+
+                <Grid.Col span={{ base: 12, sm: 4 }}>
                   <Button
-                    type="text"
-                    danger
-                    size="small"
-                    onClick={() => updateFilter('map_search', undefined)}
-                    style={{ marginTop: 4, width: '100%' }}
+                    variant={filters.map_search ? 'filled' : 'light'}
+                    color={filters.map_search ? 'blue' : 'gray'}
+                    leftSection={<IconMapPin size={18} />}
+                    onClick={onMapSearch}
+                    fullWidth
+                    rightSection={
+                      filters.map_search && (
+                        <ActionIcon
+                          size="xs"
+                          variant="transparent"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateFilter('map_search', undefined);
+                          }}
+                        >
+                          <IconX size={14} />
+                        </ActionIcon>
+                      )
+                    }
                   >
-                    {t('propertySearch.advancedSearch.clearSearchZone')}
+                    {filters.map_search
+                      ? t('propertySearch.advancedSearch.radiusKm', { radius: filters.map_search.radius_km })
+                      : t('propertySearch.advancedSearch.searchOnMap')}
                   </Button>
-                )}
-              </Col>
-            </Row>
-          </Space>
-        </Panel>
+                </Grid.Col>
+              </Grid>
+            </Stack>
+          </Accordion.Panel>
+        </Accordion.Item>
 
-        <Panel 
-          header={
-            <Space>
-              <strong>{t('propertySearch.advancedSearch.bedroomsAndBathrooms')}</strong>
-            </Space>
-          } 
-          key="rooms"
-        >
-          <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <div>
-              <Row gutter={[16, 8]} align="middle">
-                <Col xs={24} sm={8}>
-                  <label className="filter-label">{t('propertySearch.advancedSearch.bedrooms')}</label>
-                </Col>
-                <Col xs={24} sm={16}>
-                  <Radio.Group
-                    value={bedroomsMode}
-                    onChange={(e) => {
-                      setBedroomsMode(e.target.value);
-                      if (e.target.value === 'exact') {
-                        updateFilter('bedrooms_min', undefined);
-                        updateFilter('bedrooms_max', undefined);
-                      } else {
-                        updateFilter('bedrooms', undefined);
-                      }
-                    }}
-                    buttonStyle="solid"
-                    className="dark-radio-group"
-                  >
-                    <Radio.Button value="exact">{t('propertySearch.advancedSearch.exactNumber')}</Radio.Button>
-                    <Radio.Button value="range">{t('propertySearch.advancedSearch.range')}</Radio.Button>
-                  </Radio.Group>
-                </Col>
-              </Row>
+        {/* Bedrooms & Bathrooms */}
+        <Accordion.Item value="rooms">
+          <Accordion.Control
+            icon={
+              <ThemeIcon size="lg" radius="md" variant="light" color="teal">
+                <IconBed size={20} />
+              </ThemeIcon>
+            }
+          >
+            <Text fw={600}>{t('propertySearch.advancedSearch.bedroomsAndBathrooms')}</Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Stack gap="lg">
+              {/* Bedrooms */}
+              <Card shadow="sm" padding="md" radius="md" withBorder>
+                <Stack gap="md">
+                  <Group justify="space-between">
+                    <Text fw={500} size="sm">{t('propertySearch.advancedSearch.bedrooms')}</Text>
+                    <SegmentedControl
+                      value={bedroomsMode}
+                      onChange={(value: string) => {
+                        setBedroomsMode(value as 'exact' | 'range');
+                        if (value === 'exact') {
+                          updateFilter('bedrooms_min', undefined);
+                          updateFilter('bedrooms_max', undefined);
+                        } else {
+                          updateFilter('bedrooms', undefined);
+                        }
+                      }}
+                      data={[
+                        { value: 'exact', label: t('propertySearch.advancedSearch.exactNumber') },
+                        { value: 'range', label: t('propertySearch.advancedSearch.range') }
+                      ]}
+                      size="xs"
+                    />
+                  </Group>
 
-              {bedroomsMode === 'exact' ? (
-                <Row gutter={[16, 8]} style={{ marginTop: 8 }}>
-                  <Col xs={24}>
-                    <InputNumber
+                  {bedroomsMode === 'exact' ? (
+                    <NumberInput
                       placeholder={t('propertySearch.advancedSearch.bedroomsCount')}
                       min={0}
                       max={20}
                       value={filters.bedrooms}
                       onChange={(value) => updateFilter('bedrooms', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
+                      leftSection={<IconBed size={16} />}
+                      styles={{ input: { fontSize: '16px' } }}
                     />
-                  </Col>
-                </Row>
-              ) : (
-                <Row gutter={[16, 8]} style={{ marginTop: 8 }}>
-                  <Col xs={12}>
-                    <InputNumber
-                      placeholder={t('propertySearch.advancedSearch.from')}
-                      min={0}
-                      max={20}
-                      value={filters.bedrooms_min}
-                      onChange={(value) => updateFilter('bedrooms_min', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
-                      addonBefore={t('propertySearch.advancedSearch.from')}
+                  ) : (
+                    <Grid gutter="xs">
+                      <Grid.Col span={6}>
+                        <NumberInput
+                          placeholder={t('propertySearch.advancedSearch.from')}
+                          min={0}
+                          max={20}
+                          value={filters.bedrooms_min}
+                          onChange={(value) => updateFilter('bedrooms_min', value)}
+                          styles={{ input: { fontSize: '16px' } }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <NumberInput
+                          placeholder={t('propertySearch.advancedSearch.to')}
+                          min={0}
+                          max={20}
+                          value={filters.bedrooms_max}
+                          onChange={(value) => updateFilter('bedrooms_max', value)}
+                          styles={{ input: { fontSize: '16px' } }}
+                        />
+                      </Grid.Col>
+                    </Grid>
+                  )}
+                </Stack>
+              </Card>
+
+              {/* Bathrooms */}
+              <Card shadow="sm" padding="md" radius="md" withBorder>
+                <Stack gap="md">
+                  <Group justify="space-between">
+                    <Text fw={500} size="sm">{t('propertySearch.advancedSearch.bathrooms')}</Text>
+                    <SegmentedControl
+                      value={bathroomsMode}
+                      onChange={(value: string) => {
+                        setBathroomsMode(value as 'exact' | 'range');
+                        if (value === 'exact') {
+                          updateFilter('bathrooms_min', undefined);
+                          updateFilter('bathrooms_max', undefined);
+                        } else {
+                          updateFilter('bathrooms', undefined);
+                        }
+                      }}
+                      data={[
+                        { value: 'exact', label: t('propertySearch.advancedSearch.exactNumber') },
+                        { value: 'range', label: t('propertySearch.advancedSearch.range') }
+                      ]}
+                      size="xs"
                     />
-                  </Col>
-                  <Col xs={12}>
-                    <InputNumber
-                      placeholder={t('propertySearch.advancedSearch.to')}
-                      min={0}
-                      max={20}
-                      value={filters.bedrooms_max}
-                      onChange={(value) => updateFilter('bedrooms_max', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
-                      addonBefore={t('propertySearch.advancedSearch.to')}
-                    />
-                  </Col>
-                </Row>
-              )}
-            </div>
+                  </Group>
 
-            <Divider style={{ margin: '16px 0', borderColor: 'rgba(255, 255, 255, 0.1)' }} />
-
-            <div>
-              <Row gutter={[16, 8]} align="middle">
-                <Col xs={24} sm={8}>
-                  <label className="filter-label">{t('propertySearch.advancedSearch.bathrooms')}</label>
-                </Col>
-                <Col xs={24} sm={16}>
-                  <Radio.Group
-                    value={bathroomsMode}
-                    onChange={(e) => {
-                      setBathroomsMode(e.target.value);
-                      if (e.target.value === 'exact') {
-                        updateFilter('bathrooms_min', undefined);
-                        updateFilter('bathrooms_max', undefined);
-                      } else {
-                        updateFilter('bathrooms', undefined);
-                      }
-                    }}
-                    buttonStyle="solid"
-                    className="dark-radio-group"
-                  >
-                    <Radio.Button value="exact">{t('propertySearch.advancedSearch.exactNumber')}</Radio.Button>
-                    <Radio.Button value="range">{t('propertySearch.advancedSearch.range')}</Radio.Button>
-                  </Radio.Group>
-                </Col>
-              </Row>
-
-              {bathroomsMode === 'exact' ? (
-                <Row gutter={[16, 8]} style={{ marginTop: 8 }}>
-                  <Col xs={24}>
-                    <InputNumber
+                  {bathroomsMode === 'exact' ? (
+                    <NumberInput
                       placeholder={t('propertySearch.advancedSearch.bathroomsCount')}
                       min={0}
                       max={20}
                       value={filters.bathrooms}
                       onChange={(value) => updateFilter('bathrooms', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
+                      leftSection={<IconBath size={16} />}
+                      styles={{ input: { fontSize: '16px' } }}
                     />
-                  </Col>
-                </Row>
-              ) : (
-                <Row gutter={[16, 8]} style={{ marginTop: 8 }}>
-                  <Col xs={12}>
-                    <InputNumber
-                      placeholder={t('propertySearch.advancedSearch.from')}
-                      min={0}
-                      max={20}
-                      value={filters.bathrooms_min}
-                      onChange={(value) => updateFilter('bathrooms_min', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
-                      addonBefore={t('propertySearch.advancedSearch.from')}
-                    />
-                  </Col>
-                  <Col xs={12}>
-                    <InputNumber
-                      placeholder={t('propertySearch.advancedSearch.to')}
-                      min={0}
-                      max={20}
-                      value={filters.bathrooms_max}
-                      onChange={(value) => updateFilter('bathrooms_max', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
-                      addonBefore={t('propertySearch.advancedSearch.to')}
-                    />
-                  </Col>
-                </Row>
-              )}
-            </div>
-          </Space>
-        </Panel>
+                  ) : (
+                    <Grid gutter="xs">
+                      <Grid.Col span={6}>
+                        <NumberInput
+                          placeholder={t('propertySearch.advancedSearch.from')}
+                          min={0}
+                          max={20}
+                          value={filters.bathrooms_min}
+                          onChange={(value) => updateFilter('bathrooms_min', value)}
+                          styles={{ input: { fontSize: '16px' } }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <NumberInput
+                          placeholder={t('propertySearch.advancedSearch.to')}
+                          min={0}
+                          max={20}
+                          value={filters.bathrooms_max}
+                          onChange={(value) => updateFilter('bathrooms_max', value)}
+                          styles={{ input: { fontSize: '16px' } }}
+                        />
+                      </Grid.Col>
+                    </Grid>
+                  )}
+                </Stack>
+              </Card>
+            </Stack>
+          </Accordion.Panel>
+        </Accordion.Item>
 
-        <Panel 
-          header={
-            <Space>
-              <strong>{t('propertySearch.advancedSearch.budget')}</strong>
+        {/* Budget */}
+        <Accordion.Item value="budget">
+          <Accordion.Control
+            icon={
+              <ThemeIcon size="lg" radius="md" variant="light" color="green">
+                <IconCurrencyBaht size={20} />
+              </ThemeIcon>
+            }
+          >
+            <Group justify="space-between" style={{ flex: 1, marginRight: 16 }}>
+              <Text fw={600}>{t('propertySearch.advancedSearch.budget')}</Text>
               {filters.budget?.max && (
-                <Tag color="green" className="header-tag">
+                <Badge size="sm" variant="filled" color="green">
                   {Number(filters.budget.max).toLocaleString()} {filters.budget.currency}
-                </Tag>
+                </Badge>
               )}
-            </Space>
-          } 
-          key="budget"
-        >
-          <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={8}>
-                <label className="filter-label">{t('propertySearch.advancedSearch.currency')}</label>
-                <Select
-                  value={filters.budget?.currency || 'THB'}
-                  onChange={(value) => updateNestedFilter('budget', 'currency', value)}
-                  style={{ width: '100%' }}
-                  className="dark-select"
-                  options={[
-                    { value: 'THB', label: t('propertySearch.advancedSearch.currencyTHB') },
-                    { value: 'USD', label: t('propertySearch.advancedSearch.currencyUSD') },
-                    { value: 'RUB', label: t('propertySearch.advancedSearch.currencyRUB') },
-                    { value: 'EUR', label: t('propertySearch.advancedSearch.currencyEUR') }
-                  ]}
-                />
-              </Col>
+            </Group>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Stack gap="md">
+              <Grid gutter="md">
+                <Grid.Col span={{ base: 12, sm: 4 }}>
+                  <Select
+                    label={t('propertySearch.advancedSearch.currency')}
+                    value={filters.budget?.currency || 'THB'}
+                    onChange={(value) => updateNestedFilter('budget', 'currency', value)}
+                    data={[
+                      { value: 'THB', label: t('propertySearch.advancedSearch.currencyTHB') },
+                      { value: 'USD', label: t('propertySearch.advancedSearch.currencyUSD') },
+                      { value: 'RUB', label: t('propertySearch.advancedSearch.currencyRUB') },
+                      { value: 'EUR', label: t('propertySearch.advancedSearch.currencyEUR') }
+                    ]}
+                    styles={{ input: { fontSize: '16px' } }}
+                  />
+                </Grid.Col>
 
-              <Col xs={24} sm={8}>
-                <label className="filter-label">{t('propertySearch.advancedSearch.minBudget')}</label>
-                <InputNumber
-                  placeholder={t('propertySearch.advancedSearch.minimum')}
-                  min={0}
-                  value={filters.budget?.min}
-                  onChange={(value) => updateNestedFilter('budget', 'min', value)}
-                  style={{ width: '100%' }}
-                  className="dark-input-number"
-                  formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                  parser={(value) => value!.replace(/\$\s?|(,*)/g, '')}
-                />
-              </Col>
+                <Grid.Col span={{ base: 12, sm: 4 }}>
+                  <NumberInput
+                    label={t('propertySearch.advancedSearch.minBudget')}
+                    placeholder={t('propertySearch.advancedSearch.minimum')}
+                    min={0}
+                    value={filters.budget?.min}
+                    onChange={(value) => updateNestedFilter('budget', 'min', value)}
+                    thousandSeparator=","
+                    styles={{ input: { fontSize: '16px' } }}
+                  />
+                </Grid.Col>
 
-              <Col xs={24} sm={8}>
-                <label className="filter-label">{t('propertySearch.advancedSearch.maxBudget')}</label>
-                <InputNumber
-                  placeholder={t('propertySearch.advancedSearch.maximum')}
-                  min={0}
-                  value={filters.budget?.max}
-                  onChange={(value) => updateNestedFilter('budget', 'max', value)}
-                  style={{ width: '100%' }}
-                  className="dark-input-number"
-                  formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                  parser={(value) => value!.replace(/\$\s?|(,*)/g, '')}
-                />
-              </Col>
-            </Row>
+                <Grid.Col span={{ base: 12, sm: 4 }}>
+                  <NumberInput
+                    label={t('propertySearch.advancedSearch.maxBudget')}
+                    placeholder={t('propertySearch.advancedSearch.maximum')}
+                    min={0}
+                    value={filters.budget?.max}
+                    onChange={(value) => updateNestedFilter('budget', 'max', value)}
+                    thousandSeparator=","
+                    styles={{ input: { fontSize: '16px' } }}
+                  />
+                </Grid.Col>
+              </Grid>
 
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={12}>
-                <label className="filter-label">{t('propertySearch.advancedSearch.tolerance')}</label>
-                <InputNumber
-                  placeholder="0"
-                  min={0}
-                  max={100}
-                  value={filters.budget?.tolerance}
-                  onChange={(value) => updateNestedFilter('budget', 'tolerance', value)}
-                  style={{ width: '100%' }}
-                  className="dark-input-number"
-                  formatter={(value) => `${value}%`}
-                  parser={(value) => value!.replace('%', '')}
-                />
-              </Col>
+              <Grid gutter="md">
+                <Grid.Col span={{ base: 12, sm: 6 }}>
+                  <NumberInput
+                    label={t('propertySearch.advancedSearch.tolerance')}
+                    placeholder="0"
+                    min={0}
+                    max={100}
+                    value={filters.budget?.tolerance}
+                    onChange={(value) => updateNestedFilter('budget', 'tolerance', value)}
+                    suffix="%"
+                    styles={{ input: { fontSize: '16px' } }}
+                  />
+                </Grid.Col>
 
-              <Col xs={24} sm={12}>
-                <label className="filter-label">&nbsp;</label>
-                <div style={{ paddingTop: 4 }}>
-                  <Checkbox
-                    checked={filters.budget?.search_below_max !== false}
-                    onChange={(e) => updateNestedFilter('budget', 'search_below_max', e.target.checked)}
-                    className="dark-checkbox"
-                  >
-                    {t('propertySearch.advancedSearch.searchBelowMax')}
-                  </Checkbox>
-                </div>
-              </Col>
-            </Row>
-          </Space>
-        </Panel>
-
-        <Panel 
-          header={
-            <Space>
-              <strong>{t('propertySearch.advancedSearch.datesAndAvailability')}</strong>
-            </Space>
-          } 
-          key="dates"
-        >
-          <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <Radio.Group
-              value={dateMode}
-              onChange={(e) => {
-                const newMode = e.target.value;
-                setDateMode(newMode);
-                
-                if (newMode === 'fixed') {
-                  updateFilter('flexible_dates', undefined);
-                } else {
-                  updateFilter('dates', undefined);
-                }
-              }}
-              buttonStyle="solid"
-              className="dark-radio-group"
-              style={{ width: '100%' }}
-            >
-              <Radio.Button value="fixed" style={{ width: '50%', textAlign: 'center' }}>
-                {t('propertySearch.advancedSearch.specificDates')}
-              </Radio.Button>
-              <Radio.Button value="flexible" style={{ width: '50%', textAlign: 'center' }}>
-                {t('propertySearch.advancedSearch.flexibleDates')}
-              </Radio.Button>
-            </Radio.Group>
-
-            {dateMode === 'fixed' ? (
-              <>
-                <Row gutter={[16, 16]}>
-                  <Col xs={24} sm={16}>
-                    <label className="filter-label">{t('propertySearch.advancedSearch.rentalPeriod')}</label>
-                    <RangePicker
-                      value={
-                        filters.dates?.check_in && filters.dates?.check_out
-                          ? [dayjs(filters.dates.check_in), dayjs(filters.dates.check_out)]
-                          : null
-                      }
-                      onChange={(dates) => {
-                        if (dates && dates[0] && dates[1]) {
-                          updateFilter('dates', {
-                            check_in: dates[0].format('YYYY-MM-DD'),
-                            check_out: dates[1].format('YYYY-MM-DD'),
-                            tolerance_days: filters.dates?.tolerance_days || undefined
-                          });
-                        } else {
-                          updateFilter('dates', undefined);
-                        }
-                      }}
-                      format="DD.MM.YYYY"
-                      style={{ width: '100%' }}
-                      className="dark-date-picker"
-                      placeholder={[
-                        t('propertySearch.advancedSearch.checkInDate'),
-                        t('propertySearch.advancedSearch.checkOutDate')
-                      ]}
+                <Grid.Col span={{ base: 12, sm: 6 }}>
+                  <Box mt={isMobile ? 0 : 28}>
+                    <Checkbox
+                      label={t('propertySearch.advancedSearch.searchBelowMax')}
+                      checked={filters.budget?.search_below_max !== false}
+                      onChange={(e) => updateNestedFilter('budget', 'search_below_max', e.currentTarget.checked)}
                     />
-                  </Col>
+                  </Box>
+                </Grid.Col>
+              </Grid>
+            </Stack>
+          </Accordion.Panel>
+        </Accordion.Item>
 
-                  <Col xs={24} sm={8}>
-                    <label className="filter-label">
-                      <Tooltip title={t('propertySearch.advancedSearch.toleranceTooltip')}>
-                        {t('propertySearch.advancedSearch.toleranceDays')}
-                      </Tooltip>
-                    </label>
-                    <InputNumber
-                      placeholder="0"
-                      min={0}
-                      max={30}
-                      value={filters.dates?.tolerance_days}
-                      onChange={(value) => {
-                        if (filters.dates?.check_in && filters.dates?.check_out) {
-                          updateFilter('dates', {
-                            ...filters.dates,
-                            tolerance_days: value || undefined
-                          });
-                        }
-                      }}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
-                      disabled={!filters.dates?.check_in}
-                    />
-                  </Col>
-                </Row>
-
-                {filters.dates?.tolerance_days && filters.dates.tolerance_days > 0 && (
-                  <div className="info-block">
-                    <Tag color="blue">
-                      {t('propertySearch.advancedSearch.searchWithinDays', { days: filters.dates.tolerance_days })}
-                    </Tag>
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <Row gutter={[16, 16]}>
-                  <Col xs={24} sm={8}>
-                    <label className="filter-label">
-                      <Tooltip title={t('propertySearch.advancedSearch.nightsTooltip')}>
-                        {t('propertySearch.advancedSearch.nightsCount')}
-                      </Tooltip>
-                    </label>
-                    <InputNumber
-                      placeholder={t('propertySearch.advancedSearch.nightsPlaceholder')}
-                      min={1}
-                      max={365}
-                      value={filters.flexible_dates?.duration}
-                      onChange={(value) => {
-                        if (value) {
-                          updateFilter('flexible_dates', {
-                            ...filters.flexible_dates,
-                            duration: value
-                          });
-                        }
-                      }}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
-                    />
-                  </Col>
-
-                  <Col xs={24} sm={16}>
-                    <label className="filter-label">
-                      <Tooltip title={t('propertySearch.advancedSearch.searchWindowTooltip')}>
-                        {t('propertySearch.advancedSearch.searchWindow')}
-                      </Tooltip>
-                    </label>
-                    <RangePicker
-                      value={
-                        filters.flexible_dates?.search_window_start && filters.flexible_dates?.search_window_end
-                          ? [
-                              dayjs(filters.flexible_dates.search_window_start),
-                              dayjs(filters.flexible_dates.search_window_end)
-                            ]
-                          : null
-                      }
-                      onChange={(dates) => {
-                        if (dates && dates[0] && dates[1]) {
-                          updateFilter('flexible_dates', {
-                            duration: filters.flexible_dates?.duration || undefined,
-                            search_window_start: dates[0].format('YYYY-MM-DD'),
-                            search_window_end: dates[1].format('YYYY-MM-DD')
-                          });
-                        } else {
-                          if (filters.flexible_dates?.duration) {
-                            updateFilter('flexible_dates', {
-                              duration: filters.flexible_dates.duration
-                            });
-                          } else {
-                            updateFilter('flexible_dates', undefined);
-                          }
-                        }
-                      }}
-                      format="DD.MM.YYYY"
-                      style={{ width: '100%' }}
-                      className="dark-date-picker"
-                      placeholder={[
-                        t('propertySearch.advancedSearch.periodStart'),
-                        t('propertySearch.advancedSearch.periodEnd')
-                      ]}
-                    />
-                  </Col>
-                </Row>
-
-                {filters.flexible_dates?.duration && 
-                 filters.flexible_dates?.search_window_start && 
-                 filters.flexible_dates?.search_window_end && (
-                  <div className="info-block success">
-                    <Tag color="green">
-                      {t('propertySearch.advancedSearch.searchingNights', { duration: filters.flexible_dates.duration })}
-                    </Tag>
-                  </div>
-                )}
-              </>
-            )}
-          </Space>
-        </Panel>
-
-        <Panel 
-          header={
-            <Space>
-              <strong>{t('propertySearch.advancedSearch.features')}</strong>
-              <Badge 
-                count={
-                  (filters.features?.length || 0) + 
-                  (filters.must_have_features?.length || 0)
-                } 
-                showZero={false}
-                style={{ backgroundColor: '#52c41a' }}
+        {/* Dates - ✅ REACT-DATEPICKER */}
+        <Accordion.Item value="dates">
+          <Accordion.Control
+            icon={
+              <ThemeIcon size="lg" radius="md" variant="light" color="orange">
+                <IconCalendar size={20} />
+              </ThemeIcon>
+            }
+          >
+            <Text fw={600}>{t('propertySearch.advancedSearch.datesAndAvailability')}</Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Stack gap="md">
+              <SegmentedControl
+                value={dateMode}
+                onChange={(value: string) => {
+                  setDateMode(value as 'fixed' | 'flexible');
+                  if (value === 'fixed') {
+                    updateFilter('flexible_dates', undefined);
+                    setFlexibleDateRange([null, null]);
+                  } else {
+                    updateFilter('dates', undefined);
+                    setFixedDateRange([null, null]);
+                  }
+                }}
+                data={[
+                  { value: 'fixed', label: t('propertySearch.advancedSearch.specificDates') },
+                  { value: 'flexible', label: t('propertySearch.advancedSearch.flexibleDates') }
+                ]}
+                fullWidth
               />
-            </Space>
-          } 
-          key="features"
-        >
-          <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <Input
-              placeholder={t('propertySearch.advancedSearch.searchFeatures')}
-              value={featureSearch}
-              onChange={(e) => setFeatureSearch(e.target.value)}
-              allowClear
-              className="dark-input feature-search"
-              prefix={<SearchOutlined />}
-            />
 
-            <div className="features-legend">
-              <Space size="small" wrap>
-                <Tag color="red">{t('propertySearch.advancedSearch.mustHave')}</Tag>
-                <Tag color="blue">{t('propertySearch.advancedSearch.desired')}</Tag>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {t('propertySearch.advancedSearch.clickInstruction')}
-                </Text>
-              </Space>
-            </div>
+              {dateMode === 'fixed' ? (
+                <Stack gap="md">
+                  <Grid gutter="md">
+                    <Grid.Col span={{ base: 12, sm: 8 }}>
+                      <div>
+                        <Text size="sm" fw={500} mb={4}>{t('propertySearch.advancedSearch.rentalPeriod')}</Text>
+                        <DatePicker
+                          selectsRange
+                          startDate={fixedDateRange[0]}
+                          endDate={fixedDateRange[1]}
+                          onChange={(update: [Date | null, Date | null]) => {
+                            setFixedDateRange(update);
+                            const [start, end] = update;
+                            if (start && end) {
+                              updateFilter('dates', {
+                                check_in: dayjs(start).format('YYYY-MM-DD'),
+                                check_out: dayjs(end).format('YYYY-MM-DD'),
+                                tolerance_days: filters.dates?.tolerance_days || undefined
+                              });
+                            } else {
+                              updateFilter('dates', undefined);
+                            }
+                          }}
+                          dateFormat="dd.MM.yyyy"
+                          placeholderText={t('propertySearch.advancedSearch.selectDates')}
+                          isClearable
+                          className="mantine-datepicker-input"
+                          wrapperClassName="mantine-datepicker-wrapper"
+                        />
+                      </div>
+                    </Grid.Col>
 
-            <div className="features-category">
-              <div className="category-header">
-                <strong>{t('propertySearch.advancedSearch.indoorFeatures')}</strong>
-                <Badge count={
-                  PROPERTY_FEATURES.property.filter(f => 
-                    filters.features?.includes(f) || filters.must_have_features?.includes(f)
-                  ).length
-                } />
-              </div>
-              <div className="features-grid">
-                {filterFeaturesBySearch(PROPERTY_FEATURES.property).map(feature => {
-                  const isMustHave = filters.must_have_features?.includes(feature);
-                  const isDesired = filters.features?.includes(feature);
-                  
-                  return (
-                    <Tag
-                      key={feature}
-                      className={`feature-tag ${isMustHave ? 'must-have' : isDesired ? 'desired' : ''}`}
-                      onClick={() => {
-                        if (isMustHave) {
-                          toggleFeature(feature, true);
-                        } else if (isDesired) {
-                          toggleFeature(feature, false);
-                          toggleFeature(feature, true);
-                        } else {
-                          toggleFeature(feature, false);
-                        }
-                      }}
-                    >
-                      {isMustHave && '🚨 '}
-                      {isDesired && '✨ '}
-                      {t(`properties.features.${feature}`, { defaultValue: feature })}
-                    </Tag>
-                  );
-                })}
-              </div>
-            </div>
+                    <Grid.Col span={{ base: 12, sm: 4 }}>
+                      <Tooltip label={t('propertySearch.advancedSearch.toleranceTooltip')}>
+                        <NumberInput
+                          label={t('propertySearch.advancedSearch.toleranceDays')}
+                          placeholder="0"
+                          min={0}
+                          max={30}
+                          value={filters.dates?.tolerance_days}
+                          onChange={(value) => {
+                            if (filters.dates?.check_in && filters.dates?.check_out) {
+                              updateFilter('dates', {
+                                ...filters.dates,
+                                tolerance_days: value || undefined
+                              });
+                            }
+                          }}
+                          disabled={!filters.dates?.check_in}
+                          styles={{ input: { fontSize: '16px' } }}
+                        />
+                      </Tooltip>
+                    </Grid.Col>
+                  </Grid>
 
-            <Divider style={{ margin: '12px 0', borderColor: 'rgba(255, 255, 255, 0.1)' }} />
+                  {filters.dates?.tolerance_days && filters.dates.tolerance_days > 0 && (
+                    <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+                      <Text size="sm">
+                        {t('propertySearch.advancedSearch.searchWithinDays', { days: filters.dates.tolerance_days })}
+                      </Text>
+                    </Alert>
+                  )}
+                </Stack>
+              ) : (
+                <Stack gap="md">
+                  <Grid gutter="md">
+                    <Grid.Col span={{ base: 12, sm: 4 }}>
+                      <Tooltip label={t('propertySearch.advancedSearch.nightsTooltip')}>
+                        <NumberInput
+                          label={t('propertySearch.advancedSearch.nightsCount')}
+                          placeholder={t('propertySearch.advancedSearch.nightsPlaceholder')}
+                          min={1}
+                          max={365}
+                          value={filters.flexible_dates?.duration}
+                          onChange={(value) => {
+                            if (value) {
+                              updateFilter('flexible_dates', {
+                                ...filters.flexible_dates,
+                                duration: value
+                              });
+                            }
+                          }}
+                          styles={{ input: { fontSize: '16px' } }}
+                        />
+                      </Tooltip>
+                    </Grid.Col>
 
-            <div className="features-category">
-              <div className="category-header">
-                <strong>{t('propertySearch.advancedSearch.outdoorFeatures')}</strong>
-                <Badge count={
-                  PROPERTY_FEATURES.outdoor.filter(f => 
-                    filters.features?.includes(f) || filters.must_have_features?.includes(f)
-                  ).length
-                } />
-              </div>
-              <div className="features-grid">
-                {filterFeaturesBySearch(PROPERTY_FEATURES.outdoor).map(feature => {
-                  const isMustHave = filters.must_have_features?.includes(feature);
-                  const isDesired = filters.features?.includes(feature);
-                  
-                  return (
-                    <Tag
-                      key={feature}
-                      className={`feature-tag ${isMustHave ? 'must-have' : isDesired ? 'desired' : ''}`}
-                      onClick={() => {
-                        if (isMustHave) {
-                          toggleFeature(feature, true);
-                        } else if (isDesired) {
-                          toggleFeature(feature, false);
-                          toggleFeature(feature, true);
-                        } else {
-                          toggleFeature(feature, false);
-                        }
-                      }}
-                    >
-                      {isMustHave && '🚨 '}
-                      {isDesired && '✨ '}
-                      {t(`properties.features.${feature}`, { defaultValue: feature })}
-                    </Tag>
-                  );
-                })}
-              </div>
-            </div>
+                    <Grid.Col span={{ base: 12, sm: 8 }}>
+                      <div>
+                        <Tooltip label={t('propertySearch.advancedSearch.searchWindowTooltip')}>
+                          <Text size="sm" fw={500} mb={4}>{t('propertySearch.advancedSearch.searchWindow')}</Text>
+                        </Tooltip>
+                        <DatePicker
+                          selectsRange
+                          startDate={flexibleDateRange[0]}
+                          endDate={flexibleDateRange[1]}
+                          onChange={(update: [Date | null, Date | null]) => {
+                            setFlexibleDateRange(update);
+                            const [start, end] = update;
+                            if (start && end) {
+                              updateFilter('flexible_dates', {
+                                duration: filters.flexible_dates?.duration || undefined,
+                                search_window_start: dayjs(start).format('YYYY-MM-DD'),
+                                search_window_end: dayjs(end).format('YYYY-MM-DD')
+                              });
+                            } else {
+                              if (filters.flexible_dates?.duration) {
+                                updateFilter('flexible_dates', {
+                                  duration: filters.flexible_dates.duration
+                                });
+                              } else {
+                                updateFilter('flexible_dates', undefined);
+                              }
+                            }
+                          }}
+                          dateFormat="dd.MM.yyyy"
+                          placeholderText={t('propertySearch.advancedSearch.selectPeriod')}
+                          isClearable
+                          className="mantine-datepicker-input"
+                          wrapperClassName="mantine-datepicker-wrapper"
+                        />
+                      </div>
+                    </Grid.Col>
+                  </Grid>
 
-            <Divider style={{ margin: '12px 0', borderColor: 'rgba(255, 255, 255, 0.1)' }} />
+                  {filters.flexible_dates?.duration && 
+                   filters.flexible_dates?.search_window_start && 
+                   filters.flexible_dates?.search_window_end && (
+                    <Alert icon={<IconInfoCircle size={16} />} color="green" variant="light">
+                      <Text size="sm">
+                        {t('propertySearch.advancedSearch.searchingNights', { duration: filters.flexible_dates.duration })}
+                      </Text>
+                    </Alert>
+                  )}
+                </Stack>
+              )}
+            </Stack>
+          </Accordion.Panel>
+        </Accordion.Item>
+{/* Features */}
+        <Accordion.Item value="features">
+          <Accordion.Control
+            icon={
+              <ThemeIcon size="lg" radius="md" variant="light" color="violet">
+                <IconSparkles size={20} />
+              </ThemeIcon>
+            }
+          >
+            <Group justify="space-between" style={{ flex: 1, marginRight: 16 }}>
+              <Text fw={600}>{t('propertySearch.advancedSearch.features')}</Text>
+              <Badge 
+                size="sm" 
+                variant="filled" 
+                color="violet"
+                style={{ display: (filters.features?.length || 0) + (filters.must_have_features?.length || 0) > 0 ? 'block' : 'none' }}
+              >
+                {(filters.features?.length || 0) + (filters.must_have_features?.length || 0)}
+              </Badge>
+            </Group>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Stack gap="lg">
+              {/* Search Input */}
+              <TextInput
+                placeholder={t('propertySearch.advancedSearch.searchFeatures')}
+                value={featureSearch}
+                onChange={(e) => setFeatureSearch(e.target.value)}
+                leftSection={<IconSearch size={16} />}
+                styles={{ input: { fontSize: '16px' } }}
+              />
 
-            <div className="features-category">
-              <div className="category-header">
-                <strong>{t('propertySearch.advancedSearch.views')}</strong>
-                <Badge count={
-                  PROPERTY_FEATURES.views.filter(f => 
-                    filters.features?.includes(f) || filters.must_have_features?.includes(f)
-                  ).length
-                } />
-              </div>
-              <div className="features-grid">
-                {filterFeaturesBySearch(PROPERTY_FEATURES.views).map(feature => {
-                  const isMustHave = filters.must_have_features?.includes(feature);
-                  const isDesired = filters.features?.includes(feature);
-                  
-                  return (
-                    <Tag
-                      key={feature}
-                      className={`feature-tag ${isMustHave ? 'must-have' : isDesired ? 'desired' : ''}`}
-                      onClick={() => {
-                        if (isMustHave) {
-                          toggleFeature(feature, true);
-                        } else if (isDesired) {
-                          toggleFeature(feature, false);
-                          toggleFeature(feature, true);
-                        } else {
-                          toggleFeature(feature, false);
-                        }
-                      }}
-                    >
-                      {isMustHave && '🚨 '}
-                      {isDesired && '✨ '}
-                      {t(`properties.features.${feature}`, { defaultValue: feature })}
-                    </Tag>
-                  );
-                })}
-              </div>
-            </div>
+              {/* Legend */}
+              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+                <Group gap="xs">
+                  <Text size="xs" fw={500}>{t('propertySearch.advancedSearch.mustHave')}:</Text>
+                  <Badge size="sm" color="red" variant="filled">{t('propertySearch.advancedSearch.clickOnce')}</Badge>
+                  <Text size="xs" c="dimmed">→</Text>
+                  <Text size="xs" fw={500}>{t('propertySearch.advancedSearch.desired')}:</Text>
+                  <Badge size="sm" color="blue" variant="light">{t('propertySearch.advancedSearch.clickTwice')}</Badge>
+                </Group>
+              </Alert>
 
-            <Divider style={{ margin: '12px 0', borderColor: 'rgba(255, 255, 255, 0.1)' }} />
+              {/* Indoor Features */}
+              {renderFeatureCategory('indoorFeatures', PROPERTY_FEATURES.property, showAllProperty, setShowAllProperty)}
 
-            <div className="features-category">
-              <div className="category-header">
-                <strong>{t('propertySearch.advancedSearch.locationFeatures')}</strong>
-                <Badge count={
-                  PROPERTY_FEATURES.location.filter(f => 
-                    filters.features?.includes(f) || filters.must_have_features?.includes(f)
-                  ).length
-                } />
-              </div>
-              <div className="features-grid">
-                {filterFeaturesBySearch(PROPERTY_FEATURES.location).map(feature => {
-                  const isMustHave = filters.must_have_features?.includes(feature);
-                  const isDesired = filters.features?.includes(feature);
-                  
-                  return (
-                    <Tag
-                      key={feature}
-                      className={`feature-tag ${isMustHave ? 'must-have' : isDesired ? 'desired' : ''}`}
-                      onClick={() => {
-                        if (isMustHave) {
-                          toggleFeature(feature, true);
-                        } else if (isDesired) {
-                          toggleFeature(feature, false);
-                          toggleFeature(feature, true);
-                        } else {
-                          toggleFeature(feature, false);
-                        }
-                      }}
-                    >
-                      {isMustHave && '🚨 '}
-                      {isDesired && '✨ '}
-                      {t(`properties.features.${feature}`, { defaultValue: feature })}
-                    </Tag>
-                  );
-                })}
-              </div>
-            </div>
+              {/* Outdoor Features */}
+              {renderFeatureCategory('outdoorFeatures', PROPERTY_FEATURES.outdoor, showAllOutdoor, setShowAllOutdoor)}
 
-            <Divider style={{ margin: '12px 0', borderColor: 'rgba(255, 255, 255, 0.1)' }} />
+              {/* Views */}
+              {renderFeatureCategory('views', PROPERTY_FEATURES.views, showAllViews, setShowAllViews)}
 
-            <div className="features-category">
-              <div className="category-header">
-                <strong>{t('propertySearch.advancedSearch.rentalServices')}</strong>
-                <Badge count={
-                  PROPERTY_FEATURES.rental.filter(f => 
-                    filters.features?.includes(f) || filters.must_have_features?.includes(f)
-                  ).length
-                } />
-              </div>
-              <div className="features-grid">
-                {filterFeaturesBySearch(PROPERTY_FEATURES.rental).map(feature => {
-                  const isMustHave = filters.must_have_features?.includes(feature);
-                  const isDesired = filters.features?.includes(feature);
-                  
-                  return (
-                    <Tag
-                      key={feature}
-                      className={`feature-tag ${isMustHave ? 'must-have' : isDesired ? 'desired' : ''}`}
-                      onClick={() => {
-                        if (isMustHave) {
-                          toggleFeature(feature, true);
-                        } else if (isDesired) {
-                          toggleFeature(feature, false);
-                          toggleFeature(feature, true);
-                        } else {
-                          toggleFeature(feature, false);
-                        }
-                      }}
-                    >
-                      {isMustHave && '🚨 '}
-                      {isDesired && '✨ '}
-                      {t(`properties.features.${feature}`, { defaultValue: feature })}
-                    </Tag>
-                  );
-                })}
-              </div>
-            </div>
+              {/* Location Features */}
+              {renderFeatureCategory('locationFeatures', PROPERTY_FEATURES.location, showAllLocation, setShowAllLocation)}
 
-            {((filters.features?.length || 0) + (filters.must_have_features?.length || 0)) > 0 && (
-              <>
-                <Divider style={{ margin: '12px 0', borderColor: 'rgba(255, 255, 255, 0.1)' }} />
-                <div className="selected-features">
-                  <div className="selected-header">
-                    <strong>{t('propertySearch.advancedSearch.selectedFeatures')}</strong>
-                    <Space size="small">
+              {/* Rental Services */}
+              {renderFeatureCategory('rentalServices', PROPERTY_FEATURES.rental, showAllRental, setShowAllRental)}
+
+              {/* Selected Features */}
+              {((filters.features?.length || 0) + (filters.must_have_features?.length || 0)) > 0 && (
+                <Card shadow="sm" padding="md" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-6)' }}>
+                  <Stack gap="md">
+                    <Group justify="space-between">
+                      <Text fw={600} size="sm">{t('propertySearch.advancedSearch.selectedFeatures')}</Text>
                       <Button
-                        type="link"
-                        size="small"
-                        danger
+                        variant="subtle"
+                        color="red"
+                        size="xs"
+                        leftSection={<IconTrash size={14} />}
                         onClick={() => {
                           updateFilter('features', []);
                           updateFilter('must_have_features', []);
                         }}
-                        icon={<DeleteOutlined />}
                       >
                         {t('propertySearch.advancedSearch.clearAll')}
                       </Button>
-                    </Space>
-                  </div>
-                  <Space size="small" wrap style={{ marginTop: 8 }}>
-                    {filters.must_have_features?.map((feature: string) => (
-                      <Tag
-                        key={feature}
-                        closable
-                        onClose={() => toggleFeature(feature, true)}
-                        color="red"
-                      >
-                        🚨 {t(`properties.features.${feature}`, { defaultValue: feature })}
-                      </Tag>
-                    ))}
-                    {filters.features?.map((feature: string) => (
-                      <Tag
-                        key={feature}
-                        closable
-                        onClose={() => toggleFeature(feature, false)}
-                        color="blue"
-                      >
-                        ✨ {t(`properties.features.${feature}`, { defaultValue: feature })}
-                      </Tag>
-                    ))}
-                  </Space>
-                </div>
-              </>
-            )}
-          </Space>
-        </Panel>
+                    </Group>
 
-        <Panel 
-          header={
-            <Space>
-              <strong>{t('propertySearch.advancedSearch.areas')}</strong>
-            </Space>
-          } 
-          key="areas"
-        >
-          <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={12}>
-                <label className="filter-label">{t('propertySearch.advancedSearch.indoorArea')}</label>
-                <Row gutter={8}>
-                  <Col span={12}>
-                    <InputNumber
+                    <Group gap="xs">
+                      {filters.must_have_features?.map((feature: string) => (
+                        <Badge
+                          key={feature}
+                          size="lg"
+                          variant="filled"
+                          color="red"
+                          style={{ cursor: 'pointer' }}
+                          rightSection={
+                            <ActionIcon
+                              size="xs"
+                              variant="transparent"
+                              onClick={() => toggleFeature(feature, true)}
+                            >
+                              <IconX size={12} />
+                            </ActionIcon>
+                          }
+                        >
+                          {t(`properties.features.${feature}`, { defaultValue: feature })}
+                        </Badge>
+                      ))}
+                      {filters.features?.map((feature: string) => (
+                        <Badge
+                          key={feature}
+                          size="lg"
+                          variant="light"
+                          color="blue"
+                          style={{ cursor: 'pointer' }}
+                          rightSection={
+                            <ActionIcon
+                              size="xs"
+                              variant="transparent"
+                              onClick={() => toggleFeature(feature, false)}
+                            >
+                              <IconX size={12} />
+                            </ActionIcon>
+                          }
+                        >
+                          {t(`properties.features.${feature}`, { defaultValue: feature })}
+                        </Badge>
+                      ))}
+                    </Group>
+                  </Stack>
+                </Card>
+              )}
+            </Stack>
+          </Accordion.Panel>
+        </Accordion.Item>
+
+        {/* Areas */}
+        <Accordion.Item value="areas">
+          <Accordion.Control
+            icon={
+              <ThemeIcon size="lg" radius="md" variant="light" color="cyan">
+                <IconRuler size={20} />
+              </ThemeIcon>
+            }
+          >
+            <Text fw={600}>{t('propertySearch.advancedSearch.areas')}</Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Grid gutter="md">
+              <Grid.Col span={{ base: 12, sm: 6 }}>
+                <Text size="sm" fw={500} mb="xs">{t('propertySearch.advancedSearch.indoorArea')}</Text>
+                <Grid gutter="xs">
+                  <Grid.Col span={6}>
+                    <NumberInput
                       placeholder={t('propertySearch.advancedSearch.from')}
                       min={0}
                       value={filters.indoor_area_min}
                       onChange={(value) => updateFilter('indoor_area_min', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
+                      suffix=" m²"
+                      styles={{ input: { fontSize: '16px' } }}
                     />
-                  </Col>
-                  <Col span={12}>
-                    <InputNumber
+                  </Grid.Col>
+                  <Grid.Col span={6}>
+                    <NumberInput
                       placeholder={t('propertySearch.advancedSearch.to')}
                       min={0}
                       value={filters.indoor_area_max}
                       onChange={(value) => updateFilter('indoor_area_max', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
+                      suffix=" m²"
+                      styles={{ input: { fontSize: '16px' } }}
                     />
-                  </Col>
-                </Row>
-              </Col>
+                  </Grid.Col>
+                </Grid>
+              </Grid.Col>
 
-              <Col xs={24} sm={12}>
-                <label className="filter-label">{t('propertySearch.advancedSearch.outdoorArea')}</label>
-                <Row gutter={8}>
-                  <Col span={12}>
-                    <InputNumber
+              <Grid.Col span={{ base: 12, sm: 6 }}>
+                <Text size="sm" fw={500} mb="xs">{t('propertySearch.advancedSearch.outdoorArea')}</Text>
+                <Grid gutter="xs">
+                  <Grid.Col span={6}>
+                    <NumberInput
                       placeholder={t('propertySearch.advancedSearch.from')}
                       min={0}
                       value={filters.outdoor_area_min}
                       onChange={(value) => updateFilter('outdoor_area_min', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
+                      suffix=" m²"
+                      styles={{ input: { fontSize: '16px' } }}
                     />
-                  </Col>
-                  <Col span={12}>
-                    <InputNumber
+                  </Grid.Col>
+                  <Grid.Col span={6}>
+                    <NumberInput
                       placeholder={t('propertySearch.advancedSearch.to')}
                       min={0}
                       value={filters.outdoor_area_max}
                       onChange={(value) => updateFilter('outdoor_area_max', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
+                      suffix=" m²"
+                      styles={{ input: { fontSize: '16px' } }}
                     />
-                  </Col>
-                </Row>
-              </Col>
-            </Row>
+                  </Grid.Col>
+                </Grid>
+              </Grid.Col>
 
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={12}>
-                <label className="filter-label">{t('propertySearch.advancedSearch.plotSize')}</label>
-                <Row gutter={8}>
-                  <Col span={12}>
-                    <InputNumber
+              <Grid.Col span={{ base: 12, sm: 6 }}>
+                <Text size="sm" fw={500} mb="xs">{t('propertySearch.advancedSearch.plotSize')}</Text>
+                <Grid gutter="xs">
+                  <Grid.Col span={6}>
+                    <NumberInput
                       placeholder={t('propertySearch.advancedSearch.from')}
                       min={0}
                       value={filters.plot_size_min}
                       onChange={(value) => updateFilter('plot_size_min', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
+                      suffix=" m²"
+                      styles={{ input: { fontSize: '16px' } }}
                     />
-                  </Col>
-                  <Col span={12}>
-                    <InputNumber
+                  </Grid.Col>
+                  <Grid.Col span={6}>
+                    <NumberInput
                       placeholder={t('propertySearch.advancedSearch.to')}
                       min={0}
                       value={filters.plot_size_max}
                       onChange={(value) => updateFilter('plot_size_max', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
+                      suffix=" m²"
+                      styles={{ input: { fontSize: '16px' } }}
                     />
-                  </Col>
-                </Row>
-              </Col>
+                  </Grid.Col>
+                </Grid>
+              </Grid.Col>
 
-              <Col xs={24} sm={12}>
-                <label className="filter-label">{t('propertySearch.advancedSearch.distanceToBeach')}</label>
+              <Grid.Col span={{ base: 12, sm: 6 }}>
                 <Select
+                  label={t('propertySearch.advancedSearch.distanceToBeach')}
                   placeholder={t('propertySearch.advancedSearch.anyDistance')}
-                  value={filters.distance_to_beach?.max}
-                  onChange={(value) => updateNestedFilter('distance_to_beach', 'max', value)}
-                  allowClear
-                  style={{ width: '100%' }}
-                  className="dark-select"
-                  options={[
-                    { value: 100, label: t('propertySearch.advancedSearch.beach100') },
-                    { value: 200, label: t('propertySearch.advancedSearch.beach200') },
-                    { value: 500, label: t('propertySearch.advancedSearch.beach500') },
-                    { value: 1000, label: t('propertySearch.advancedSearch.beach1000') },
-                    { value: 2000, label: t('propertySearch.advancedSearch.beach2000') },
-                    { value: 5000, label: t('propertySearch.advancedSearch.beach5000') }
+                  value={filters.distance_to_beach?.max?.toString()}
+                  onChange={(value) => updateNestedFilter('distance_to_beach', 'max', value ? parseInt(value) : undefined)}
+                  clearable
+                  data={[
+                    { value: '100', label: t('propertySearch.advancedSearch.beach100') },
+                    { value: '200', label: t('propertySearch.advancedSearch.beach200') },
+                    { value: '500', label: t('propertySearch.advancedSearch.beach500') },
+                    { value: '1000', label: t('propertySearch.advancedSearch.beach1000') },
+                    { value: '2000', label: t('propertySearch.advancedSearch.beach2000') },
+                    { value: '5000', label: t('propertySearch.advancedSearch.beach5000') }
                   ]}
+                  styles={{ input: { fontSize: '16px' } }}
                 />
-              </Col>
-            </Row>
-          </Space>
-        </Panel>
+              </Grid.Col>
+            </Grid>
+          </Accordion.Panel>
+        </Accordion.Item>
 
-        <Panel 
-          header={
-            <Space>
-              <strong>{t('propertySearch.advancedSearch.floors')}</strong>
-            </Space>
-          } 
-          key="floors"
-        >
-          <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={12}>
-                <label className="filter-label">{t('propertySearch.advancedSearch.floorNumber')}</label>
-                <Row gutter={8}>
-                  <Col span={12}>
-                    <InputNumber
+        {/* Floors */}
+        <Accordion.Item value="floors">
+          <Accordion.Control
+            icon={
+              <ThemeIcon size="lg" radius="md" variant="light" color="pink">
+                <IconStairs size={20} />
+              </ThemeIcon>
+            }
+          >
+            <Text fw={600}>{t('propertySearch.advancedSearch.floors')}</Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Grid gutter="md">
+              <Grid.Col span={{ base: 12, sm: 6 }}>
+                <Text size="sm" fw={500} mb="xs">{t('propertySearch.advancedSearch.floorNumber')}</Text>
+                <Grid gutter="xs">
+                  <Grid.Col span={6}>
+                    <NumberInput
                       placeholder={t('propertySearch.advancedSearch.from')}
                       min={0}
                       max={100}
                       value={filters.floor?.min}
                       onChange={(value) => updateNestedFilter('floor', 'min', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
+                      styles={{ input: { fontSize: '16px' } }}
                     />
-                  </Col>
-                  <Col span={12}>
-                    <InputNumber
+                  </Grid.Col>
+                  <Grid.Col span={6}>
+                    <NumberInput
                       placeholder={t('propertySearch.advancedSearch.to')}
                       min={0}
                       max={100}
                       value={filters.floor?.max}
                       onChange={(value) => updateNestedFilter('floor', 'max', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
+                      styles={{ input: { fontSize: '16px' } }}
                     />
-                  </Col>
-                </Row>
-              </Col>
+                  </Grid.Col>
+                </Grid>
+              </Grid.Col>
 
-              <Col xs={24} sm={12}>
-                <label className="filter-label">{t('propertySearch.advancedSearch.buildingFloors')}</label>
-                <Row gutter={8}>
-                  <Col span={12}>
-                    <InputNumber
+              <Grid.Col span={{ base: 12, sm: 6 }}>
+                <Text size="sm" fw={500} mb="xs">{t('propertySearch.advancedSearch.buildingFloors')}</Text>
+                <Grid gutter="xs">
+                  <Grid.Col span={6}>
+                    <NumberInput
                       placeholder={t('propertySearch.advancedSearch.from')}
                       min={1}
                       max={100}
                       value={filters.floors?.min}
                       onChange={(value) => updateNestedFilter('floors', 'min', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
+                      styles={{ input: { fontSize: '16px' } }}
                     />
-                  </Col>
-                  <Col span={12}>
-                    <InputNumber
+                  </Grid.Col>
+                  <Grid.Col span={6}>
+                    <NumberInput
                       placeholder={t('propertySearch.advancedSearch.to')}
                       min={1}
                       max={100}
                       value={filters.floors?.max}
                       onChange={(value) => updateNestedFilter('floors', 'max', value)}
-                      style={{ width: '100%' }}
-                      className="dark-input-number"
+                      styles={{ input: { fontSize: '16px' } }}
                     />
-                  </Col>
-                </Row>
-              </Col>
-            </Row>
-          </Space>
-        </Panel>
+                  </Grid.Col>
+                </Grid>
+              </Grid.Col>
+            </Grid>
+          </Accordion.Panel>
+        </Accordion.Item>
 
-        <Panel 
-          header={
-            <Space>
-              <strong>{t('propertySearch.advancedSearch.constructionYear')}</strong>
-            </Space>
-          } 
-          key="construction"
-        >
-          <Row gutter={[16, 16]}>
-            <Col xs={12}>
-              <label className="filter-label">{t('propertySearch.advancedSearch.fromYear')}</label>
-              <InputNumber
-                placeholder={t('propertySearch.advancedSearch.yearPlaceholder', { year: 2015 })}
-                min={1950}
-                max={new Date().getFullYear() + 5}
-                value={filters.construction_year_min}
-                onChange={(value) => updateFilter('construction_year_min', value)}
-                style={{ width: '100%' }}
-                className="dark-input-number"
-              />
-            </Col>
-            <Col xs={12}>
-              <label className="filter-label">{t('propertySearch.advancedSearch.toYear')}</label>
-              <InputNumber
-                placeholder={t('propertySearch.advancedSearch.yearPlaceholder', { year: 2024 })}
-                min={1950}
-                max={new Date().getFullYear() + 5}
-                value={filters.construction_year_max}
-                onChange={(value) => updateFilter('construction_year_max', value)}
-                style={{ width: '100%' }}
-                className="dark-input-number"
-              />
-            </Col>
-          </Row>
-        </Panel>
-
-        {filters.deal_type === 'sale' && (
-          <Panel 
-            header={
-              <Space>
-                <strong>{t('propertySearch.advancedSearch.ownershipTypes')}</strong>
-              </Space>
-            } 
-            key="ownership"
+        {/* Construction Year */}
+        <Accordion.Item value="construction">
+          <Accordion.Control
+            icon={
+              <ThemeIcon size="lg" radius="md" variant="light" color="yellow">
+                <IconHammer size={20} />
+              </ThemeIcon>
+            }
           >
-            <Space direction="vertical" style={{ width: '100%' }} size="middle">
-              <Row gutter={[16, 16]}>
-                <Col xs={24} sm={8}>
-                  <label className="filter-label">{t('properties.buildingOwnership')}</label>
-                  <Select
-                    placeholder={t('propertySearch.advancedSearch.any')}
-                    value={filters.building_ownership}
-                    onChange={(value) => updateFilter('building_ownership', value)}
-                    allowClear
-                    style={{ width: '100%' }}
-                    className="dark-select"
-                    options={[
-                      { value: 'freehold', label: `✅ ${t('properties.ownershipTypes.freehold')}` },
-                      { value: 'leasehold', label: `📝 ${t('properties.ownershipTypes.leasehold')}` },
-                      { value: 'company', label: `🏢 ${t('properties.ownershipTypes.company')}` }
-                    ]}
-                  />
-                </Col>
+            <Text fw={600}>{t('propertySearch.advancedSearch.constructionYear')}</Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Grid gutter="md">
+              <Grid.Col span={6}>
+                <NumberInput
+                  label={t('propertySearch.advancedSearch.fromYear')}
+                  placeholder="2015"
+                  min={1950}
+                  max={new Date().getFullYear() + 5}
+                  value={filters.construction_year_min}
+                  onChange={(value) => updateFilter('construction_year_min', value)}
+                  styles={{ input: { fontSize: '16px' } }}
+                />
+              </Grid.Col>
+              <Grid.Col span={6}>
+                <NumberInput
+                  label={t('propertySearch.advancedSearch.toYear')}
+                  placeholder={new Date().getFullYear().toString()}
+                  min={1950}
+                  max={new Date().getFullYear() + 5}
+                  value={filters.construction_year_max}
+                  onChange={(value) => updateFilter('construction_year_max', value)}
+                  styles={{ input: { fontSize: '16px' } }}
+                />
+              </Grid.Col>
+            </Grid>
+          </Accordion.Panel>
+        </Accordion.Item>
 
-                <Col xs={24} sm={8}>
-                  <label className="filter-label">{t('properties.landOwnership')}</label>
-                  <Select
-                    placeholder={t('propertySearch.advancedSearch.any')}
-                    value={filters.land_ownership}
-                    onChange={(value) => updateFilter('land_ownership', value)}
-                    allowClear
-                    style={{ width: '100%' }}
-                    className="dark-select"
-                    options={[
-                      { value: 'freehold', label: `✅ ${t('properties.ownershipTypes.freehold')}` },
-                      { value: 'leasehold', label: `📝 ${t('properties.ownershipTypes.leasehold')}` },
-                      { value: 'company', label: `🏢 ${t('properties.ownershipTypes.company')}` }
-                    ]}
-                  />
-                </Col>
+        {/* Ownership - только для продажи */}
+        {filters.deal_type === 'sale' && (
+          <Accordion.Item value="ownership">
+            <Accordion.Control
+              icon={
+                <ThemeIcon size="lg" radius="md" variant="light" color="grape">
+                  <IconShield size={20} />
+                </ThemeIcon>
+              }
+            >
+              <Text fw={600}>{t('propertySearch.advancedSearch.ownershipTypes')}</Text>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Stack gap="md">
+                <Grid gutter="md">
+                  <Grid.Col span={{ base: 12, sm: 4 }}>
+                    <Select
+                      label={t('properties.buildingOwnership')}
+                      placeholder={t('propertySearch.advancedSearch.any')}
+                      value={filters.building_ownership}
+                      onChange={(value) => updateFilter('building_ownership', value)}
+                      clearable
+                      data={[
+                        { value: 'freehold', label: t('properties.ownershipTypes.freehold') },
+                        { value: 'leasehold', label: t('properties.ownershipTypes.leasehold') },
+                        { value: 'company', label: t('properties.ownershipTypes.company') }
+                      ]}
+                      styles={{ input: { fontSize: '16px' } }}
+                    />
+                  </Grid.Col>
 
-                <Col xs={24} sm={8}>
-                  <label className="filter-label">{t('properties.ownership')}</label>
-                  <Select
-                    placeholder={t('propertySearch.advancedSearch.any')}
-                    value={filters.ownership_type}
-                    onChange={(value) => updateFilter('ownership_type', value)}
-                    allowClear
-                    style={{ width: '100%' }}
-                    className="dark-select"
-                    options={[
-                      { value: 'freehold', label: `✅ ${t('properties.ownershipTypes.freehold')}` },
-                      { value: 'leasehold', label: `📝 ${t('properties.ownershipTypes.leasehold')}` },
-                      { value: 'company', label: `🏢 ${t('properties.ownershipTypes.company')}` }
-                    ]}
-                  />
-                </Col>
-              </Row>
+                  <Grid.Col span={{ base: 12, sm: 4 }}>
+                    <Select
+                      label={t('properties.landOwnership')}
+                      placeholder={t('propertySearch.advancedSearch.any')}
+                      value={filters.land_ownership}
+                      onChange={(value) => updateFilter('land_ownership', value)}
+                      clearable
+                      data={[
+                        { value: 'freehold', label: t('properties.ownershipTypes.freehold') },
+                        { value: 'leasehold', label: t('properties.ownershipTypes.leasehold') },
+                        { value: 'company', label: t('properties.ownershipTypes.company') }
+                      ]}
+                      styles={{ input: { fontSize: '16px' } }}
+                    />
+                  </Grid.Col>
 
-              <div className="info-block">
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {t('propertySearch.advancedSearch.ownershipInfo')}
-                </Text>
-              </div>
-            </Space>
-          </Panel>
+                  <Grid.Col span={{ base: 12, sm: 4 }}>
+                    <Select
+                      label={t('properties.ownership')}
+                      placeholder={t('propertySearch.advancedSearch.any')}
+                      value={filters.ownership_type}
+                      onChange={(value) => updateFilter('ownership_type', value)}
+                      clearable
+                      data={[
+                        { value: 'freehold', label: t('properties.ownershipTypes.freehold') },
+                        { value: 'leasehold', label: t('properties.ownershipTypes.leasehold') },
+                        { value: 'company', label: t('properties.ownershipTypes.company') }
+                      ]}
+                      styles={{ input: { fontSize: '16px' } }}
+                    />
+                  </Grid.Col>
+                </Grid>
+
+                <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+                  <Text size="xs">
+                    {t('propertySearch.advancedSearch.ownershipInfo')}
+                  </Text>
+                </Alert>
+              </Stack>
+            </Accordion.Panel>
+          </Accordion.Item>
         )}
-      </Collapse>
+      </Accordion>
 
-      <Divider style={{ margin: '24px 0', borderColor: 'rgba(255, 255, 255, 0.2)' }} />
-
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12}>
+      {/* Search Buttons */}
+      <Grid gutter="md">
+        <Grid.Col span={{ base: 12, sm: 6 }}>
           <Button
-            type="primary"
-            icon={<SearchOutlined />}
+            variant="gradient"
+            gradient={{ from: 'violet', to: 'grape' }}
+            size="lg"
+            fullWidth
+            leftSection={<IconSearch size={20} />}
             onClick={handleSearch}
             loading={loading}
-            size="large"
-            block
-            className="search-button"
           >
             {t('propertySearch.advancedSearch.searchButton')}
           </Button>
-        </Col>
-        <Col xs={24} sm={12}>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, sm: 6 }}>
           <Button
-            icon={<ReloadOutlined />}
+            variant="light"
+            color="gray"
+            size="lg"
+            fullWidth
+            leftSection={<IconRefresh size={20} />}
             onClick={handleReset}
             disabled={loading}
-            size="large"
-            block
-            className="reset-button"
           >
             {t('propertySearch.advancedSearch.resetButton')}
           </Button>
-        </Col>
-      </Row>
-    </Card>
+        </Grid.Col>
+      </Grid>
+
+      {/* CSS для стилизации react-datepicker */}
+      <style>{`
+        .mantine-datepicker-wrapper {
+          width: 100%;
+        }
+        
+        .mantine-datepicker-input {
+          width: 100%;
+          padding: 8px 12px;
+          font-size: 16px;
+          border: 1px solid #373A40;
+          border-radius: 4px;
+          background-color: #25262B;
+          color: #C1C2C5;
+          transition: border-color 0.2s;
+        }
+        
+        .mantine-datepicker-input:hover {
+          border-color: #5C5F66;
+        }
+        
+        .mantine-datepicker-input:focus {
+          outline: none;
+          border-color: #5F3DC4;
+        }
+        
+        .react-datepicker-wrapper {
+          width: 100%;
+        }
+        
+        .react-datepicker__input-container {
+          width: 100%;
+        }
+        
+        .react-datepicker {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+          background-color: #25262B;
+          border: 1px solid #373A40;
+          border-radius: 8px;
+        }
+        
+        .react-datepicker__header {
+          background-color: #2C2E33;
+          border-bottom: 1px solid #373A40;
+        }
+        
+        .react-datepicker__current-month,
+        .react-datepicker__day-name {
+          color: #C1C2C5;
+        }
+        
+        .react-datepicker__day {
+          color: #C1C2C5;
+        }
+        
+        .react-datepicker__day:hover {
+          background-color: #373A40;
+        }
+        
+        .react-datepicker__day--selected,
+        .react-datepicker__day--in-range,
+        .react-datepicker__day--in-selecting-range {
+          background-color: #5F3DC4;
+          color: white;
+        }
+        
+        .react-datepicker__day--keyboard-selected {
+          background-color: #5F3DC4;
+          color: white;
+        }
+        
+        .react-datepicker__day--disabled {
+          color: #5C5F66;
+        }
+        
+        .react-datepicker__navigation-icon::before {
+          border-color: #C1C2C5;
+        }
+        
+        .react-datepicker__navigation:hover *::before {
+          border-color: white;
+        }
+      `}</style>
+    </Stack>
   );
 };
 

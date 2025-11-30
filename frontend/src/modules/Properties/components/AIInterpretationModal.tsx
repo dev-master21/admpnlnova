@@ -1,17 +1,28 @@
 // frontend/src/modules/Properties/components/AIInterpretationModal.tsx
 import React from 'react';
-import { Modal, Progress, Descriptions, Tag, Space, Alert, Typography, Row, Col } from 'antd';
 import {
-  CheckCircleOutlined,
-  WarningOutlined,
-  CloseCircleOutlined,
-  RobotOutlined
-} from '@ant-design/icons';
+  Modal,
+  Stack,
+  Group,
+  Text,
+  Badge,
+  Alert,
+  Progress,
+  Card,
+  Grid,
+  ThemeIcon,
+  Paper
+} from '@mantine/core';
+import {
+  IconCheck,
+  IconAlertTriangle,
+  IconX,
+  IconRobot,
+  IconInfoCircle
+} from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
+import { useMediaQuery } from '@mantine/hooks';
 import dayjs from 'dayjs';
-import './AIInterpretationModal.css';
-
-const { Text, Paragraph } = Typography;
 
 interface AIInterpretationModalProps {
   visible: boolean;
@@ -25,6 +36,7 @@ const AIInterpretationModal: React.FC<AIInterpretationModalProps> = ({
   interpretation
 }) => {
   const { t } = useTranslation();
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   if (!interpretation) return null;
 
@@ -34,271 +46,327 @@ const AIInterpretationModal: React.FC<AIInterpretationModalProps> = ({
   const getConfidenceLevel = () => {
     if (confidence >= 0.8) {
       return {
-        status: 'success' as const,
+        status: 'success',
         label: t('aiInterpretationModal.highConfidence'),
-        color: '#52c41a',
-        icon: <CheckCircleOutlined />
+        color: 'green',
+        icon: <IconCheck size={18} />
       };
     } else if (confidence >= 0.6) {
       return {
-        status: 'normal' as const,
+        status: 'warning',
         label: t('aiInterpretationModal.mediumConfidence'),
-        color: '#faad14',
-        icon: <WarningOutlined />
+        color: 'yellow',
+        icon: <IconAlertTriangle size={18} />
       };
     } else {
       return {
-        status: 'exception' as const,
+        status: 'error',
         label: t('aiInterpretationModal.lowConfidence'),
-        color: '#ff4d4f',
-        icon: <CloseCircleOutlined />
+        color: 'red',
+        icon: <IconX size={18} />
       };
     }
   };
 
   const confidenceLevel = getConfidenceLevel();
 
+  const renderDescriptionItem = (label: string, content: React.ReactNode, span: number = 1) => {
+    return (
+      <Grid.Col span={{ base: 12, sm: span === 2 ? 12 : 6 }}>
+        <Paper p="sm" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-6)' }}>
+          <Stack gap={4}>
+            <Text size="xs" c="dimmed" fw={500}>
+              {label}
+            </Text>
+            <div>
+              {content}
+            </div>
+          </Stack>
+        </Paper>
+      </Grid.Col>
+    );
+  };
+
+  const hasParameters = !!(
+    interpretation.deal_type || 
+    interpretation.property_type || 
+    interpretation.bedrooms || 
+    interpretation.budget
+  );
+
   return (
     <Modal
+      opened={visible}
+      onClose={onClose}
+      size={isMobile ? 'full' : 'xl'}
       title={
-        <Space>
-          <RobotOutlined style={{ color: '#1890ff' }} />
-          <span>{t('aiInterpretationModal.title')}</span>
-        </Space>
+        <Group gap="sm">
+          <ThemeIcon size="lg" radius="md" variant="gradient" gradient={{ from: 'blue', to: 'cyan' }}>
+            <IconRobot size={20} />
+          </ThemeIcon>
+          <div>
+            <Text fw={600} size="lg">{t('aiInterpretationModal.title')}</Text>
+            <Text size="xs" c="dimmed">{t('aiInterpretationModal.subtitle')}</Text>
+          </div>
+        </Group>
       }
-      open={visible}
-      onCancel={onClose}
-      footer={null}
-      width={800}
-      className="ai-interpretation-modal"
+      centered
+      styles={{
+        body: { padding: isMobile ? 12 : 24 }
+      }}
     >
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        <div className="confidence-section">
-          <Row gutter={16} align="middle">
-            <Col span={4}>
-              <Text strong style={{ color: '#ffffff' }}>{t('aiInterpretationModal.aiConfidence')}</Text>
-            </Col>
-            <Col span={20}>
-              <Space direction="vertical" style={{ width: '100%' }} size="small">
-                <Progress
-                  percent={confidencePercent}
-                  status={confidenceLevel.status}
-                  strokeColor={confidenceLevel.color}
-                  trailColor="#2a2a2a"
-                  style={{ marginBottom: 0 }}
-                />
-                <Space>
+      <Stack gap="lg">
+        {/* Confidence Section */}
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="md">
+            <Group gap="xs">
+              <ThemeIcon size="md" radius="md" variant="light" color={confidenceLevel.color}>
+                {confidenceLevel.icon}
+              </ThemeIcon>
+              <Text fw={500} size="sm">{t('aiInterpretationModal.aiConfidence')}</Text>
+            </Group>
+
+            <Stack gap="xs">
+              <Progress
+                value={confidencePercent}
+                size="lg"
+                radius="md"
+                color={confidenceLevel.color}
+                striped
+                animated
+              />
+              <Group gap="xs">
+                <ThemeIcon size="sm" radius="md" variant="light" color={confidenceLevel.color}>
                   {confidenceLevel.icon}
-                  <Text style={{ color: confidenceLevel.color }}>
-                    {t('aiInterpretationModal.accuracyPercent', { 
-                      level: confidenceLevel.label, 
-                      percent: confidencePercent 
-                    })}
-                  </Text>
-                </Space>
-              </Space>
-            </Col>
-          </Row>
-
-          {confidence < 0.7 && (
-            <Alert
-              message={t('aiInterpretationModal.mediumAccuracyWarning')}
-              description={t('aiInterpretationModal.mediumAccuracyDescription')}
-              type="warning"
-              showIcon
-              style={{ marginTop: 12 }}
-            />
-          )}
-        </div>
-
-        <div className="reasoning-section">
-          <Text strong style={{ color: '#ffffff', display: 'block', marginBottom: 8 }}>
-            {t('aiInterpretationModal.queryUnderstanding')}
-          </Text>
-          <Paragraph 
-            className="reasoning-text"
-            style={{ 
-              color: '#ffffff',
-              background: '#1890ff22',
-              padding: '12px',
-              borderRadius: '6px',
-              border: '1px solid #1890ff44',
-              marginBottom: 0
-            }}
-          >
-            {interpretation.reasoning || t('aiInterpretationModal.noDescription')}
-          </Paragraph>
-        </div>
-
-        <div className="parameters-section">
-          <Text strong style={{ color: '#ffffff', display: 'block', marginBottom: 12 }}>
-            {t('aiInterpretationModal.extractedParameters')}
-          </Text>
-          
-          <Descriptions 
-            bordered 
-            column={2} 
-            size="small"
-            className="ai-parameters-descriptions"
-          >
-            {interpretation.deal_type && (
-              <Descriptions.Item label={t('aiInterpretationModal.dealType')} span={2}>
-                <Tag color="blue">
-                  {interpretation.deal_type === 'rent' ? t('properties.dealTypes.rent') : 
-                   interpretation.deal_type === 'sale' ? t('properties.dealTypes.sale') : 
-                   t('propertySearch.advancedSearch.any')}
-                </Tag>
-              </Descriptions.Item>
-            )}
-
-            {interpretation.property_type && (
-              <Descriptions.Item label={t('properties.propertyType')} span={2}>
-                <Tag color="cyan">{interpretation.property_type}</Tag>
-              </Descriptions.Item>
-            )}
-
-            {interpretation.bedrooms && (
-              <Descriptions.Item label={t('propertySearch.advancedSearch.bedrooms')}>
-                <Text style={{ color: '#ffffff' }}>{interpretation.bedrooms}</Text>
-              </Descriptions.Item>
-            )}
-
-            {interpretation.bathrooms && (
-              <Descriptions.Item label={t('propertySearch.advancedSearch.bathrooms')}>
-                <Text style={{ color: '#ffffff' }}>{interpretation.bathrooms}</Text>
-              </Descriptions.Item>
-            )}
-
-            {interpretation.budget && (
-              <Descriptions.Item label={t('propertySearch.advancedSearch.budget')} span={2}>
-                <Space>
-                  {interpretation.budget.min && (
-                    <Text style={{ color: '#ffffff' }}>
-                      {t('propertySearch.advancedSearch.from')} {interpretation.budget.min.toLocaleString()}
-                    </Text>
-                  )}
-                  {interpretation.budget.amount && (
-                    <Text style={{ color: '#ffffff' }}>
-                      {t('propertySearch.advancedSearch.to')} {interpretation.budget.amount.toLocaleString()}
-                    </Text>
-                  )}
-                  <Tag>{interpretation.budget.currency || 'THB'}</Tag>
-                  {interpretation.budget.tolerance > 0 && (
-                    <Tag color="orange">±{interpretation.budget.tolerance}%</Tag>
-                  )}
-                </Space>
-              </Descriptions.Item>
-            )}
-
-            {interpretation.dates && (
-              <Descriptions.Item label={t('aiInterpretationModal.dates')} span={2}>
-                <Space>
-                  {interpretation.dates.check_in && (
-                    <Text style={{ color: '#ffffff' }}>
-                      {t('aiInterpretationModal.dateFrom')} {dayjs(interpretation.dates.check_in).format('DD.MM.YYYY')}
-                    </Text>
-                  )}
-                  {interpretation.dates.check_out && (
-                    <Text style={{ color: '#ffffff' }}>
-                      {t('aiInterpretationModal.dateTo')} {dayjs(interpretation.dates.check_out).format('DD.MM.YYYY')}
-                    </Text>
-                  )}
-                  {interpretation.dates.tolerance_days > 0 && (
-                    <Tag color="orange">±{interpretation.dates.tolerance_days} {t('aiInterpretationModal.days')}</Tag>
-                  )}
-                </Space>
-              </Descriptions.Item>
-            )}
-
-            {interpretation.regions && interpretation.regions.length > 0 && (
-              <Descriptions.Item label={t('aiInterpretationModal.regions')} span={2}>
-                <Space wrap>
-                  {interpretation.regions.map((region: string) => (
-                    <Tag key={region} color="green">{region}</Tag>
-                  ))}
-                </Space>
-              </Descriptions.Item>
-            )}
-
-            {interpretation.features && interpretation.features.length > 0 && (
-              <Descriptions.Item label={t('aiInterpretationModal.features')} span={2}>
-                <Space wrap>
-                  {interpretation.features.map((feature: string) => (
-                    <Tag key={feature} color="purple">{feature}</Tag>
-                  ))}
-                </Space>
-              </Descriptions.Item>
-            )}
-
-            {interpretation.furniture && (
-              <Descriptions.Item label={t('propertySearch.advancedSearch.furniture')} span={2}>
-                <Tag color="gold">
-                  {interpretation.furniture === 'fullyFurnished' ? t('propertySearch.advancedSearch.fullyFurnished') :
-                   interpretation.furniture === 'partiallyFurnished' ? t('propertySearch.advancedSearch.partiallyFurnished') : 
-                   t('propertySearch.advancedSearch.unfurnished')}
-                </Tag>
-              </Descriptions.Item>
-            )}
-
-            {interpretation.parking !== undefined && (
-              <Descriptions.Item label={t('aiInterpretationModal.parking')}>
-                <Tag color={interpretation.parking ? 'success' : 'default'}>
-                  {interpretation.parking ? t('aiInterpretationModal.required') : t('aiInterpretationModal.notRequired')}
-                </Tag>
-              </Descriptions.Item>
-            )}
-
-            {interpretation.pets !== undefined && (
-              <Descriptions.Item label={t('aiInterpretationModal.pets')}>
-                <Tag color={interpretation.pets ? 'success' : 'default'}>
-                  {interpretation.pets ? t('aiInterpretationModal.allowed') : t('aiInterpretationModal.notAllowed')}
-                </Tag>
-              </Descriptions.Item>
-            )}
-
-            {interpretation.distance_to_beach && (
-              <Descriptions.Item label={t('propertySearch.advancedSearch.distanceToBeach')} span={2}>
-                <Tag color="blue">
-                  {t('aiInterpretationModal.upTo')} {interpretation.distance_to_beach.max}{t('aiInterpretationModal.meters')}
-                </Tag>
-              </Descriptions.Item>
-            )}
-
-            {interpretation.complex_name && (
-              <Descriptions.Item label={t('aiInterpretationModal.complex')} span={2}>
-                <Text style={{ color: '#ffffff' }}>{interpretation.complex_name}</Text>
-              </Descriptions.Item>
-            )}
-
-            {interpretation.floor && (
-              <Descriptions.Item label={t('aiInterpretationModal.floor')} span={2}>
-                <Text style={{ color: '#ffffff' }}>
-                  {interpretation.floor.min && `${t('propertySearch.advancedSearch.from')} ${interpretation.floor.min}`}
-                  {interpretation.floor.max && ` ${t('propertySearch.advancedSearch.to')} ${interpretation.floor.max}`}
+                </ThemeIcon>
+                <Text size="sm" c={`${confidenceLevel.color}.4`}>
+                  {t('aiInterpretationModal.accuracyPercent', { 
+                    level: confidenceLevel.label, 
+                    percent: confidencePercent 
+                  })}
                 </Text>
-              </Descriptions.Item>
-            )}
+              </Group>
+            </Stack>
 
-            {interpretation.owner_name && (
-              <Descriptions.Item label={t('aiInterpretationModal.owner')} span={2}>
-                <Text style={{ color: '#ffffff' }}>{interpretation.owner_name}</Text>
-              </Descriptions.Item>
+            {confidence < 0.7 && (
+              <Alert icon={<IconAlertTriangle size={16} />} color="yellow" variant="light">
+                <Stack gap={4}>
+                  <Text size="sm" fw={500}>
+                    {t('aiInterpretationModal.mediumAccuracyWarning')}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {t('aiInterpretationModal.mediumAccuracyDescription')}
+                  </Text>
+                </Stack>
+              </Alert>
             )}
-          </Descriptions>
+          </Stack>
+        </Card>
 
-          {!interpretation.deal_type && 
-           !interpretation.property_type && 
-           !interpretation.bedrooms && 
-           !interpretation.budget && (
-            <Alert
-              message={t('aiInterpretationModal.noParametersExtracted')}
-              description={t('aiInterpretationModal.noParametersDescription')}
-              type="info"
-              showIcon
-            />
-          )}
-        </div>
-      </Space>
+        {/* Reasoning Section */}
+        <Card shadow="sm" padding="md" radius="md" withBorder>
+          <Stack gap="sm">
+            <Group gap="xs">
+              <ThemeIcon size="md" radius="md" variant="light" color="blue">
+                <IconInfoCircle size={18} />
+              </ThemeIcon>
+              <Text fw={500} size="sm">{t('aiInterpretationModal.queryUnderstanding')}</Text>
+            </Group>
+
+            <Paper
+              p="md"
+              radius="md"
+              style={{
+                background: 'rgba(34, 139, 230, 0.1)',
+                border: '1px solid rgba(34, 139, 230, 0.3)'
+              }}
+            >
+              <Text size="sm" style={{ lineHeight: 1.6 }}>
+                {interpretation.reasoning || t('aiInterpretationModal.noDescription')}
+              </Text>
+            </Paper>
+          </Stack>
+        </Card>
+
+        {/* Parameters Section */}
+        <Card shadow="sm" padding="md" radius="md" withBorder>
+          <Stack gap="md">
+            <Group gap="xs">
+              <ThemeIcon size="md" radius="md" variant="light" color="violet">
+                <IconCheck size={18} />
+              </ThemeIcon>
+              <Text fw={500} size="sm">{t('aiInterpretationModal.extractedParameters')}</Text>
+            </Group>
+
+            {hasParameters ? (
+              <Grid gutter="xs">
+                {interpretation.deal_type && renderDescriptionItem(
+                  t('aiInterpretationModal.dealType'),
+                  <Badge size="lg" variant="filled" color="blue">
+                    {interpretation.deal_type === 'rent' ? t('properties.dealTypes.rent') : 
+                     interpretation.deal_type === 'sale' ? t('properties.dealTypes.sale') : 
+                     t('propertySearch.advancedSearch.any')}
+                  </Badge>,
+                  2
+                )}
+
+                {interpretation.property_type && renderDescriptionItem(
+                  t('properties.propertyType'),
+                  <Badge size="lg" variant="filled" color="cyan">
+                    {interpretation.property_type}
+                  </Badge>,
+                  2
+                )}
+
+                {interpretation.bedrooms && renderDescriptionItem(
+                  t('propertySearch.advancedSearch.bedrooms'),
+                  <Text fw={500}>{interpretation.bedrooms}</Text>
+                )}
+
+                {interpretation.bathrooms && renderDescriptionItem(
+                  t('propertySearch.advancedSearch.bathrooms'),
+                  <Text fw={500}>{interpretation.bathrooms}</Text>
+                )}
+
+                {interpretation.budget && renderDescriptionItem(
+                  t('propertySearch.advancedSearch.budget'),
+                  <Group gap="xs" wrap="wrap">
+                    {interpretation.budget.min && (
+                      <Text size="sm">
+                        {t('propertySearch.advancedSearch.from')} {interpretation.budget.min.toLocaleString()}
+                      </Text>
+                    )}
+                    {interpretation.budget.amount && (
+                      <Text size="sm">
+                        {t('propertySearch.advancedSearch.to')} {interpretation.budget.amount.toLocaleString()}
+                      </Text>
+                    )}
+                    <Badge size="sm" variant="filled" color="green">
+                      {interpretation.budget.currency || 'THB'}
+                    </Badge>
+                    {interpretation.budget.tolerance > 0 && (
+                      <Badge size="sm" variant="filled" color="orange">
+                        ±{interpretation.budget.tolerance}%
+                      </Badge>
+                    )}
+                  </Group>,
+                  2
+                )}
+
+                {interpretation.dates && renderDescriptionItem(
+                  t('aiInterpretationModal.dates'),
+                  <Group gap="xs" wrap="wrap">
+                    {interpretation.dates.check_in && (
+                      <Text size="sm">
+                        {t('aiInterpretationModal.dateFrom')} {dayjs(interpretation.dates.check_in).format('DD.MM.YYYY')}
+                      </Text>
+                    )}
+                    {interpretation.dates.check_out && (
+                      <Text size="sm">
+                        {t('aiInterpretationModal.dateTo')} {dayjs(interpretation.dates.check_out).format('DD.MM.YYYY')}
+                      </Text>
+                    )}
+                    {interpretation.dates.tolerance_days > 0 && (
+                      <Badge size="sm" variant="filled" color="orange">
+                        ±{interpretation.dates.tolerance_days} {t('aiInterpretationModal.days')}
+                      </Badge>
+                    )}
+                  </Group>,
+                  2
+                )}
+
+                {interpretation.regions && interpretation.regions.length > 0 && renderDescriptionItem(
+                  t('aiInterpretationModal.regions'),
+                  <Group gap="xs" wrap="wrap">
+                    {interpretation.regions.map((region: string) => (
+                      <Badge key={region} size="sm" variant="filled" color="green">
+                        {region}
+                      </Badge>
+                    ))}
+                  </Group>,
+                  2
+                )}
+
+                {interpretation.features && interpretation.features.length > 0 && renderDescriptionItem(
+                  t('aiInterpretationModal.features'),
+                  <Group gap="xs" wrap="wrap">
+                    {interpretation.features.map((feature: string) => (
+                      <Badge key={feature} size="sm" variant="filled" color="violet">
+                        {feature}
+                      </Badge>
+                    ))}
+                  </Group>,
+                  2
+                )}
+
+                {interpretation.furniture && renderDescriptionItem(
+                  t('propertySearch.advancedSearch.furniture'),
+                  <Badge size="lg" variant="filled" color="yellow">
+                    {interpretation.furniture === 'fullyFurnished' ? t('propertySearch.advancedSearch.fullyFurnished') :
+                     interpretation.furniture === 'partiallyFurnished' ? t('propertySearch.advancedSearch.partiallyFurnished') : 
+                     t('propertySearch.advancedSearch.unfurnished')}
+                  </Badge>,
+                  2
+                )}
+
+                {interpretation.parking !== undefined && renderDescriptionItem(
+                  t('aiInterpretationModal.parking'),
+                  <Badge size="lg" variant="filled" color={interpretation.parking ? 'teal' : 'gray'}>
+                    {interpretation.parking ? t('aiInterpretationModal.required') : t('aiInterpretationModal.notRequired')}
+                  </Badge>
+                )}
+
+                {interpretation.pets !== undefined && renderDescriptionItem(
+                  t('aiInterpretationModal.pets'),
+                  <Badge size="lg" variant="filled" color={interpretation.pets ? 'teal' : 'gray'}>
+                    {interpretation.pets ? t('aiInterpretationModal.allowed') : t('aiInterpretationModal.notAllowed')}
+                  </Badge>
+                )}
+
+                {interpretation.distance_to_beach && renderDescriptionItem(
+                  t('propertySearch.advancedSearch.distanceToBeach'),
+                  <Badge size="lg" variant="filled" color="blue">
+                    {t('aiInterpretationModal.upTo')} {interpretation.distance_to_beach.max} {t('aiInterpretationModal.meters')}
+                  </Badge>,
+                  2
+                )}
+
+                {interpretation.complex_name && renderDescriptionItem(
+                  t('aiInterpretationModal.complex'),
+                  <Text fw={500}>{interpretation.complex_name}</Text>,
+                  2
+                )}
+
+                {interpretation.floor && renderDescriptionItem(
+                  t('aiInterpretationModal.floor'),
+                  <Text fw={500}>
+                    {interpretation.floor.min && `${t('propertySearch.advancedSearch.from')} ${interpretation.floor.min}`}
+                    {interpretation.floor.max && ` ${t('propertySearch.advancedSearch.to')} ${interpretation.floor.max}`}
+                  </Text>,
+                  2
+                )}
+
+                {interpretation.owner_name && renderDescriptionItem(
+                  t('aiInterpretationModal.owner'),
+                  <Text fw={500}>{interpretation.owner_name}</Text>,
+                  2
+                )}
+              </Grid>
+            ) : (
+              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+                <Stack gap={4}>
+                  <Text size="sm" fw={500}>
+                    {t('aiInterpretationModal.noParametersExtracted')}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {t('aiInterpretationModal.noParametersDescription')}
+                  </Text>
+                </Stack>
+              </Alert>
+            )}
+          </Stack>
+        </Card>
+      </Stack>
     </Modal>
   );
 };

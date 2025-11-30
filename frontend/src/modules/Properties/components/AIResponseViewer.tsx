@@ -1,20 +1,50 @@
 // frontend/src/modules/Properties/components/AIResponseViewer.tsx
-import React, { useState, useEffect } from 'react';
-import { 
-  Modal, Button, Tabs, Typography, Space, Tag, message, Spin, 
-  Card, Row, Col, Statistic, Divider, Empty, Tooltip, Progress
-} from 'antd';
-import { 
-  RobotOutlined, CheckCircleOutlined, WarningOutlined, CloseCircleOutlined,
-  CopyOutlined, DownloadOutlined, CalendarOutlined, DollarOutlined,
-  HomeOutlined, EnvironmentOutlined, StarOutlined, ClockCircleOutlined
-} from '@ant-design/icons';
+import { useState, useEffect } from 'react';
+import {
+  Modal,
+  Button,
+  Tabs,
+  Stack,
+  Group,
+  Text,
+  Badge,
+  Card,
+  Grid,
+  ThemeIcon,
+  Progress,
+  Loader,
+  Center,
+  Paper,
+  Divider,
+  ActionIcon,
+  Tooltip,
+  CopyButton,
+  Alert,
+  Code
+} from '@mantine/core';
+import {
+  IconRobot,
+  IconCheck,
+  IconAlertTriangle,
+  IconX,
+  IconCopy,
+  IconDownload,
+  IconCalendar,
+  IconCurrencyDollar,
+  IconHome,
+  IconMapPin,
+  IconStar,
+  IconClock,
+  IconFileText,
+  IconSettings,
+  IconTarget,
+  IconChartBar,
+  IconInfoCircle
+} from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
+import { useMediaQuery } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
 import { propertySearchApi } from '@/api/propertySearch.api';
-import './AIResponseViewer.css';
-
-const { Title, Text, Paragraph } = Typography;
-const { TabPane } = Tabs;
 
 interface AIResponseViewerProps {
   visible: boolean;
@@ -23,6 +53,7 @@ interface AIResponseViewerProps {
 
 const AIResponseViewer: React.FC<AIResponseViewerProps> = ({ visible, onClose }) => {
   const { t } = useTranslation();
+  const isMobile = useMediaQuery('(max-width: 768px)');
   
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any>(null);
@@ -39,7 +70,12 @@ const AIResponseViewer: React.FC<AIResponseViewerProps> = ({ visible, onClose })
       const { data: response } = await propertySearchApi.getLastAIInterpretation();
       setData(response.data);
     } catch (error: any) {
-      message.error(t('aiResponseViewer.errorLoading'));
+      notifications.show({
+        title: t('aiResponseViewer.error'),
+        message: t('aiResponseViewer.errorLoading'),
+        color: 'red',
+        icon: <IconX size={16} />
+      });
       console.error(error);
     } finally {
       setLoading(false);
@@ -54,11 +90,6 @@ const AIResponseViewer: React.FC<AIResponseViewerProps> = ({ visible, onClose })
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    message.success(t('aiResponseViewer.copiedToClipboard'));
-  };
-
   const downloadJSON = () => {
     if (!data) return;
     const blob = new Blob([formatJSON(data.interpretation)], { type: 'application/json' });
@@ -68,19 +99,18 @@ const AIResponseViewer: React.FC<AIResponseViewerProps> = ({ visible, onClose })
     a.download = `ai-interpretation-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    message.success(t('aiResponseViewer.jsonDownloaded'));
+    notifications.show({
+      title: t('aiResponseViewer.success'),
+      message: t('aiResponseViewer.jsonDownloaded'),
+      color: 'green',
+      icon: <IconCheck size={16} />
+    });
   };
 
-  const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 0.8) return '#52c41a';
-    if (confidence >= 0.6) return '#faad14';
-    return '#ff4d4f';
-  };
-
-  const getConfidenceStatus = (confidence: number): 'success' | 'normal' | 'exception' => {
-    if (confidence >= 0.8) return 'success';
-    if (confidence >= 0.6) return 'normal';
-    return 'exception';
+  const getConfidenceColor = (confidence: number): string => {
+    if (confidence >= 0.8) return 'green';
+    if (confidence >= 0.6) return 'yellow';
+    return 'red';
   };
 
   const renderQueryTypeCard = () => {
@@ -88,60 +118,57 @@ const AIResponseViewer: React.FC<AIResponseViewerProps> = ({ visible, onClose })
     const interp = data.interpretation;
 
     let queryType = t('aiResponseViewer.unknownQueryType');
-    let queryIcon = <CloseCircleOutlined />;
+    let queryIcon = <IconX size={32} />;
     let queryDescription = '';
+    let gradientColors = { from: 'red', to: 'pink' };
 
     if (interp.duration && interp.search_window) {
       queryType = t('aiResponseViewer.flexibleSearch');
-      queryIcon = <CalendarOutlined />;
+      queryIcon = <IconCalendar size={32} />;
       queryDescription = t('aiResponseViewer.flexibleSearchDesc', {
         duration: interp.duration,
         start: interp.search_window.start,
         end: interp.search_window.end
       });
+      gradientColors = { from: 'orange', to: 'red' };
     } else if (interp.dates && interp.dates.check_in && interp.dates.check_out) {
       queryType = t('aiResponseViewer.fixedDates');
-      queryIcon = <CheckCircleOutlined />;
+      queryIcon = <IconCheck size={32} />;
       queryDescription = t('aiResponseViewer.fixedDatesDesc', {
         checkIn: interp.dates.check_in,
         checkOut: interp.dates.check_out
       });
+      gradientColors = { from: 'teal', to: 'green' };
     } else if (interp.deal_type || interp.property_type || interp.bedrooms) {
       queryType = t('aiResponseViewer.parameterSearch');
-      queryIcon = <HomeOutlined />;
+      queryIcon = <IconHome size={32} />;
       queryDescription = t('aiResponseViewer.searchWithoutDates');
+      gradientColors = { from: 'violet', to: 'grape' };
     }
 
     return (
-      <Card 
-        className="query-type-card"
-        style={{ 
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          border: 'none',
-          borderRadius: 12,
-          marginBottom: 20
+      <Card
+        shadow="sm"
+        padding="lg"
+        radius="md"
+        withBorder
+        style={{
+          background: `linear-gradient(135deg, var(--mantine-color-${gradientColors.from}-9) 0%, var(--mantine-color-${gradientColors.to}-9) 100%)`
         }}
       >
-        <Row align="middle" gutter={16}>
-          <Col>
-            <div style={{ 
-              fontSize: 48, 
-              color: '#ffffff',
-              display: 'flex',
-              alignItems: 'center'
-            }}>
-              {queryIcon}
-            </div>
-          </Col>
-          <Col flex={1}>
-            <Title level={4} style={{ color: '#ffffff', margin: 0 }}>
+        <Group gap="md" wrap="nowrap">
+          <ThemeIcon size={60} radius="md" variant="white" color="white">
+            {queryIcon}
+          </ThemeIcon>
+          <Stack gap={4} style={{ flex: 1 }}>
+            <Text fw={700} size="lg" c="white">
               {queryType}
-            </Title>
-            <Text style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: 14 }}>
+            </Text>
+            <Text size="sm" c="white" opacity={0.9}>
               {queryDescription}
             </Text>
-          </Col>
-        </Row>
+          </Stack>
+        </Group>
       </Card>
     );
   };
@@ -154,42 +181,42 @@ const AIResponseViewer: React.FC<AIResponseViewerProps> = ({ visible, onClose })
 
     if (interp.deal_type) {
       params.push({
-        icon: <HomeOutlined />,
+        icon: <IconHome size={18} />,
         label: t('aiInterpretationModal.dealType'),
         value: interp.deal_type === 'rent' ? t('properties.dealTypes.rent') : 
                interp.deal_type === 'sale' ? t('properties.dealTypes.sale') : 
                t('propertySearch.advancedSearch.any'),
-        color: '#1890ff'
+        color: 'blue'
       });
     }
 
     if (interp.property_type) {
       params.push({
-        icon: <HomeOutlined />,
+        icon: <IconHome size={18} />,
         label: t('properties.propertyType'),
         value: interp.property_type === 'villa' ? t('properties.propertyTypes.villa') : 
                interp.property_type === 'condo' ? t('properties.propertyTypes.condo') :
                interp.property_type === 'apartment' ? t('properties.propertyTypes.apartment') :
                interp.property_type,
-        color: '#52c41a'
+        color: 'green'
       });
     }
 
     if (interp.bedrooms !== undefined && interp.bedrooms !== null) {
       params.push({
-        icon: <HomeOutlined />,
+        icon: <IconHome size={18} />,
         label: t('propertySearch.advancedSearch.bedrooms'),
         value: t('aiResponseViewer.bedroomsCount', { count: interp.bedrooms }),
-        color: '#722ed1'
+        color: 'violet'
       });
     }
 
     if (interp.regions && interp.regions.length > 0) {
       params.push({
-        icon: <EnvironmentOutlined />,
+        icon: <IconMapPin size={18} />,
         label: t('aiInterpretationModal.regions'),
         value: interp.regions.join(', '),
-        color: '#fa8c16'
+        color: 'orange'
       });
     }
 
@@ -198,50 +225,67 @@ const AIResponseViewer: React.FC<AIResponseViewerProps> = ({ visible, onClose })
                          interp.budget.budget_type === 'per_month' ? t('aiResponseViewer.perMonth') :
                          interp.budget.budget_type === 'per_year' ? t('aiResponseViewer.perYear') : '';
       params.push({
-        icon: <DollarOutlined />,
+        icon: <IconCurrencyDollar size={18} />,
         label: t('propertySearch.advancedSearch.budget'),
         value: `${interp.budget.amount?.toLocaleString('ru-RU')} ${interp.budget.currency}${budgetType}`,
-        color: '#13c2c2'
+        color: 'cyan'
       });
     }
 
     if (params.length === 0) {
       return (
-        <Empty 
-          description={t('aiResponseViewer.parametersNotSpecified')}
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-        />
+        <Center p="xl">
+          <Stack align="center" gap="sm">
+            <ThemeIcon size={60} radius="md" variant="light" color="gray">
+              <IconInfoCircle size={30} />
+            </ThemeIcon>
+            <Text c="dimmed">{t('aiResponseViewer.parametersNotSpecified')}</Text>
+          </Stack>
+        </Center>
       );
     }
 
     return (
-      <Row gutter={[16, 16]}>
+      <Grid gutter="md">
         {params.map((param, index) => (
-          <Col xs={24} sm={12} md={8} key={index}>
-            <Card 
-              className="parameter-card"
+          <Grid.Col key={index} span={{ base: 12, xs: 6, sm: 4 }}>
+            <Card
+              shadow="sm"
+              padding="md"
+              radius="md"
+              withBorder
               style={{
-                background: '#262626',
-                border: `1px solid ${param.color}`,
-                borderRadius: 8,
-                height: '100%'
+                background: 'var(--mantine-color-dark-6)',
+                borderColor: `var(--mantine-color-${param.color}-5)`,
+                height: '100%',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = `0 4px 12px var(--mantine-color-${param.color}-5)`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '';
               }}
             >
-              <Space direction="vertical" size="small" style={{ width: '100%' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ color: param.color, fontSize: 20 }}>{param.icon}</span>
-                  <Text style={{ color: 'rgba(255, 255, 255, 0.65)', fontSize: 12 }}>
+              <Stack gap="xs">
+                <Group gap="xs">
+                  <ThemeIcon size="sm" radius="md" variant="light" color={param.color}>
+                    {param.icon}
+                  </ThemeIcon>
+                  <Text size="xs" c="dimmed">
                     {param.label}
                   </Text>
-                </div>
-                <Text strong style={{ color: '#ffffff', fontSize: 16 }}>
+                </Group>
+                <Text fw={600} size="sm">
                   {param.value}
                 </Text>
-              </Space>
+              </Stack>
             </Card>
-          </Col>
+          </Grid.Col>
         ))}
-      </Row>
+      </Grid>
     );
   };
 
@@ -270,38 +314,29 @@ const AIResponseViewer: React.FC<AIResponseViewerProps> = ({ visible, onClose })
     if (features.length === 0) return null;
 
     return (
-      <Card
-        title={
-          <Space>
-            <StarOutlined style={{ color: '#faad14' }} />
-            <span style={{ color: '#ffffff' }}>{t('aiResponseViewer.requiredFeatures')}</span>
-          </Space>
-        }
-        className="features-card"
-        style={{
-          background: '#262626',
-          border: '1px solid #434343',
-          borderRadius: 8,
-          marginTop: 20
-        }}
-        headStyle={{ background: '#1f1f1f', borderBottom: '1px solid #434343' }}
-        bodyStyle={{ padding: 16 }}
-      >
-        <Space wrap>
-          {features.map((feature, index) => (
-            <Tag 
-              key={index} 
-              color="blue"
-              style={{ 
-                padding: '4px 12px',
-                fontSize: 13,
-                borderRadius: 6
-              }}
-            >
-              {feature}
-            </Tag>
-          ))}
-        </Space>
+      <Card shadow="sm" padding="md" radius="md" withBorder style={{ marginTop: 20 }}>
+        <Stack gap="md">
+          <Group gap="xs">
+            <ThemeIcon size="md" radius="md" variant="light" color="yellow">
+              <IconStar size={18} />
+            </ThemeIcon>
+            <Text fw={500} size="sm">{t('aiResponseViewer.requiredFeatures')}</Text>
+          </Group>
+
+          <Group gap="xs">
+            {features.map((feature, index) => (
+              <Badge
+                key={index}
+                size="lg"
+                variant="filled"
+                color="blue"
+                radius="md"
+              >
+                {feature}
+              </Badge>
+            ))}
+          </Group>
+        </Stack>
       </Card>
     );
   };
@@ -311,364 +346,326 @@ const AIResponseViewer: React.FC<AIResponseViewerProps> = ({ visible, onClose })
 
     const interp = data.interpretation;
     const confidence = interp.confidence || 0;
+    const confidencePercent = Math.round(confidence * 100);
+    const confidenceColor = getConfidenceColor(confidence);
 
     return (
-      <div style={{ padding: '20px 0' }}>
-        <Card 
-          className="query-card"
-          style={{
-            background: '#262626',
-            border: '1px solid #434343',
-            borderRadius: 12,
-            marginBottom: 20
-          }}
-        >
-          <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Title level={5} style={{ color: '#ffffff', margin: 0 }}>
-                {t('aiResponseViewer.yourQuery')}
-              </Title>
-              <Button
-                type="text"
-                icon={<CopyOutlined />}
-                onClick={() => copyToClipboard(data.query)}
-                style={{ color: '#ffffff' }}
-              >
-                {t('aiResponseViewer.copy')}
-              </Button>
-            </div>
-            <Paragraph 
-              style={{ 
-                color: '#ffffff',
-                fontSize: 15,
-                margin: 0,
-                padding: 16,
-                background: '#1f1f1f',
-                borderRadius: 8,
-                border: '1px solid #434343'
-              }}
-            >
-              "{data.query}"
-            </Paragraph>
-          </Space>
-        </Card>
-
-        <Card 
-          className="confidence-card"
-          style={{
-            background: '#262626',
-            border: `2px solid ${getConfidenceColor(confidence)}`,
-            borderRadius: 12,
-            marginBottom: 20
-          }}
-        >
-          <Row align="middle" gutter={24}>
-            <Col>
-              <RobotOutlined style={{ fontSize: 48, color: getConfidenceColor(confidence) }} />
-            </Col>
-            <Col flex={1}>
-              <Space direction="vertical" style={{ width: '100%' }} size="small">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ color: 'rgba(255, 255, 255, 0.65)', fontSize: 14 }}>
-                    {t('aiInterpretationModal.aiConfidence')}
-                  </Text>
-                  <Tag 
-                    color={confidence >= 0.8 ? 'green' : confidence >= 0.6 ? 'orange' : 'red'}
-                    style={{ fontSize: 16, padding: '4px 16px', borderRadius: 8 }}
-                  >
-                    {(confidence * 100).toFixed(0)}%
-                  </Tag>
-                </div>
-                <Progress 
-                  percent={confidence * 100} 
-                  showInfo={false}
-                  status={getConfidenceStatus(confidence)}
-                  strokeColor={getConfidenceColor(confidence)}
-                  trailColor="#434343"
-                />
-                {interp.reasoning && (
-                  <Paragraph 
-                    style={{ 
-                      color: 'rgba(255, 255, 255, 0.85)', 
-                      margin: '8px 0 0 0',
-                      fontSize: 13
-                    }}
-                  >
-                    <strong style={{ color: getConfidenceColor(confidence) }}>
-                      {t('aiResponseViewer.explanation')}:
-                    </strong> {interp.reasoning}
-                  </Paragraph>
+      <Stack gap="lg">
+        {/* Your Query Card */}
+        <Card shadow="sm" padding="md" radius="md" withBorder>
+          <Stack gap="md">
+            <Group justify="space-between">
+              <Group gap="xs">
+                <ThemeIcon size="md" radius="md" variant="light" color="blue">
+                  <IconFileText size={18} />
+                </ThemeIcon>
+                <Text fw={500} size="sm">{t('aiResponseViewer.yourQuery')}</Text>
+              </Group>
+              <CopyButton value={data.query}>
+                {({ copied, copy }) => (
+                  <Tooltip label={copied ? t('aiResponseViewer.copied') : t('aiResponseViewer.copy')}>
+                    <ActionIcon variant="light" color={copied ? 'green' : 'blue'} onClick={copy}>
+                      <IconCopy size={16} />
+                    </ActionIcon>
+                  </Tooltip>
                 )}
-              </Space>
-            </Col>
-          </Row>
+              </CopyButton>
+            </Group>
+
+            <Paper p="md" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-6)' }}>
+              <Text size="sm" style={{ lineHeight: 1.6 }}>
+                "{data.query}"
+              </Text>
+            </Paper>
+          </Stack>
         </Card>
 
+        {/* Confidence Card */}
+        <Card
+          shadow="sm"
+          padding="lg"
+          radius="md"
+          withBorder
+          style={{
+            borderColor: `var(--mantine-color-${confidenceColor}-5)`,
+            borderWidth: 2
+          }}
+        >
+          <Group gap="lg" wrap="nowrap">
+            <ThemeIcon size={60} radius="md" variant="light" color={confidenceColor}>
+              <IconRobot size={30} />
+            </ThemeIcon>
+            <Stack gap="sm" style={{ flex: 1 }}>
+              <Group justify="space-between">
+                <Text size="sm" c="dimmed">
+                  {t('aiInterpretationModal.aiConfidence')}
+                </Text>
+                <Badge size="xl" variant="filled" color={confidenceColor}>
+                  {confidencePercent}%
+                </Badge>
+              </Group>
+              <Progress
+                value={confidencePercent}
+                size="lg"
+                radius="md"
+                color={confidenceColor}
+                striped
+                animated
+              />
+              {interp.reasoning && (
+                <Text size="sm" c="dimmed" style={{ lineHeight: 1.6 }}>
+                  <Text component="span" fw={600} c={`${confidenceColor}.4`}>
+                    {t('aiResponseViewer.explanation')}:
+                  </Text>{' '}
+                  {interp.reasoning}
+                </Text>
+              )}
+            </Stack>
+          </Group>
+        </Card>
+
+        {/* Query Type Card */}
         {renderQueryTypeCard()}
 
+        {/* Results Count Card */}
         <Card
+          shadow="sm"
+          padding="lg"
+          radius="md"
+          withBorder
           style={{
-            background: data.results_count > 0 ? 'rgba(82, 196, 26, 0.1)' : 'rgba(255, 77, 79, 0.1)',
-            border: data.results_count > 0 ? '1px solid #52c41a' : '1px solid #ff4d4f',
-            borderRadius: 12,
-            marginBottom: 20
+            background: data.results_count > 0 
+              ? 'rgba(82, 196, 26, 0.1)' 
+              : 'rgba(255, 77, 79, 0.1)',
+            borderColor: data.results_count > 0 ? 'var(--mantine-color-green-5)' : 'var(--mantine-color-red-5)'
           }}
         >
-          <Statistic
-            title={<span style={{ color: '#ffffff', fontSize: 14 }}>{t('aiResponseViewer.propertiesFound')}</span>}
-            value={data.results_count}
-            valueStyle={{ 
-              color: data.results_count > 0 ? '#52c41a' : '#ff4d4f',
-              fontSize: 36,
-              fontWeight: 700
-            }}
-            prefix={data.results_count > 0 ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
-          />
+          <Group gap="lg" wrap="nowrap">
+            <ThemeIcon 
+              size={60} 
+              radius="md" 
+              variant="light" 
+              color={data.results_count > 0 ? 'green' : 'red'}
+            >
+              {data.results_count > 0 ? <IconCheck size={30} /> : <IconX size={30} />}
+            </ThemeIcon>
+            <div style={{ flex: 1 }}>
+              <Text size="sm" c="dimmed" mb={4}>
+                {t('aiResponseViewer.propertiesFound')}
+              </Text>
+              <Text
+                style={{ fontSize: '36px' }}
+                fw={700}
+                c={data.results_count > 0 ? 'green' : 'red'}
+              >
+                {data.results_count}
+              </Text>
+            </div>
+          </Group>
         </Card>
 
-        <Divider style={{ borderColor: '#434343', margin: '24px 0' }}>
-          <span style={{ color: 'rgba(255, 255, 255, 0.65)' }}>
-            {t('aiInterpretationModal.extractedParameters')}
-          </span>
-        </Divider>
+        <Divider
+          label={
+            <Group gap="xs">
+              <IconTarget size={16} />
+              <Text size="sm" c="dimmed">{t('aiInterpretationModal.extractedParameters')}</Text>
+            </Group>
+          }
+          labelPosition="center"
+        />
 
         {renderMainParameters()}
         {renderFeatures()}
 
+        {/* Low Confidence Warning */}
         {confidence < 0.6 && (
-          <Card
-            style={{
-              background: 'rgba(250, 173, 20, 0.1)',
-              border: '1px solid #faad14',
-              borderRadius: 12,
-              marginTop: 20
-            }}
+          <Alert
+            icon={<IconAlertTriangle size={20} />}
+            title={<Text fw={600}>{t('aiResponseViewer.lowConfidenceWarning')}</Text>}
+            color="yellow"
+            variant="light"
           >
-            <Space>
-              <WarningOutlined style={{ color: '#faad14', fontSize: 24 }} />
-              <div>
-                <Title level={5} style={{ color: '#faad14', margin: 0 }}>
-                  {t('aiResponseViewer.lowConfidenceWarning')}
-                </Title>
-                <Text style={{ color: 'rgba(255, 255, 255, 0.85)' }}>
-                  {t('aiResponseViewer.lowConfidenceDescription')}
-                </Text>
-              </div>
-            </Space>
-          </Card>
+            <Text size="sm">
+              {t('aiResponseViewer.lowConfidenceDescription')}
+            </Text>
+          </Alert>
         )}
-      </div>
+      </Stack>
     );
   };
 
   const renderJSONTab = () => {
     if (!data) return null;
 
+    const jsonContent = data.raw_response || formatJSON(data.interpretation);
+
     return (
-      <div style={{ position: 'relative' }}>
-        <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
-          <Space>
-            <Tooltip title={t('aiResponseViewer.copyJSON')}>
-              <Button
-                icon={<CopyOutlined />}
-                onClick={() => copyToClipboard(data.raw_response || formatJSON(data.interpretation))}
-                style={{ background: '#434343', color: '#ffffff', border: 'none' }}
-              />
-            </Tooltip>
-            <Tooltip title={t('aiResponseViewer.downloadJSON')}>
-              <Button
-                icon={<DownloadOutlined />}
-                onClick={downloadJSON}
-                style={{ background: '#434343', color: '#ffffff', border: 'none' }}
-              />
-            </Tooltip>
-          </Space>
-        </div>
-        <pre style={{ 
-          background: '#1e1e1e', 
-          color: '#d4d4d4', 
-          padding: '24px 16px 16px 16px', 
-          borderRadius: 8,
-          fontSize: 13,
-          lineHeight: 1.6,
-          border: '1px solid #434343',
-          maxHeight: '60vh',
-          overflow: 'auto',
-          fontFamily: "'Fira Code', 'Consolas', 'Monaco', monospace"
-        }}>
-          {data.raw_response || formatJSON(data.interpretation)}
-        </pre>
-      </div>
+      <Stack gap="md">
+        <Group justify="flex-end">
+          <CopyButton value={jsonContent}>
+            {({ copied, copy }) => (
+              <Tooltip label={copied ? t('aiResponseViewer.copied') : t('aiResponseViewer.copyJSON')}>
+                <Button
+                  variant="light"
+                  leftSection={<IconCopy size={16} />}
+                  color={copied ? 'green' : 'blue'}
+                  onClick={copy}
+                >
+                  {t('aiResponseViewer.copy')}
+                </Button>
+              </Tooltip>
+            )}
+          </CopyButton>
+          <Tooltip label={t('aiResponseViewer.downloadJSON')}>
+            <Button
+              variant="light"
+              leftSection={<IconDownload size={16} />}
+              onClick={downloadJSON}
+            >
+              {t('aiResponseViewer.download')}
+            </Button>
+          </Tooltip>
+        </Group>
+
+        <Paper
+          p="md"
+          radius="md"
+          withBorder
+          style={{
+            background: '#1e1e1e',
+            maxHeight: '60vh',
+            overflow: 'auto'
+          }}
+        >
+          <Code block style={{ background: 'transparent', color: '#d4d4d4' }}>
+            {jsonContent}
+          </Code>
+        </Paper>
+      </Stack>
     );
   };
 
   const renderFiltersTab = () => {
     if (!data) return null;
 
+    const filtersJSON = formatJSON(data.converted_filters);
+
     return (
-      <div style={{ position: 'relative' }}>
-        <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
-          <Tooltip title={t('aiResponseViewer.copyFilters')}>
-            <Button
-              icon={<CopyOutlined />}
-              onClick={() => copyToClipboard(formatJSON(data.converted_filters))}
-              style={{ background: '#434343', color: '#ffffff', border: 'none' }}
-            />
-          </Tooltip>
-        </div>
-        <pre style={{ 
-          background: '#1e1e1e', 
-          color: '#d4d4d4', 
-          padding: '24px 16px 16px 16px', 
-          borderRadius: 8,
-          fontSize: 13,
-          lineHeight: 1.6,
-          border: '1px solid #434343',
-          maxHeight: '60vh',
-          overflow: 'auto',
-          fontFamily: "'Fira Code', 'Consolas', 'Monaco', monospace"
-        }}>
-          {formatJSON(data.converted_filters)}
-        </pre>
-      </div>
+      <Stack gap="md">
+        <Group justify="flex-end">
+          <CopyButton value={filtersJSON}>
+            {({ copied, copy }) => (
+              <Tooltip label={copied ? t('aiResponseViewer.copied') : t('aiResponseViewer.copyFilters')}>
+                <Button
+                  variant="light"
+                  leftSection={<IconCopy size={16} />}
+                  color={copied ? 'green' : 'blue'}
+                  onClick={copy}
+                >
+                  {t('aiResponseViewer.copy')}
+                </Button>
+              </Tooltip>
+            )}
+          </CopyButton>
+        </Group>
+
+        <Paper
+          p="md"
+          radius="md"
+          withBorder
+          style={{
+            background: '#1e1e1e',
+            maxHeight: '60vh',
+            overflow: 'auto'
+          }}
+        >
+          <Code block style={{ background: 'transparent', color: '#d4d4d4' }}>
+            {filtersJSON}
+          </Code>
+        </Paper>
+      </Stack>
     );
   };
 
   return (
     <Modal
+      opened={visible}
+      onClose={onClose}
+      size={isMobile ? 'full' : 'xl'}
       title={
-        <Space size="large">
-          <Space>
-            <RobotOutlined style={{ color: '#1890ff', fontSize: 22 }} />
-            <span style={{ color: '#ffffff', fontSize: 18, fontWeight: 600 }}>
-              {t('aiResponseViewer.title')}
-            </span>
-          </Space>
+        <Group gap="md">
+          <ThemeIcon size="xl" radius="md" variant="gradient" gradient={{ from: 'blue', to: 'cyan' }}>
+            <IconRobot size={24} />
+          </ThemeIcon>
+          <div style={{ flex: 1 }}>
+            <Text fw={600} size="lg">{t('aiResponseViewer.title')}</Text>
+            <Text size="xs" c="dimmed">{t('aiResponseViewer.subtitle')}</Text>
+          </div>
           {data && (
-            <Tag icon={<ClockCircleOutlined />} color="blue">
+            <Badge size="lg" variant="filled" color="blue" leftSection={<IconClock size={14} />}>
               ID: {data.id}
-            </Tag>
+            </Badge>
           )}
-        </Space>
+        </Group>
       }
-      open={visible}
-      onCancel={onClose}
-      width={1000}
-      footer={[
-        <Button 
-          key="close" 
-          onClick={onClose} 
-          size="large"
-          style={{ 
-            background: '#434343', 
-            color: '#ffffff', 
-            border: 'none',
-            borderRadius: 8,
-            height: 40
-          }}
-        >
-          {t('aiResponseViewer.close')}
-        </Button>
-      ]}
-      className="ai-response-viewer-modal"
+      centered
       styles={{
-        body: { background: '#1f1f1f', padding: 0 },
-        header: { 
-          background: '#1f1f1f', 
-          borderBottom: '1px solid #434343',
-          padding: '20px 24px'
-        },
-        content: { 
-          background: '#1f1f1f',
-          borderRadius: 12
-        },
-        footer: {
-          background: '#1f1f1f',
-          borderTop: '1px solid #434343',
-          padding: '16px 24px'
-        }
+        body: { padding: isMobile ? 12 : 24 }
       }}
     >
       {loading ? (
-        <div style={{ 
-          textAlign: 'center', 
-          padding: '80px 0',
-          background: '#1f1f1f'
-        }}>
-          <Spin size="large" />
-          <div style={{ marginTop: 24, color: '#ffffff', fontSize: 16 }}>
-            {t('aiResponseViewer.loadingData')}
-          </div>
-        </div>
+        <Center p={80}>
+          <Stack align="center" gap="md">
+            <Loader size="lg" />
+            <Text c="dimmed">{t('aiResponseViewer.loadingData')}</Text>
+          </Stack>
+        </Center>
       ) : data ? (
-        <Tabs 
-          defaultActiveKey="interpretation"
-          className="ai-tabs"
-          tabBarStyle={{
-            background: '#1f1f1f',
-            padding: '0 24px',
-            margin: 0,
-            borderBottom: '1px solid #434343'
-          }}
-        >
-          <TabPane 
-            tab={
-              <span style={{ color: '#ffffff', fontSize: 14 }}>
-                🎯 {t('aiResponseViewer.interpretationTab')}
-              </span>
-            } 
-            key="interpretation"
-          >
-            <div style={{ 
-              maxHeight: '60vh', 
-              overflowY: 'auto',
-              padding: '0 24px'
-            }}>
+        <Tabs defaultValue="interpretation" variant="pills">
+          <Tabs.List grow={isMobile}>
+            <Tabs.Tab
+              value="interpretation"
+              leftSection={<IconTarget size={16} />}
+            >
+              {!isMobile && t('aiResponseViewer.interpretationTab')}
+            </Tabs.Tab>
+            <Tabs.Tab
+              value="raw"
+              leftSection={<IconFileText size={16} />}
+            >
+              {!isMobile && t('aiResponseViewer.rawJSONTab')}
+            </Tabs.Tab>
+            <Tabs.Tab
+              value="filters"
+              leftSection={<IconSettings size={16} />}
+            >
+              {!isMobile && t('aiResponseViewer.filtersTab')}
+            </Tabs.Tab>
+          </Tabs.List>
+
+          <Tabs.Panel value="interpretation" pt="lg">
+            <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
               {renderInterpretationTab()}
             </div>
-          </TabPane>
+          </Tabs.Panel>
 
-          <TabPane 
-            tab={
-              <span style={{ color: '#ffffff', fontSize: 14 }}>
-                📝 {t('aiResponseViewer.rawJSONTab')}
-              </span>
-            } 
-            key="raw"
-          >
-            <div style={{ padding: '20px 24px' }}>
-              {renderJSONTab()}
-            </div>
-          </TabPane>
+          <Tabs.Panel value="raw" pt="lg">
+            {renderJSONTab()}
+          </Tabs.Panel>
 
-          <TabPane 
-            tab={
-              <span style={{ color: '#ffffff', fontSize: 14 }}>
-                🔧 {t('aiResponseViewer.filtersTab')}
-              </span>
-            } 
-            key="filters"
-          >
-            <div style={{ padding: '20px 24px' }}>
-              {renderFiltersTab()}
-            </div>
-          </TabPane>
+          <Tabs.Panel value="filters" pt="lg">
+            {renderFiltersTab()}
+          </Tabs.Panel>
         </Tabs>
       ) : (
-        <div style={{ 
-          textAlign: 'center', 
-          padding: '80px 24px',
-          background: '#1f1f1f'
-        }}>
-          <Empty
-            description={
-              <span style={{ color: 'rgba(255, 255, 255, 0.65)', fontSize: 15 }}>
-                {t('aiResponseViewer.noData')}
-              </span>
-            }
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-          />
-        </div>
+        <Center p={80}>
+          <Stack align="center" gap="md">
+            <ThemeIcon size={80} radius="md" variant="light" color="gray">
+              <IconChartBar size={40} />
+            </ThemeIcon>
+            <Text c="dimmed" size="sm">{t('aiResponseViewer.noData')}</Text>
+          </Stack>
+        </Center>
       )}
     </Modal>
   );

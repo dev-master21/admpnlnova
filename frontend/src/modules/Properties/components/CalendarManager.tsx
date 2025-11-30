@@ -1,46 +1,64 @@
 // frontend/src/modules/Properties/components/CalendarManager.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Card,
+  Stack,
+  Group,
   Button,
+  Text,
+  Badge,
   Modal,
-  Form,
-  DatePicker,
-  Input,
-  message,
-  Space,
-  Alert,
-  Typography,
-  List,
-  Popconfirm,
-  Tag,
-  Spin,
-  Switch,
+  TextInput,
+  Textarea,
+  Paper,
+  ActionIcon,
+  ThemeIcon,
+  Tooltip,
   Divider,
-  Table
-} from 'antd';
+  Alert,
+  Center,
+  Box,
+  SimpleGrid,
+  Switch,
+  CopyButton,
+  Timeline,
+  Stepper,
+  List,
+  Accordion,
+  Loader
+} from '@mantine/core';
 import {
-  PlusOutlined,
-  DeleteOutlined,
-  DownloadOutlined,
-  CalendarOutlined,
-  InfoCircleOutlined,
-  LeftOutlined,
-  RightOutlined,
-  SyncOutlined,
-  LinkOutlined,
-  WarningOutlined,
-  CheckCircleOutlined,
-  ExclamationCircleOutlined
-} from '@ant-design/icons';
+  IconCalendar,
+  IconPlus,
+  IconTrash,
+  IconDownload,
+  IconLink,
+  IconRefresh,
+  IconChevronLeft,
+  IconChevronRight,
+  IconAlertCircle,
+  IconCheck,
+  IconX,
+  IconInfoCircle,
+  IconClock,
+  IconExternalLink,
+  IconCopy,
+  IconCircleCheck,
+  IconCircleX,
+  IconArrowRight,
+  IconBrandAirbnb,
+  IconBuilding,
+  IconPlayerPlay,
+  IconEye,
+  IconCalendarTime,
+  IconCalendarPlus
+} from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
+import { notifications } from '@mantine/notifications';
+import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { propertiesApi } from '@/api/properties.api';
-import dayjs, { Dayjs } from 'dayjs';
-import './CalendarManager.css';
-
-const { RangePicker } = DatePicker;
-const { TextArea } = Input;
-const { Text, Link } = Typography;
+import dayjs from 'dayjs';
+import 'dayjs/locale/ru';
 
 interface BlockedDate {
   blocked_date: string;
@@ -77,32 +95,59 @@ const CalendarManager = ({
   initialBlockedDates = []
 }: CalendarManagerProps) => {
   const { t } = useTranslation();
-  const [form] = Form.useForm();
-  const [externalCalendarForm] = Form.useForm();
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
-  const [tempBlockedDates, setTempBlockedDates] = useState<BlockedDate[]>(
-    initialBlockedDates || []
-  );
+  // Состояния
+  const [tempBlockedDates, setTempBlockedDates] = useState<BlockedDate[]>(initialBlockedDates || []);
   const isCreatingMode = propertyId === 0;
 
   const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([]);
   const [blockedDatesMap, setBlockedDatesMap] = useState<Map<string, BlockedDate>>(new Map());
   const [icsInfo, setIcsInfo] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
+  
   const [selectedYear, setSelectedYear] = useState(dayjs().year());
   const [selectedMonth, setSelectedMonth] = useState(dayjs().month());
-  const [isMobile] = useState(window.innerWidth < 768);
 
+  // Календари
   const [externalCalendars, setExternalCalendars] = useState<ExternalCalendar[]>([]);
-  const [externalCalendarModalVisible, setExternalCalendarModalVisible] = useState(false);
-  const [analysisModalVisible, setAnalysisModalVisible] = useState(false);
+  
+  // Модальные окна
+  const [blockModalOpened, { open: openBlockModal, close: closeBlockModal }] = useDisclosure(false);
+  const [externalCalendarModalOpened, { open: openExternalCalendarModal, close: closeExternalCalendarModal }] = useDisclosure(false);
+  const [analysisModalOpened, { open: openAnalysisModal, close: closeAnalysisModal }] = useDisclosure(false);
+  const [icsInfoModalOpened, { open: openIcsInfoModal, close: closeIcsInfoModal }] = useDisclosure(false);
+  const [deleteModalOpened, { open: openDeleteModal, close: closeDeleteModal }] = useDisclosure(false);
+  const [deleteCalendarModalOpened, { open: openDeleteCalendarModal, close: closeDeleteCalendarModal }] = useDisclosure(false);
+  const [addOccupancyModalOpened, { open: openAddOccupancyModal, close: closeAddOccupancyModal }] = useDisclosure(false);
+  
+  // Форма добавления блокировки
+  const [selectionType, setSelectionType] = useState<'period' | 'days'>('period');
+  const [reason, setReason] = useState('');
+  const [hasConflict, setHasConflict] = useState(false);
+  const [conflictDates, setConflictDates] = useState<string[]>([]);
+  
+  // Форма внешнего календаря
+  const [calendarName, setCalendarName] = useState('');
+  const [icsUrl, setIcsUrl] = useState('');
+  const [addCalendarStep, setAddCalendarStep] = useState(0);
+  
+  // Анализ
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [analyzingConflicts, setAnalyzingConflicts] = useState(false);
   const [syncing, setSyncing] = useState(false);
-
-  const [hasConflict, setHasConflict] = useState(false);
-  const [conflictDates, setConflictDates] = useState<string[]>([]);
+  
+  // Удаление периода
+  const [periodToDelete, setPeriodToDelete] = useState<any>(null);
+  
+  // Удаление календаря
+  const [calendarToDelete, setCalendarToDelete] = useState<ExternalCalendar | null>(null);
+  
+  // Выбор периода/дней на календаре
+  const [calendarSelectionMode, setCalendarSelectionMode] = useState(false);
+  const [selectedCalendarDates, setSelectedCalendarDates] = useState<string[]>([]);
+  const [periodStart, setPeriodStart] = useState<string | null>(null);
+  const [periodEnd, setPeriodEnd] = useState<string | null>(null);
 
   useEffect(() => {
     if (isCreatingMode && initialBlockedDates && initialBlockedDates.length > 0) {
@@ -112,9 +157,11 @@ const CalendarManager = ({
   }, [initialBlockedDates]);
 
   useEffect(() => {
-    loadCalendarData();
-    loadICSInfo();
-    loadExternalCalendars();
+    if (!isCreatingMode) {
+      loadCalendarData();
+      loadICSInfo();
+      loadExternalCalendars();
+    }
   }, [propertyId]);
 
   const loadCalendarData = async () => {
@@ -142,7 +189,12 @@ const CalendarManager = ({
       
       setBlockedDatesMap(blockedMap);
     } catch (error: any) {
-      message.error(t('calendarManager.errorLoadingCalendar'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('calendarManager.errorLoadingCalendar'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     } finally {
       setLoading(false);
     }
@@ -166,22 +218,199 @@ const CalendarManager = ({
     }
   };
 
-  const handleAddBlock = () => {
-    form.resetFields();
-    setHasConflict(false);
-    setConflictDates([]);
-    setModalVisible(true);
+  // Обработчики для календаря
+  const handleCalendarDayClick = (dateStr: string) => {
+    if (viewMode || !calendarSelectionMode) return;
+
+    if (selectionType === 'days') {
+      // Режим выбора отдельных дней
+      setSelectedCalendarDates(prev => {
+        if (prev.includes(dateStr)) {
+          return prev.filter(d => d !== dateStr);
+        } else {
+          return [...prev, dateStr].sort();
+        }
+      });
+    } else if (selectionType === 'period') {
+      // Режим выбора периода
+      if (!periodStart) {
+        // Выбираем начало периода
+        setPeriodStart(dateStr);
+        setPeriodEnd(null);
+      } else if (!periodEnd) {
+        // Выбираем конец периода
+        const start = dayjs(periodStart);
+        const end = dayjs(dateStr);
+        
+        if (end.isBefore(start)) {
+          // Если выбрали дату раньше начала, делаем её началом
+          setPeriodStart(dateStr);
+          setPeriodEnd(null);
+        } else {
+          // Устанавливаем конец периода
+          setPeriodEnd(dateStr);
+        }
+      } else {
+        // Если оба выбраны, начинаем заново
+        setPeriodStart(dateStr);
+        setPeriodEnd(null);
+      }
+    }
   };
 
-  const handleDateRangeChange = (dates: any) => {
-    if (dates && dates.length === 2) {
-      const [start, end] = dates;
+  const handleStartDaysSelection = () => {
+    setSelectionType('days');
+    setCalendarSelectionMode(true);
+    setSelectedCalendarDates([]);
+    setPeriodStart(null);
+    setPeriodEnd(null);
+  };
+
+  const handleStartPeriodSelection = () => {
+    setSelectionType('period');
+    setCalendarSelectionMode(true);
+    setSelectedCalendarDates([]);
+    setPeriodStart(null);
+    setPeriodEnd(null);
+  };
+
+  const handleCancelSelection = () => {
+    setCalendarSelectionMode(false);
+    setSelectedCalendarDates([]);
+    setPeriodStart(null);
+    setPeriodEnd(null);
+  };
+
+  const handleConfirmSelection = () => {
+    if (selectionType === 'days') {
+      if (selectedCalendarDates.length === 0) {
+        notifications.show({
+          message: t('calendarManager.selectAtLeastOneDay'),
+          color: 'orange',
+          icon: <IconAlertCircle size={18} />
+        });
+        return;
+      }
+    } else if (selectionType === 'period') {
+      if (!periodStart || !periodEnd) {
+        notifications.show({
+          message: t('calendarManager.selectPeriodDates'),
+          color: 'orange',
+          icon: <IconAlertCircle size={18} />
+        });
+        return;
+      }
+    }
+
+    // НЕ выключаем режим выбора, просто открываем модальное окно
+    openBlockModal();
+  };
+
+  // Добавление блокировки
+  const handleOpenAddOccupancy = () => {
+    setSelectionType('period');
+    setReason('');
+    setHasConflict(false);
+    setConflictDates([]);
+    setSelectedCalendarDates([]);
+    setPeriodStart(null);
+    setPeriodEnd(null);
+    openAddOccupancyModal();
+  };
+
+  const handleSelectPeriod = () => {
+    closeAddOccupancyModal();
+    handleStartPeriodSelection();
+  };
+
+  const handleSelectDays = () => {
+    closeAddOccupancyModal();
+    handleStartDaysSelection();
+  };
+
+  const handleSubmitBlock = async (forceAdd: boolean = false) => {
+    // Режим выбора отдельных дней
+    if (selectionType === 'days' && selectedCalendarDates.length > 0) {
+      const conflicts = selectedCalendarDates.filter(date => blockedDatesMap.has(date));
+      
+      if (conflicts.length > 0 && !forceAdd) {
+        setHasConflict(true);
+        setConflictDates(conflicts);
+        return;
+      }
+
+      if (isCreatingMode) {
+        const dates: BlockedDate[] = selectedCalendarDates.map(date => ({
+          blocked_date: date,
+          reason: reason || null
+        }));
+        
+        setTempBlockedDates([...tempBlockedDates, ...dates]);
+        notifications.show({
+          title: t('common.success'),
+          message: t('calendarManager.datesAddedTemporarily', { count: dates.length }),
+          color: 'green',
+          icon: <IconCheck size={18} />
+        });
+        closeBlockModal();
+        setHasConflict(false);
+        setConflictDates([]);
+        setSelectedCalendarDates([]);
+        setCalendarSelectionMode(false);
+        setReason('');
+        loadCalendarData();
+        return;
+      }
+
+      try {
+        if (forceAdd && conflicts.length > 0) {
+          await propertiesApi.removeBlockedDates(propertyId, conflicts);
+        }
+
+        for (const date of selectedCalendarDates) {
+          await propertiesApi.addBlockedPeriod(propertyId, {
+            start_date: date,
+            end_date: date,
+            reason: reason || undefined
+          });
+        }
+
+        notifications.show({
+          title: t('common.success'),
+          message: t('calendarManager.daysBlocked', { count: selectedCalendarDates.length }),
+          color: 'green',
+          icon: <IconCheck size={18} />
+        });
+        
+        closeBlockModal();
+        setHasConflict(false);
+        setConflictDates([]);
+        setSelectedCalendarDates([]);
+        setCalendarSelectionMode(false);
+        setReason('');
+        loadCalendarData();
+        loadICSInfo();
+      } catch (error: any) {
+        notifications.show({
+          title: t('errors.generic'),
+          message: error.response?.data?.message || t('calendarManager.errorBlocking'),
+          color: 'red',
+          icon: <IconX size={18} />
+        });
+      }
+      return;
+    }
+
+    // Режим выбора периода
+    if (selectionType === 'period' && periodStart && periodEnd) {
+      const start = dayjs(periodStart);
+      const end = dayjs(periodEnd);
+
+      // Проверяем конфликты
       const conflicts: string[] = [];
+      let current = start;
       
-      let current = dayjs(start);
-      const endDate = dayjs(end);
-      
-      while (current.isBefore(endDate, 'day') || current.isSame(endDate, 'day')) {
+      while (current.isBefore(end, 'day') || current.isSame(end, 'day')) {
         const dateStr = current.format('YYYY-MM-DD');
         if (blockedDatesMap.has(dateStr)) {
           conflicts.push(dateStr);
@@ -189,200 +418,225 @@ const CalendarManager = ({
         current = current.add(1, 'day');
       }
 
-      if (conflicts.length > 0) {
+      if (conflicts.length > 0 && !forceAdd) {
         setHasConflict(true);
         setConflictDates(conflicts);
-      } else {
-        setHasConflict(false);
-        setConflictDates([]);
+        return;
       }
-    } else {
-      setHasConflict(false);
-      setConflictDates([]);
-    }
-  };
-
-  const handleSubmitBlock = async (forceAdd: boolean = false) => {
-    try {
-      const values = await form.validateFields();
-      const [start, end] = values.dateRange;
 
       if (isCreatingMode) {
         const dates: BlockedDate[] = [];
-        let currentDate = dayjs(start);
-        const endDate = dayjs(end);
+        let currentDate = start;
         
-        while (currentDate.isBefore(endDate) || currentDate.isSame(endDate)) {
+        while (currentDate.isBefore(end) || currentDate.isSame(end)) {
           dates.push({
             blocked_date: currentDate.format('YYYY-MM-DD'),
-            reason: values.reason || null
+            reason: reason || null
           });
           currentDate = currentDate.add(1, 'day');
         }
         
         setTempBlockedDates([...tempBlockedDates, ...dates]);
-        message.success(t('calendarManager.datesAddedTemporarily', { count: dates.length }));
-        setModalVisible(false);
+        notifications.show({
+          title: t('common.success'),
+          message: t('calendarManager.datesAddedTemporarily', { count: dates.length }),
+          color: 'green',
+          icon: <IconCheck size={18} />
+        });
+        closeBlockModal();
         setHasConflict(false);
         setConflictDates([]);
-        
+        setPeriodStart(null);
+        setPeriodEnd(null);
+        setCalendarSelectionMode(false);
+        setReason('');
         loadCalendarData();
         return;
       }
 
-      if (hasConflict && !forceAdd) {
-        Modal.confirm({
-          title: t('calendarManager.occupiedDatesDetected'),
-          icon: <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />,
-          content: (
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <Text>
-                {t('calendarManager.periodHasOccupied', { count: conflictDates.length })}
-              </Text>
-              <div style={{ maxHeight: 150, overflow: 'auto', padding: '8px', background: '#1f1f1f', borderRadius: 4, border: '1px solid #303030' }}>
-                {conflictDates.map(date => (
-                  <div key={date} style={{ color: '#fff', padding: '2px 0' }}>
-                    {dayjs(date).format('DD.MM.YYYY')}
-                  </div>
-                ))}
-              </div>
-              <Alert
-                message={t('calendarManager.forceAdd')}
-                description={t('calendarManager.forceAddDescription')}
-                type="error"
-                showIcon
-              />
-            </Space>
-          ),
-          okText: t('calendarManager.forceAddButton'),
-          okButtonProps: { danger: true },
-          cancelText: t('calendarManager.cancel'),
-          onOk: () => handleSubmitBlock(true)
+      try {
+        if (forceAdd && conflicts.length > 0) {
+          await propertiesApi.removeBlockedDates(propertyId, conflicts);
+        }
+
+        await propertiesApi.addBlockedPeriod(propertyId, {
+          start_date: start.format('YYYY-MM-DD'),
+          end_date: end.format('YYYY-MM-DD'),
+          reason: reason || undefined
         });
-        return;
-      }
 
-      if (forceAdd) {
-        Modal.confirm({
-          title: t('calendarManager.finalConfirmation'),
-          icon: <WarningOutlined style={{ color: '#ff4d4f' }} />,
-          content: (
-            <Space direction="vertical">
-              <Text strong>{t('calendarManager.areYouSure')}</Text>
-              <Text type="danger">
-                {t('calendarManager.actionWarning')}
-              </Text>
-            </Space>
-          ),
-          okText: t('calendarManager.yesImSure'),
-          okButtonProps: { danger: true },
-          cancelText: t('calendarManager.cancel'),
-          onOk: async () => {
-            if (conflictDates.length > 0) {
-              await propertiesApi.removeBlockedDates(propertyId, conflictDates);
-            }
-
-            await propertiesApi.addBlockedPeriod(propertyId, {
-              start_date: start.format('YYYY-MM-DD'),
-              end_date: end.format('YYYY-MM-DD'),
-              reason: values.reason || null
-            });
-
-            message.success(t('calendarManager.periodAddedForced'));
-            setModalVisible(false);
-            setHasConflict(false);
-            setConflictDates([]);
-            loadCalendarData();
-            loadICSInfo();
-          }
+        notifications.show({
+          title: t('common.success'),
+          message: forceAdd ? t('calendarManager.periodAddedForced') : t('calendarManager.periodBlocked'),
+          color: 'green',
+          icon: <IconCheck size={18} />
         });
-        return;
+        
+        closeBlockModal();
+        setHasConflict(false);
+        setConflictDates([]);
+        setPeriodStart(null);
+        setPeriodEnd(null);
+        setCalendarSelectionMode(false);
+        setReason('');
+        loadCalendarData();
+        loadICSInfo();
+      } catch (error: any) {
+        notifications.show({
+          title: t('errors.generic'),
+          message: error.response?.data?.message || t('calendarManager.errorBlocking'),
+          color: 'red',
+          icon: <IconX size={18} />
+        });
       }
-
-      await propertiesApi.addBlockedPeriod(propertyId, {
-        start_date: start.format('YYYY-MM-DD'),
-        end_date: end.format('YYYY-MM-DD'),
-        reason: values.reason || null
-      });
-
-      message.success(t('calendarManager.periodBlocked'));
-      setModalVisible(false);
-      setHasConflict(false);
-      setConflictDates([]);
-      loadCalendarData();
-      loadICSInfo();
-    } catch (error: any) {
-      message.error(error.response?.data?.message || t('calendarManager.errorBlocking'));
+      return;
     }
+
+    notifications.show({
+      message: t('calendarManager.selectPeriodRequired'),
+      color: 'orange',
+      icon: <IconAlertCircle size={18} />
+    });
   };
 
   const handleRemoveDates = async (dates: string[]) => {
     if (isCreatingMode) {
       setTempBlockedDates(tempBlockedDates.filter(d => !dates.includes(d.blocked_date)));
-      message.success(t('calendarManager.datesRemovedTemporarily'));
+      notifications.show({
+        title: t('common.success'),
+        message: t('calendarManager.datesRemovedTemporarily'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
       loadCalendarData();
       return;
     }
 
     try {
       await propertiesApi.removeBlockedDates(propertyId, dates);
-      message.success(t('calendarManager.datesUnblocked'));
+      notifications.show({
+        title: t('common.success'),
+        message: t('calendarManager.datesUnblocked'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
       loadCalendarData();
       loadICSInfo();
     } catch (error: any) {
-      message.error(t('calendarManager.errorRemovingDates'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('calendarManager.errorRemovingDates'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     }
   };
 
+  // Внешние календари
   const handleAddExternalCalendar = () => {
-    externalCalendarForm.resetFields();
-    setExternalCalendarModalVisible(true);
+    setCalendarName('');
+    setIcsUrl('');
+    setAddCalendarStep(0);
+    openExternalCalendarModal();
   };
 
   const handleSubmitExternalCalendar = async () => {
+    if (!calendarName.trim()) {
+      notifications.show({
+        message: t('calendarManager.specifyName'),
+        color: 'orange',
+        icon: <IconAlertCircle size={18} />
+      });
+      return;
+    }
+
+    if (!icsUrl.trim()) {
+      notifications.show({
+        message: t('calendarManager.specifyLink'),
+        color: 'orange',
+        icon: <IconAlertCircle size={18} />
+      });
+      return;
+    }
+
     try {
-      const values = await externalCalendarForm.validateFields();
-      
       await propertiesApi.addExternalCalendar(propertyId, {
-        calendar_name: values.calendar_name,
-        ics_url: values.ics_url
+        calendar_name: calendarName,
+        ics_url: icsUrl
       });
 
-      message.success(t('calendarManager.calendarAdded'));
-      setExternalCalendarModalVisible(false);
+      notifications.show({
+        title: t('common.success'),
+        message: t('calendarManager.calendarAdded'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
+      
+      closeExternalCalendarModal();
       loadExternalCalendars();
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('calendarManager.errorAddingCalendar'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('calendarManager.errorAddingCalendar'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     }
   };
 
   const handleRemoveExternalCalendar = async (calendarId: number, removeDates: boolean) => {
     try {
       await propertiesApi.removeExternalCalendar(propertyId, calendarId, removeDates);
-      message.success(t('calendarManager.calendarRemoved'));
+      notifications.show({
+        title: t('common.success'),
+        message: t('calendarManager.calendarRemoved'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
+      closeDeleteCalendarModal();
+      setCalendarToDelete(null);
       loadExternalCalendars();
       loadCalendarData();
       loadICSInfo();
     } catch (error: any) {
-      message.error(t('calendarManager.errorRemovingCalendar'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('calendarManager.errorRemovingCalendar'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     }
   };
 
   const handleToggleExternalCalendar = async (calendarId: number, isEnabled: boolean) => {
     try {
       await propertiesApi.toggleExternalCalendar(propertyId, calendarId, isEnabled);
-      message.success(t('calendarManager.syncToggled', { 
-        state: isEnabled ? t('calendarManager.enabled') : t('calendarManager.disabled')
-      }));
+      notifications.show({
+        title: t('common.success'),
+        message: t('calendarManager.syncToggled', { 
+          state: isEnabled ? t('calendarManager.enabled') : t('calendarManager.disabled')
+        }),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
       loadExternalCalendars();
     } catch (error: any) {
-      message.error(t('calendarManager.errorTogglingSync'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('calendarManager.errorTogglingSync'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     }
   };
 
   const handleAnalyzeCalendars = async () => {
     if (externalCalendars.length < 2) {
-      message.warning(t('calendarManager.minTwoCalendars'));
+      notifications.show({
+        message: t('calendarManager.minTwoCalendars'),
+        color: 'orange',
+        icon: <IconAlertCircle size={18} />
+      });
       return;
     }
 
@@ -392,15 +646,29 @@ const CalendarManager = ({
       const { data } = await propertiesApi.analyzeExternalCalendars(propertyId, calendarIds);
       
       setAnalysisResult(data.data);
-      setAnalysisModalVisible(true);
+      openAnalysisModal();
 
       if (data.data.totalConflicts === 0) {
-        message.success(t('calendarManager.noConflicts'));
+        notifications.show({
+          title: t('common.success'),
+          message: t('calendarManager.noConflicts'),
+          color: 'green',
+          icon: <IconCheck size={18} />
+        });
       } else {
-        message.warning(t('calendarManager.conflictsDetected', { count: data.data.totalConflicts }));
+        notifications.show({
+          message: t('calendarManager.conflictsDetected', { count: data.data.totalConflicts }),
+          color: 'orange',
+          icon: <IconAlertCircle size={18} />
+        });
       }
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('calendarManager.errorAnalyzing'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('calendarManager.errorAnalyzing'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     } finally {
       setAnalyzingConflicts(false);
     }
@@ -412,49 +680,44 @@ const CalendarManager = ({
       const { data } = await propertiesApi.syncExternalCalendars(propertyId);
       
       if (data.success) {
-        message.success(t('calendarManager.syncSuccess', {
-          calendars: data.data.syncedCalendars,
-          events: data.data.totalEvents
-        }));
+        notifications.show({
+          title: t('common.success'),
+          message: t('calendarManager.syncSuccess', {
+            calendars: data.data.syncedCalendars,
+            events: data.data.totalEvents
+          }),
+          color: 'green',
+          icon: <IconCheck size={18} />
+        });
       } else {
-        message.warning(t('calendarManager.syncWithErrors'));
+        notifications.show({
+          message: t('calendarManager.syncWithErrors'),
+          color: 'orange',
+          icon: <IconAlertCircle size={18} />
+        });
       }
 
       loadExternalCalendars();
       loadCalendarData();
       loadICSInfo();
-      setAnalysisModalVisible(false);
+      closeAnalysisModal();
+      
+      setTimeout(() => {
+        openIcsInfoModal();
+      }, 500);
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('calendarManager.errorSyncing'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('calendarManager.errorSyncing'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     } finally {
       setSyncing(false);
     }
   };
 
-  const dateRender = (current: Dayjs) => {
-    const dateStr = current.format('YYYY-MM-DD');
-    const blockedInfo = blockedDatesMap.get(dateStr);
-    
-    if (blockedInfo) {
-      return (
-        <div className="ant-picker-cell-inner" style={{ 
-          background: '#2a1515', 
-          color: '#ff4d4f',
-          border: '1px solid #ff4d4f',
-          borderRadius: '2px'
-        }}>
-          {current.date()}
-        </div>
-      );
-    }
-    
-    return (
-      <div className="ant-picker-cell-inner">
-        {current.date()}
-      </div>
-    );
-  };
-
+  // Навигация по календарю
   const goToPreviousMonth = () => {
     if (selectedMonth === 0) {
       setSelectedMonth(11);
@@ -473,11 +736,16 @@ const CalendarManager = ({
     }
   };
 
-  const getCurrentMonthName = () => {
-    const months = t('calendarManager.months', { returnObjects: true }) as string[];
-    return `${months[selectedMonth]} ${selectedYear}`;
+  const goToToday = () => {
+    setSelectedYear(dayjs().year());
+    setSelectedMonth(dayjs().month());
   };
 
+  const getCurrentMonthName = () => {
+    return dayjs().year(selectedYear).month(selectedMonth).format('MMMM YYYY');
+  };
+
+  // Генерация календаря
   const generateCalendar = () => {
     const firstDay = dayjs().year(selectedYear).month(selectedMonth).startOf('month');
     const lastDay = firstDay.endOf('month');
@@ -523,6 +791,14 @@ const CalendarManager = ({
 
   const isCurrentMonth = (date: dayjs.Dayjs) => {
     return date.month() === selectedMonth;
+  };
+
+  const isInPeriodRange = (dateStr: string) => {
+    if (!periodStart || !periodEnd) return false;
+    const date = dayjs(dateStr);
+    const start = dayjs(periodStart);
+    const end = dayjs(periodEnd);
+    return (date.isAfter(start) || date.isSame(start)) && (date.isBefore(end) || date.isSame(end));
   };
 
   const getGroupedPeriods = () => {
@@ -576,645 +852,1251 @@ const CalendarManager = ({
     }
   };
 
-  const weekDays = t('calendarManager.weekDays', { returnObjects: true }) as string[];
+  const weekDays = useMemo(() => {
+    const days = t('calendarManager.weekDays', { returnObjects: true }) as string[];
+    return days || ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  }, [t]);
+
   const calendar = generateCalendar();
   const periods = getGroupedPeriods();
 
-  const conflictColumns = [
-    {
-      title: t('calendarManager.date'),
-      dataIndex: 'date',
-      key: 'date',
-      render: (date: string) => (
-        <span style={{ color: '#fff' }}>{dayjs(date).format('DD.MM.YYYY')}</span>
-      )
-    },
-    {
-      title: t('calendarManager.calendars'),
-      dataIndex: 'calendars',
-      key: 'calendars',
-      render: (calendars: any[]) => (
-        <Space direction="vertical" size="small" style={{ width: '100%' }}>
-          {calendars.map((cal, idx) => (
-            <div key={idx} className="analysis-calendar-item">
-              <div className="analysis-calendar-name">{cal.calendar_name}</div>
-              <div className="analysis-event-summary">{cal.event_summary}</div>
-              <div className="analysis-event-period">
-                {t('calendarManager.period')}: {dayjs(cal.period_start).format('DD.MM.YYYY')} - {dayjs(cal.period_end).format('DD.MM.YYYY')}
-              </div>
-              {cal.event_description && (
-                <div className="analysis-event-description">
-                  {cal.event_description}
-                </div>
-              )}
-            </div>
-          ))}
-        </Space>
-      )
+  // Рендер дня календаря
+  const renderCalendarDay = (day: dayjs.Dayjs) => {
+    const dateStr = day.format('YYYY-MM-DD');
+    const status = getDateStatus(day);
+    const current = isCurrentMonth(day);
+    const today = day.isSame(dayjs(), 'day');
+    const isSelected = selectedCalendarDates.includes(dateStr);
+    const isPeriodStartDay = periodStart === dateStr;
+    const isPeriodEndDay = periodEnd === dateStr;
+    const isInPeriod = isInPeriodRange(dateStr);
+
+    let backgroundColor = 'transparent';
+    let borderColor = '#2C2E33';
+    let textColor = current ? '#C1C2C5' : '#5C5F66';
+    let dayStyle: React.CSSProperties = {};
+
+    if (today) {
+      borderColor = '#228BE6';
+      textColor = '#228BE6';
     }
-  ];
+
+    // Визуальное выделение для режима выбора периода
+    if (selectionType === 'period' && calendarSelectionMode) {
+      if (isPeriodStartDay || isPeriodEndDay) {
+        backgroundColor = '#7950F2';
+        textColor = '#FFFFFF';
+        borderColor = '#7950F2';
+      } else if (isInPeriod) {
+        backgroundColor = '#5F3DC4';
+        textColor = '#FFFFFF';
+        borderColor = '#5F3DC4';
+      }
+    }
+
+    // Визуальное выделение для режима выбора дней
+    if (selectionType === 'days' && isSelected) {
+      backgroundColor = '#1864AB';
+      textColor = '#FFFFFF';
+      borderColor = '#1864AB';
+    }
+
+    // Заблокированная дата
+    if (status.blocked && !isSelected && !isPeriodStartDay && !isPeriodEndDay && !isInPeriod) {
+      if (status.checkIn && status.checkOut) {
+        dayStyle = {
+          background: 'linear-gradient(135deg, #C92A2A 0%, #C92A2A 50%, #862E9C 50%, #862E9C 100%)',
+          position: 'relative'
+        };
+        textColor = '#FFFFFF';
+        borderColor = '#FA5252';
+      } else if (status.checkIn) {
+        dayStyle = {
+          background: 'linear-gradient(135deg, transparent 50%, #C92A2A 50%)',
+          position: 'relative'
+        };
+        borderColor = '#FA5252';
+      } else if (status.checkOut) {
+        dayStyle = {
+          background: 'linear-gradient(135deg, #C92A2A 0%, #C92A2A 50%, transparent 50%)',
+          position: 'relative'
+        };
+        borderColor = '#FA5252';
+      } else {
+        backgroundColor = '#C92A2A';
+        textColor = '#FFFFFF';
+        borderColor = '#FA5252';
+      }
+    }
+
+    const hoverStyle = calendarSelectionMode && !viewMode ? {
+      transform: 'scale(1.05)',
+      zIndex: 10,
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
+    } : {};
+
+    return (
+      <Box
+        key={dateStr}
+        onClick={() => handleCalendarDayClick(dateStr)}
+        onMouseEnter={(e) => {
+          if (calendarSelectionMode && !viewMode) {
+            Object.assign(e.currentTarget.style, hoverStyle);
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (calendarSelectionMode && !viewMode) {
+            e.currentTarget.style.transform = '';
+            e.currentTarget.style.zIndex = '';
+            e.currentTarget.style.boxShadow = '';
+          }
+        }}
+        style={{
+          aspectRatio: '1',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          border: `2px solid ${borderColor}`,
+          borderRadius: '8px',
+          cursor: calendarSelectionMode && !viewMode ? 'pointer' : 'default',
+          transition: 'all 0.2s ease',
+          backgroundColor,
+          minHeight: isMobile ? '45px' : '60px',
+          fontSize: isMobile ? '14px' : '16px',
+          fontWeight: 600,
+          color: textColor,
+          opacity: current ? 1 : 0.4,
+          ...dayStyle
+        }}
+      >
+        {day.date()}
+      </Box>
+    );
+  };
+// Компонент легенды
+  const CalendarLegend = () => (
+    <Paper p="md" radius="md" withBorder>
+      <Stack gap="sm">
+        <Text size="sm" fw={600}>{t('calendarManager.legend')}</Text>
+        <SimpleGrid cols={{ base: 2, xs: 3, sm: 5 }} spacing="xs">
+          <Group gap={8}>
+            <Box
+              w={24}
+              h={24}
+              style={{
+                border: '2px solid #228BE6',
+                borderRadius: '4px',
+                backgroundColor: 'transparent'
+              }}
+            />
+            <Text size="xs">{t('calendarManager.today')}</Text>
+          </Group>
+          
+          <Group gap={8}>
+            <Box
+              w={24}
+              h={24}
+              style={{
+                backgroundColor: '#C92A2A',
+                borderRadius: '4px',
+                border: '2px solid #FA5252'
+              }}
+            />
+            <Text size="xs">{t('calendarManager.occupied')}</Text>
+          </Group>
+          
+          <Group gap={8}>
+            <Box
+              w={24}
+              h={24}
+              style={{
+                background: 'linear-gradient(135deg, transparent 50%, #C92A2A 50%)',
+                borderRadius: '4px',
+                border: '2px solid #FA5252'
+              }}
+            />
+            <Text size="xs">{t('calendarManager.checkIn')}</Text>
+          </Group>
+          
+          <Group gap={8}>
+            <Box
+              w={24}
+              h={24}
+              style={{
+                background: 'linear-gradient(135deg, #C92A2A 0%, #C92A2A 50%, transparent 50%)',
+                borderRadius: '4px',
+                border: '2px solid #FA5252'
+              }}
+            />
+            <Text size="xs">{t('calendarManager.checkOut')}</Text>
+          </Group>
+          
+          <Group gap={8}>
+            <Box
+              w={24}
+              h={24}
+              style={{
+                background: 'linear-gradient(135deg, #C92A2A 0%, #C92A2A 50%, #862E9C 50%, #862E9C 100%)',
+                borderRadius: '4px',
+                border: '2px solid #FA5252'
+              }}
+            />
+            <Text size="xs">{t('calendarManager.checkInOut')}</Text>
+          </Group>
+        </SimpleGrid>
+      </Stack>
+    </Paper>
+  );
+
+  if (loading && !isCreatingMode) {
+    return (
+      <Center p="xl">
+        <Loader size="lg" />
+      </Center>
+    );
+  }
 
   return (
-    <Card
-      title={
-        <Space>
-          <CalendarOutlined />
-          <span>{t('calendarManager.title')}</span>
-        </Space>
-      }
-      extra={
-        !viewMode && (
-          <Space wrap>
-            {icsInfo && (
-              <Button
-                icon={<DownloadOutlined />}
-                onClick={downloadICS}
-                type="default"
-                size="small"
-              >
-                {t('calendarManager.downloadIcs')}
-              </Button>
+    <Stack gap="lg">
+      {/* Заголовок и основные действия */}
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="lg">
+          <Group justify="space-between" wrap="wrap">
+            <Group gap="sm">
+              <ThemeIcon size="lg" radius="md" variant="gradient" gradient={{ from: 'violet', to: 'grape' }}>
+                <IconCalendar size={20} />
+              </ThemeIcon>
+              <div>
+                <Text fw={600} size="lg">
+                  {t('calendarManager.title')}
+                </Text>
+                <Text size="sm" c="dimmed">
+                  {isCreatingMode 
+                    ? t('calendarManager.icsCreatedAfter')
+                    : t('calendarManager.manageOccupancy')
+                  }
+                </Text>
+              </div>
+            </Group>
+
+            {!viewMode && (
+              <Group gap="sm" wrap="wrap">
+                {icsInfo && !isCreatingMode && (
+                  <>
+                    <Button
+                      variant="light"
+                      color="blue"
+                      leftSection={<IconEye size={18} />}
+                      onClick={openIcsInfoModal}
+                      size={isMobile ? 'sm' : 'md'}
+                    >
+                      {isMobile ? 'ICS' : t('calendarManager.viewIcsInfo')}
+                    </Button>
+                    <Button
+                      variant="light"
+                      color="teal"
+                      leftSection={<IconDownload size={18} />}
+                      onClick={downloadICS}
+                      size={isMobile ? 'sm' : 'md'}
+                    >
+                      {isMobile ? t('common.download') : t('calendarManager.downloadIcs')}
+                    </Button>
+                  </>
+                )}
+                <Button
+                  variant="gradient"
+                  gradient={{ from: 'violet', to: 'grape' }}
+                  leftSection={<IconPlus size={18} />}
+                  onClick={handleOpenAddOccupancy}
+                  size={isMobile ? 'sm' : 'md'}
+                >
+                  {isMobile ? t('common.add') : t('calendarManager.addOccupancy')}
+                </Button>
+              </Group>
             )}
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={handleAddBlock}
-              size="small"
-            >
-              {t('calendarManager.addPeriod')}
-            </Button>
-          </Space>
-        )
-      }
-    >
-      <Spin spinning={loading}>
-        <Space direction="vertical" style={{ width: '100%' }} size="large">
-          {!viewMode && !isCreatingMode && (
-            <Card 
-              title={
-                <Space>
-                  <SyncOutlined />
-                  <span>{t('calendarManager.syncCalendars')}</span>
-                </Space>
-              }
-              size="small"
-              extra={
-                <Space wrap>
-                  {externalCalendars.length > 1 && (
-                    <Button
-                      size="small"
-                      icon={<InfoCircleOutlined />}
-                      onClick={handleAnalyzeCalendars}
-                      loading={analyzingConflicts}
-                    >
-                      {t('calendarManager.analysis')}
-                    </Button>
-                  )}
-                  {externalCalendars.length > 0 && (
-                    <Button
-                      size="small"
-                      type="primary"
-                      icon={<SyncOutlined />}
-                      onClick={handleSyncCalendars}
-                      loading={syncing}
-                    >
-                      {t('calendarManager.synchronize')}
-                    </Button>
-                  )}
+          </Group>
+
+          {/* Статистика */}
+          {!isCreatingMode && icsInfo && (
+            <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
+              <Paper p="sm" radius="md" withBorder>
+                <Stack gap={4}>
+                  <Text size="xs" c="dimmed">{t('calendarManager.blockedDays')}</Text>
+                  <Text size="xl" fw={700} c="red">{icsInfo.total_blocked_days || 0}</Text>
+                </Stack>
+              </Paper>
+              <Paper p="sm" radius="md" withBorder>
+                <Stack gap={4}>
+                  <Text size="xs" c="dimmed">{t('calendarManager.externalCalendars')}</Text>
+                  <Text size="xl" fw={700} c="blue">{externalCalendars.length}</Text>
+                </Stack>
+              </Paper>
+              <Paper p="sm" radius="md" withBorder>
+                <Stack gap={4}>
+                  <Text size="xs" c="dimmed">{t('calendarManager.activeSyncs')}</Text>
+                  <Text size="xl" fw={700} c="green">
+                    {externalCalendars.filter(c => c.is_enabled).length}
+                  </Text>
+                </Stack>
+              </Paper>
+              <Paper p="sm" radius="md" withBorder>
+                <Stack gap={4}>
+                  <Text size="xs" c="dimmed">{t('calendarManager.lastUpdate')}</Text>
+                  <Text size="sm" fw={600}>
+                    {icsInfo.updated_at ? dayjs(icsInfo.updated_at).format('DD.MM HH:mm') : '-'}
+                  </Text>
+                </Stack>
+              </Paper>
+            </SimpleGrid>
+          )}
+
+          {isCreatingMode && tempBlockedDates.length > 0 && (
+            <Alert icon={<IconInfoCircle size={18} />} color="blue" variant="light">
+              <Text size="sm">
+                {t('calendarManager.addedTemporarily')}: <strong>{tempBlockedDates.length}</strong> {t('calendarManager.dates')}
+              </Text>
+            </Alert>
+          )}
+        </Stack>
+      </Card>
+
+      {/* Внешние календари */}
+      {!viewMode && !isCreatingMode && (
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="md">
+            <Group justify="space-between" wrap="wrap">
+              <Group gap="sm">
+                <ThemeIcon size="lg" radius="md" variant="light" color="cyan">
+                  <IconRefresh size={20} />
+                </ThemeIcon>
+                <div>
+                  <Text fw={600} size="md">{t('calendarManager.syncCalendars')}</Text>
+                  <Text size="xs" c="dimmed">{t('calendarManager.syncCalendarsDesc')}</Text>
+                </div>
+              </Group>
+
+              <Group gap="xs" wrap="wrap">
+                {externalCalendars.length > 1 && (
                   <Button
-                    size="small"
-                    type="dashed"
-                    icon={<PlusOutlined />}
-                    onClick={handleAddExternalCalendar}
+                    variant="light"
+                    color="orange"
+                    size="sm"
+                    leftSection={<IconAlertCircle size={16} />}
+                    onClick={handleAnalyzeCalendars}
+                    loading={analyzingConflicts}
                   >
-                    {t('calendarManager.addCalendar')}
+                    {t('calendarManager.analysis')}
                   </Button>
-                </Space>
-              }
-            >
-              {externalCalendars.length === 0 ? (
-                <Alert
-                  message={t('calendarManager.noExternalCalendars')}
-                  description={t('calendarManager.noExternalCalendarsDesc')}
-                  type="info"
-                  showIcon
-                />
-              ) : (
-                <List
-                  dataSource={externalCalendars}
-                  renderItem={(calendar) => (
-                    <List.Item
-                      actions={[
-                        <Switch
-                          key="toggle"
-                          checked={calendar.is_enabled}
-                          onChange={(checked) => handleToggleExternalCalendar(calendar.id, checked)}
-                          checkedChildren={t('calendarManager.on')}
-                          unCheckedChildren={t('calendarManager.off')}
-                        />,
-                        <Popconfirm
-                          key="delete"
-                          title={t('calendarManager.deleteCalendar')}
-                          description={
-                            <Space direction="vertical">
-                              <Text>{t('calendarManager.deleteCalendarDesc')}</Text>
-                              <Space>
-                                <Button
-                                  size="small"
-                                  danger
-                                  onClick={() => {
-                                    handleRemoveExternalCalendar(calendar.id, true);
-                                  }}
-                                >
-                                  {t('calendarManager.yesDeleteDates')}
-                                </Button>
-                                <Button
-                                  size="small"
-                                  onClick={() => {
-                                    handleRemoveExternalCalendar(calendar.id, false);
-                                  }}
-                                >
-                                  {t('calendarManager.noKeepDates')}
-                                </Button>
-                              </Space>
-                            </Space>
-                          }
-                          showCancel={false}
-                          icon={<WarningOutlined style={{ color: 'red' }} />}
-                        >
-                          <Button
-                            type="link"
-                            danger
-                            size="small"
-                            icon={<DeleteOutlined />}
-                          />
-                        </Popconfirm>
-                      ]}
-                    >
-                      <List.Item.Meta
-                        avatar={
-                          calendar.is_enabled ? (
-                            <CheckCircleOutlined style={{ fontSize: 20, color: '#52c41a' }} />
-                          ) : (
-                            <InfoCircleOutlined style={{ fontSize: 20, color: '#999' }} />
-                          )
-                        }
-                        title={
-                          <Space wrap>
-                            <Text strong>{calendar.calendar_name}</Text>
-                            {calendar.total_events > 0 && (
-                              <Tag color="blue">{calendar.total_events} {t('calendarManager.events')}</Tag>
-                            )}
-                            {calendar.sync_error && (
-                              <Tag color="red">{t('calendarManager.syncError')}</Tag>
-                            )}
-                          </Space>
-                        }
-                        description={
-                          <Space direction="vertical" size={2}>
-                            <Text type="secondary" style={{ fontSize: 12, wordBreak: 'break-all' }}>
-                              <LinkOutlined /> {calendar.ics_url}
-                            </Text>
-                            {calendar.last_sync_at && (
-                              <Text type="secondary" style={{ fontSize: 11 }}>
-                                {t('calendarManager.lastSync')}: {dayjs(calendar.last_sync_at).format('DD.MM.YYYY HH:mm')}
-                              </Text>
-                            )}
-                            {calendar.sync_error && (
-                              <Text type="danger" style={{ fontSize: 11 }}>
-                                {t('calendarManager.error')}: {calendar.sync_error}
-                              </Text>
-                            )}
-                          </Space>
-                        }
-                      />
-                    </List.Item>
-                  )}
-                />
-              )}
-            </Card>
-          )}
-
-          <Divider style={{ margin: '16px 0' }} />
-
-          {isCreatingMode ? (
-            <Alert
-              message={t('calendarManager.occupancyCalendar')}
-              description={
-                <Space direction="vertical" size={4}>
-                  <Text>
-                    {t('calendarManager.icsCreatedAfter')}
-                  </Text>
-                  {tempBlockedDates.length > 0 && (
-                    <Text>
-                      {t('calendarManager.addedTemporarily')}: <strong>{tempBlockedDates.length}</strong> {t('calendarManager.dates')}
-                    </Text>
-                  )}
-                </Space>
-              }
-              type="info"
-              showIcon
-              icon={<InfoCircleOutlined />}
-            />
-          ) : icsInfo && (
-            <Alert
-              message={t('calendarManager.combinedIcsFile')}
-              description={
-                <Space direction="vertical" size={4}>
-                  <Text>
-                    {t('calendarManager.blockedDays')}: <strong>{icsInfo.total_blocked_days}</strong>
-                  </Text>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    {t('calendarManager.updated')}: {dayjs(icsInfo.updated_at).format('DD.MM.YYYY HH:mm')}
-                  </Text>
-                  <Link
-                    href={`https://admin.novaestate.company${icsInfo.ics_url}`}
-                    target="_blank"
-                    style={{ fontSize: 12 }}
+                )}
+                {externalCalendars.length > 0 && (
+                  <Button
+                    variant="light"
+                    color="teal"
+                    size="sm"
+                    leftSection={<IconRefresh size={16} />}
+                    onClick={handleSyncCalendars}
+                    loading={syncing}
                   >
-                    {icsInfo.ics_filename}
-                  </Link>
-                </Space>
-              }
-              type="info"
-              showIcon
-              icon={<InfoCircleOutlined />}
-            />
-          )}
+                    {t('calendarManager.synchronize')}
+                  </Button>
+                )}
+                <Button
+                  variant="light"
+                  color="blue"
+                  size="sm"
+                  leftSection={<IconPlus size={16} />}
+                  onClick={handleAddExternalCalendar}
+                >
+                  {t('calendarManager.addCalendar')}
+                </Button>
+              </Group>
+            </Group>
 
-          <div style={{ 
-            marginBottom: 12, 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between',
-            padding: '8px 0'
-          }}>
-            <Button
-              type="text"
-              icon={<LeftOutlined />}
-              onClick={goToPreviousMonth}
-              size="small"
-              disabled={false}
-            />
-            <div style={{ 
-              fontSize: 16, 
-              fontWeight: 600,
-              textAlign: 'center',
-              flex: 1
-            }}>
-              {getCurrentMonthName()}
-            </div>
-            <Button
-              type="text"
-              icon={<RightOutlined />}
-              onClick={goToNextMonth}
-              size="small"
-              disabled={false}
-            />
-          </div>
-
-          <div className="modern-calendar-container">
-            <div className="modern-calendar">
-              <div className="modern-calendar-header">
-                {weekDays.map(day => (
-                  <div key={day} className="modern-calendar-weekday">
-                    {day}
-                  </div>
-                ))}
-              </div>
-
-              <div className="modern-calendar-body">
-                {calendar.map((week, weekIndex) => (
-                  <div key={weekIndex} className="modern-calendar-week">
-                    {week.map((day) => {
-                      const status = getDateStatus(day);
-                      const current = isCurrentMonth(day);
-                      const today = day.isSame(dayjs(), 'day');
-
-                      return (
-                        <div
-                          key={day.format('YYYY-MM-DD')}
-                          className={`
-                            modern-calendar-day
-                            ${!current ? 'other-month' : ''}
-                            ${today ? 'today' : ''}
-                            ${status.blocked ? 'blocked' : ''}
-                            ${status.checkIn && status.checkOut ? 'both-checks' : ''}
-                            ${status.checkIn && !status.checkOut ? 'check-in' : ''}
-                            ${!status.checkIn && status.checkOut ? 'check-out' : ''}
-                          `}
+            {externalCalendars.length === 0 ? (
+              <Alert icon={<IconInfoCircle size={18} />} color="blue" variant="light">
+                <Stack gap="xs">
+                  <Text size="sm" fw={500}>{t('calendarManager.noExternalCalendars')}</Text>
+                  <Text size="xs" c="dimmed">{t('calendarManager.noExternalCalendarsDesc')}</Text>
+                </Stack>
+              </Alert>
+            ) : (
+              <Stack gap="sm">
+                {externalCalendars.map((calendar) => (
+                  <Paper key={calendar.id} p="md" radius="md" withBorder>
+                    <Group justify="space-between" wrap="wrap">
+                      <Group gap="md" style={{ flex: 1 }}>
+                        <ThemeIcon
+                          size="lg"
+                          radius="md"
+                          variant="light"
+                          color={calendar.is_enabled ? 'green' : 'gray'}
                         >
-                          <span className="modern-day-number">{day.date()}</span>
-                        </div>
-                      );
+                          {calendar.is_enabled ? (
+                            <IconCircleCheck size={20} />
+                          ) : (
+                            <IconCircleX size={20} />
+                          )}
+                        </ThemeIcon>
+
+                        <Stack gap={4} style={{ flex: 1 }}>
+                          <Group gap="xs">
+                            <Text fw={600}>{calendar.calendar_name}</Text>
+                            {calendar.total_events > 0 && (
+                              <Badge size="sm" color="blue" variant="light">
+                                {calendar.total_events} {t('calendarManager.events')}
+                              </Badge>
+                            )}
+                            {calendar.sync_error && (
+                              <Badge size="sm" color="red" variant="light">
+                                {t('calendarManager.syncError')}
+                              </Badge>
+                            )}
+                          </Group>
+
+                          <Text size="xs" c="dimmed" lineClamp={1}>
+                            {calendar.ics_url}
+                          </Text>
+
+                          {calendar.last_sync_at && (
+                            <Text size="xs" c="dimmed">
+                              {t('calendarManager.lastSync')}: {dayjs(calendar.last_sync_at).format('DD.MM.YYYY HH:mm')}
+                            </Text>
+                          )}
+
+                          {calendar.sync_error && (
+                            <Text size="xs" c="red">
+                              {t('calendarManager.error')}: {calendar.sync_error}
+                            </Text>
+                          )}
+                        </Stack>
+                      </Group>
+
+                      <Group gap="xs">
+                        <Switch
+                          checked={calendar.is_enabled}
+                          onChange={(e) => handleToggleExternalCalendar(calendar.id, e.currentTarget.checked)}
+                          size={isMobile ? 'sm' : 'md'}
+                        />
+                        <ActionIcon
+                          color="red"
+                          variant="light"
+                          onClick={() => {
+                            setCalendarToDelete(calendar);
+                            openDeleteCalendarModal();
+                          }}
+                        >
+                          <IconTrash size={18} />
+                        </ActionIcon>
+                      </Group>
+                    </Group>
+                  </Paper>
+                ))}
+              </Stack>
+            )}
+          </Stack>
+        </Card>
+      )}
+
+      <Divider />
+
+      {/* Календарь */}
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="md">
+          {/* Навигация по месяцам */}
+          <Group justify="space-between" wrap="wrap">
+            <Group gap="xs">
+              <ActionIcon
+                variant="light"
+                color="violet"
+                onClick={goToPreviousMonth}
+                size="lg"
+              >
+                <IconChevronLeft size={20} />
+              </ActionIcon>
+              <Text fw={600} size="lg" style={{ minWidth: isMobile ? '140px' : '180px', textAlign: 'center' }}>
+                {getCurrentMonthName()}
+              </Text>
+              <ActionIcon
+                variant="light"
+                color="violet"
+                onClick={goToNextMonth}
+                size="lg"
+              >
+                <IconChevronRight size={20} />
+              </ActionIcon>
+            </Group>
+
+            <Group gap="xs">
+              <Button
+                variant="light"
+                color="gray"
+                size="sm"
+                onClick={goToToday}
+              >
+                {t('calendarManager.today')}
+              </Button>
+            </Group>
+          </Group>
+
+          {calendarSelectionMode && (
+            <Alert icon={<IconInfoCircle size={18} />} color="violet" variant="light">
+              <Stack gap="sm">
+                {selectionType === 'days' ? (
+                  <Text size="sm">
+                    {t('calendarManager.selectDatesOnCalendar')} {selectedCalendarDates.length > 0 && `(${selectedCalendarDates.length} ${t('calendarManager.selected')})`}
+                  </Text>
+                ) : (
+                  <Text size="sm">
+                    {!periodStart && t('calendarManager.selectPeriodStart')}
+                    {periodStart && !periodEnd && t('calendarManager.selectPeriodEnd')}
+                    {periodStart && periodEnd && t('calendarManager.periodSelected', { 
+                      start: dayjs(periodStart).format('DD.MM.YYYY'),
+                      end: dayjs(periodEnd).format('DD.MM.YYYY')
                     })}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="calendar-legend">
-            <div className="legend-item">
-              <div className="legend-square today-square" />
-              <span>{t('calendarManager.today')}</span>
-            </div>
-            <div className="legend-item">
-              <div className="legend-square blocked-square" />
-              <span>{t('calendarManager.occupied')}</span>
-            </div>
-            <div className="legend-item">
-              <div className="legend-square checkin-square" />
-              <span>{t('calendarManager.checkIn')}</span>
-            </div>
-            <div className="legend-item">
-              <div className="legend-square checkout-square" />
-              <span>{t('calendarManager.checkOut')}</span>
-            </div>
-            <div className="legend-item">
-              <div className="legend-square both-square" />
-              <span>{t('calendarManager.checkInOut')}</span>
-            </div>
-          </div>
-
-          {periods.length > 0 && (
-            <Card title={t('calendarManager.blockedPeriods')} size="small" style={{ marginTop: 16 }}>
-              <List
-                dataSource={periods}
-                renderItem={(period) => (
-                  <List.Item
-                    actions={
-                      !viewMode ? [
-                        <Popconfirm
-                          key="delete"
-                          title={t('calendarManager.deletePeriod')}
-                          description={t('calendarManager.daysWillBeDeleted', { count: period.dates.length })}
-                          onConfirm={() => handleRemoveDates(period.dates)}
-                          okText={t('calendarManager.yes')}
-                          cancelText={t('calendarManager.no')}
-                        >
-                          <Button
-                            type="link"
-                            danger
-                            size="small"
-                            icon={<DeleteOutlined />}
-                          >
-                            {t('calendarManager.delete')}
-                          </Button>
-                        </Popconfirm>
-                      ] : []
+                  </Text>
+                )}
+                <Group gap="xs">
+                  <Button
+                    variant="light"
+                    color="red"
+                    size="sm"
+                    onClick={handleCancelSelection}
+                  >
+                    {t('common.cancel')}
+                  </Button>
+                  <Button
+                    variant="filled"
+                    color="violet"
+                    size="sm"
+                    onClick={handleConfirmSelection}
+                    disabled={
+                      (selectionType === 'days' && selectedCalendarDates.length === 0) ||
+                      (selectionType === 'period' && (!periodStart || !periodEnd))
                     }
                   >
-                    <List.Item.Meta
-                      title={
-                        <Space wrap>
-                          <Tag color="red">
-                            {dayjs(period.start).format('DD.MM.YYYY')} -{' '}
-                            {dayjs(period.end).format('DD.MM.YYYY')}
-                          </Tag>
-                          <Text type="secondary">
-                            ({period.dates.length}{' '}
-                            {t('calendarManager.daysCount', { count: period.dates.length })})
-                          </Text>
-                        </Space>
-                      }
-                      description={period.reason || t('calendarManager.noDescription')}
-                    />
-                  </List.Item>
-                )}
-              />
-            </Card>
+                    {t('common.confirm')} 
+                    {selectionType === 'days' && selectedCalendarDates.length > 0 && ` (${selectedCalendarDates.length})`}
+                  </Button>
+                </Group>
+              </Stack>
+            </Alert>
           )}
-        </Space>
-      </Spin>
 
+          {/* Сетка календаря */}
+          <Box>
+            {/* Дни недели */}
+            <SimpleGrid cols={7} spacing={2} mb="xs">
+              {weekDays.map((day) => (
+                <Center key={day}>
+                  <Text size="sm" fw={700} c="dimmed" tt="uppercase">
+                    {day}
+                  </Text>
+                </Center>
+              ))}
+            </SimpleGrid>
+
+            {/* Дни месяца */}
+            <Stack gap={2}>
+              {calendar.map((week, weekIndex) => (
+                <SimpleGrid key={weekIndex} cols={7} spacing={2}>
+                  {week.map((day) => renderCalendarDay(day))}
+                </SimpleGrid>
+              ))}
+            </Stack>
+          </Box>
+
+          {/* Легенда */}
+          <CalendarLegend />
+        </Stack>
+      </Card>
+
+      {/* Заблокированные периоды */}
+      {periods.length > 0 && (
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="md">
+            <Group gap="sm">
+              <ThemeIcon size="lg" radius="md" variant="light" color="red">
+                <IconClock size={20} />
+              </ThemeIcon>
+              <div>
+                <Text fw={600} size="md">{t('calendarManager.blockedPeriods')}</Text>
+                <Text size="xs" c="dimmed">
+                  {t('calendarManager.totalPeriods')}: {periods.length}
+                </Text>
+              </div>
+            </Group>
+
+            <Stack gap="xs">
+              {periods.map((period, index) => (
+                <Paper key={index} p="md" radius="md" withBorder>
+                  <Group justify="space-between" wrap="wrap">
+                    <Stack gap={4} style={{ flex: 1 }}>
+                      <Group gap="xs">
+                        <Badge color="red" variant="filled">
+                          {dayjs(period.start).format('DD.MM.YYYY')} - {dayjs(period.end).format('DD.MM.YYYY')}
+                        </Badge>
+                        <Text size="sm" c="dimmed">
+                          ({period.dates.length} {t('calendarManager.daysCount', { count: period.dates.length })})
+                        </Text>
+                      </Group>
+                      <Text size="sm">
+                        {period.reason || <Text c="dimmed" fs="italic">{t('calendarManager.noDescription')}</Text>}
+                      </Text>
+                    </Stack>
+
+                    {!viewMode && (
+                      <ActionIcon
+                        color="red"
+                        variant="light"
+                        onClick={() => {
+                          setPeriodToDelete(period);
+                          openDeleteModal();
+                        }}
+                      >
+                        <IconTrash size={18} />
+                      </ActionIcon>
+                    )}
+                  </Group>
+                </Paper>
+              ))}
+            </Stack>
+          </Stack>
+        </Card>
+      )}
+
+      {/* Модальное окно выбора типа добавления */}
       <Modal
-        title={t('calendarManager.addOccupancyPeriod')}
-        open={modalVisible}
-        onCancel={() => {
-          setModalVisible(false);
+        opened={addOccupancyModalOpened}
+        onClose={closeAddOccupancyModal}
+        title={t('calendarManager.addOccupancy')}
+        size="md"
+        centered
+      >
+        <Stack gap="lg">
+          <Text size="sm" c="dimmed">
+            {t('calendarManager.chooseAddType')}
+          </Text>
+
+          <Stack gap="md">
+            <Paper
+              p="lg"
+              radius="md"
+              withBorder
+              style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+              onClick={handleSelectPeriod}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--mantine-color-violet-6)';
+                e.currentTarget.style.backgroundColor = 'var(--mantine-color-violet-0)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = '';
+                e.currentTarget.style.backgroundColor = '';
+              }}
+            >
+              <Group gap="md">
+                <ThemeIcon size="xl" radius="md" variant="light" color="violet">
+                  <IconCalendarTime size={24} />
+                </ThemeIcon>
+                <Stack gap={4} style={{ flex: 1 }}>
+                  <Text fw={600} size="md">{t('calendarManager.addPeriod')}</Text>
+                  <Text size="xs" c="dimmed">{t('calendarManager.addPeriodDesc')}</Text>
+                </Stack>
+              </Group>
+            </Paper>
+
+            <Paper
+              p="lg"
+              radius="md"
+              withBorder
+              style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+              onClick={handleSelectDays}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--mantine-color-grape-6)';
+                e.currentTarget.style.backgroundColor = 'var(--mantine-color-grape-0)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = '';
+                e.currentTarget.style.backgroundColor = '';
+              }}
+            >
+              <Group gap="md">
+                <ThemeIcon size="xl" radius="md" variant="light" color="grape">
+                  <IconCalendarPlus size={24} />
+                </ThemeIcon>
+                <Stack gap={4} style={{ flex: 1 }}>
+                  <Text fw={600} size="md">{t('calendarManager.selectDays')}</Text>
+                  <Text size="xs" c="dimmed">{t('calendarManager.selectDaysDesc')}</Text>
+                </Stack>
+              </Group>
+            </Paper>
+          </Stack>
+        </Stack>
+      </Modal>
+
+      {/* Модальное окно добавления блокировки */}
+      <Modal
+        opened={blockModalOpened}
+        onClose={() => {
+          closeBlockModal();
           setHasConflict(false);
           setConflictDates([]);
+          setReason('');
+          // НЕ сбрасываем выбранные даты и режим выбора
         }}
-        footer={null}
-        width={isMobile ? '95%' : 600}
-        style={isMobile ? { top: 20 } : undefined}
+        title={selectionType === 'period' ? t('calendarManager.addOccupancyPeriod') : t('calendarManager.addOccupancyDays')}
+        size={isMobile ? 'full' : 'lg'}
+        centered
       >
-        <Form form={form} layout="vertical">
-          <Form.Item
-            name="dateRange"
-            label={t('calendarManager.selectPeriod')}
-            rules={[{ required: true, message: t('calendarManager.selectPeriodRequired') }]}
-          >
-            <RangePicker
-              style={{ width: '100%' }}
-              format="DD.MM.YYYY"
-              placeholder={[t('calendarManager.start'), t('calendarManager.end')]}
-              onChange={handleDateRangeChange}
-              dateRender={dateRender}
-              inputReadOnly={isMobile}
-            />
-          </Form.Item>
+        <Stack gap="md">
+          {selectionType === 'period' && periodStart && periodEnd ? (
+            <Alert icon={<IconInfoCircle size={18} />} color="violet" variant="light">
+              <Text size="sm">
+                {t('calendarManager.selectedPeriod')}: {dayjs(periodStart).format('DD.MM.YYYY')} - {dayjs(periodEnd).format('DD.MM.YYYY')}
+              </Text>
+              <Text size="xs" c="dimmed" mt={4}>
+                {t('calendarManager.daysInPeriod')}: {dayjs(periodEnd).diff(dayjs(periodStart), 'day') + 1}
+              </Text>
+            </Alert>
+          ) : selectionType === 'days' && selectedCalendarDates.length > 0 ? (
+            <Alert icon={<IconInfoCircle size={18} />} color="violet" variant="light">
+              <Text size="sm">
+                {t('calendarManager.selectedDaysCount', { count: selectedCalendarDates.length })}
+              </Text>
+              <Text size="xs" c="dimmed" mt={4}>
+                {selectedCalendarDates.map(date => dayjs(date).format('DD.MM.YYYY')).join(', ')}
+              </Text>
+            </Alert>
+          ) : null}
 
           {hasConflict && (
-            <Alert
-              message={t('calendarManager.occupiedDatesDetected')}
-              description={
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  <Text>
-                    {t('calendarManager.periodHasOccupied', { count: conflictDates.length })}:
-                  </Text>
-                  <div style={{ 
-                    maxHeight: 120, 
-                    overflow: 'auto', 
-                    padding: '8px', 
-                    background: '#1f1f1f', 
-                    borderRadius: 4, 
-                    border: '1px solid #303030',
-                    marginTop: 8
-                  }}>
+            <Alert icon={<IconAlertCircle size={18} />} color="orange" variant="light">
+              <Stack gap="xs">
+                <Text size="sm" fw={500}>
+                  {t('calendarManager.occupiedDatesDetected')}
+                </Text>
+                <Text size="xs">
+                  {t('calendarManager.periodHasOccupied', { count: conflictDates.length })}
+                </Text>
+                <Paper p="xs" radius="md" withBorder style={{ maxHeight: '120px', overflow: 'auto' }}>
+                  <Stack gap={2}>
                     {conflictDates.slice(0, 10).map(date => (
-                      <div key={date} style={{ color: '#ff4d4f', fontSize: 12, padding: '2px 0' }}>
+                      <Text key={date} size="xs" c="red">
                         • {dayjs(date).format('DD.MM.YYYY')}
-                      </div>
+                      </Text>
                     ))}
                     {conflictDates.length > 10 && (
-                      <div style={{ color: '#888', fontSize: 11, marginTop: 4 }}>
+                      <Text size="xs" c="dimmed">
                         {t('calendarManager.andMoreDates', { count: conflictDates.length - 10 })}
-                      </div>
+                      </Text>
                     )}
-                  </div>
-                  <Text type="secondary" style={{ fontSize: 12, marginTop: 8 }}>
-                    {t('calendarManager.selectOtherPeriod')}
-                  </Text>
-                </Space>
-              }
-              type="error"
-              showIcon
-              style={{ marginBottom: 16 }}
-            />
+                  </Stack>
+                </Paper>
+                <Text size="xs" c="dimmed">
+                  {t('calendarManager.selectOtherPeriod')}
+                </Text>
+              </Stack>
+            </Alert>
           )}
 
-          <Form.Item name="reason" label={t('calendarManager.descriptionOptional')}>
-            <TextArea
-              rows={3}
-              placeholder={t('calendarManager.reasonPlaceholder')}
-              maxLength={500}
-            />
-          </Form.Item>
+          <Textarea
+            label={t('calendarManager.descriptionOptional')}
+            placeholder={t('calendarManager.reasonPlaceholder')}
+            value={reason}
+            onChange={(e) => setReason(e.currentTarget.value)}
+            rows={3}
+            maxLength={500}
+            size={isMobile ? 'sm' : 'md'}
+            styles={{
+              input: {
+                fontSize: '16px'
+              }
+            }}
+          />
 
           {!hasConflict && (
-            <Alert
-              message={t('calendarManager.info')}
-              description={t('calendarManager.infoDescription')}
-              type="info"
-              showIcon
-              style={{ marginBottom: 16 }}
-            />
+            <Alert icon={<IconInfoCircle size={18} />} color="blue" variant="light">
+              <Text size="xs">{t('calendarManager.infoDescription')}</Text>
+            </Alert>
           )}
 
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <Button onClick={() => {
-              setModalVisible(false);
-              setHasConflict(false);
-              setConflictDates([]);
-            }}>
-              {t('calendarManager.cancel')}
+          <Group justify="flex-end" gap="sm">
+            <Button
+              variant="subtle"
+              onClick={() => {
+                closeBlockModal();
+                setHasConflict(false);
+                setConflictDates([]);
+                setReason('');
+                // НЕ сбрасываем выбранные даты
+              }}
+            >
+              {t('common.cancel')}
             </Button>
             
             {hasConflict ? (
               <Button
-                type="primary"
-                danger
+                color="red"
                 onClick={() => handleSubmitBlock(true)}
               >
                 {t('calendarManager.forceAddButton')}
               </Button>
             ) : (
               <Button
-                type="primary"
+                variant="gradient"
+                gradient={{ from: 'violet', to: 'grape' }}
                 onClick={() => handleSubmitBlock(false)}
               >
-                {t('calendarManager.add')}
+                {t('common.add')}
               </Button>
             )}
-          </div>
-        </Form>
+          </Group>
+        </Stack>
       </Modal>
-
+{/* Модальное окно добавления внешнего календаря */}
       <Modal
+        opened={externalCalendarModalOpened}
+        onClose={() => {
+          closeExternalCalendarModal();
+          setCalendarName('');
+          setIcsUrl('');
+          setAddCalendarStep(0);
+        }}
         title={t('calendarManager.addExternalCalendar')}
-        open={externalCalendarModalVisible}
-        onOk={handleSubmitExternalCalendar}
-        onCancel={() => setExternalCalendarModalVisible(false)}
-        okText={t('calendarManager.add')}
-        cancelText={t('calendarManager.cancel')}
-        width={isMobile ? '95%' : 600}
+        size={isMobile ? 'full' : 'lg'}
+        centered
       >
-        <Form form={externalCalendarForm} layout="vertical">
-          <Form.Item
-            name="calendar_name"
-            label={t('calendarManager.serviceName')}
-            rules={[{ required: true, message: t('calendarManager.specifyName') }]}
-          >
-            <Input 
-              placeholder={t('calendarManager.serviceNamePlaceholder')}
-              maxLength={255}
-            />
-          </Form.Item>
+        <Stack gap="lg">
+          <Stepper active={addCalendarStep} onStepClick={setAddCalendarStep}>
+            <Stepper.Step
+              label={t('calendarManager.step1')}
+              description={t('calendarManager.calendarInfo')}
+            >
+              <Stack gap="md" mt="md">
+                <TextInput
+                  label={t('calendarManager.serviceName')}
+                  placeholder={t('calendarManager.serviceNamePlaceholder')}
+                  value={calendarName}
+                  onChange={(e) => setCalendarName(e.currentTarget.value)}
+                  required
+                  leftSection={<IconBuilding size={16} />}
+                  size={isMobile ? 'sm' : 'md'}
+                  styles={{ input: { fontSize: '16px' } }}
+                />
 
-          <Form.Item
-            name="ics_url"
-            label={t('calendarManager.icsLink')}
-            rules={[
-              { required: true, message: t('calendarManager.specifyLink') },
-              { type: 'url', message: t('calendarManager.invalidURL') }
-            ]}
-          >
-            <Input 
-              placeholder="https://example.com/calendar.ics"
-              prefix={<LinkOutlined />}
-            />
-          </Form.Item>
+                <Alert icon={<IconInfoCircle size={18} />} color="blue" variant="light">
+                  <Text size="xs">
+                    {t('calendarManager.exampleServices')}: Airbnb, Booking.com, Beds24, HomeAway
+                  </Text>
+                </Alert>
+              </Stack>
+            </Stepper.Step>
 
-          <Alert
-            message={t('calendarManager.info')}
-            description={t('calendarManager.externalCalendarInfo')}
-            type="info"
-            showIcon
-          />
-        </Form>
+            <Stepper.Step
+              label={t('calendarManager.step2')}
+              description={t('calendarManager.icsLink')}
+            >
+              <Stack gap="md" mt="md">
+                <TextInput
+                  label={t('calendarManager.icsLink')}
+                  placeholder="https://example.com/calendar.ics"
+                  value={icsUrl}
+                  onChange={(e) => setIcsUrl(e.currentTarget.value)}
+                  required
+                  leftSection={<IconLink size={16} />}
+                  size={isMobile ? 'sm' : 'md'}
+                  styles={{ input: { fontSize: '16px' } }}
+                />
+
+                <Accordion variant="contained">
+                  <Accordion.Item value="airbnb">
+                    <Accordion.Control icon={<IconBrandAirbnb size={20} />}>
+                      {t('calendarManager.howToGetAirbnb')}
+                    </Accordion.Control>
+                    <Accordion.Panel>
+                      <Timeline bulletSize={24} lineWidth={2}>
+                        <Timeline.Item bullet={<IconPlayerPlay size={12} />} title={t('calendarManager.airbnbStep1Title')}>
+                          <Text size="xs" c="dimmed">{t('calendarManager.airbnbStep1')}</Text>
+                        </Timeline.Item>
+                        <Timeline.Item bullet={<IconArrowRight size={12} />} title={t('calendarManager.airbnbStep2Title')}>
+                          <Text size="xs" c="dimmed">{t('calendarManager.airbnbStep2')}</Text>
+                        </Timeline.Item>
+                        <Timeline.Item bullet={<IconCopy size={12} />} title={t('calendarManager.airbnbStep3Title')}>
+                          <Text size="xs" c="dimmed">{t('calendarManager.airbnbStep3')}</Text>
+                        </Timeline.Item>
+                      </Timeline>
+                    </Accordion.Panel>
+                  </Accordion.Item>
+
+                  <Accordion.Item value="booking">
+                    <Accordion.Control icon={<IconBuilding size={20} />}>
+                      {t('calendarManager.howToGetBooking')}
+                    </Accordion.Control>
+                    <Accordion.Panel>
+                      <Timeline bulletSize={24} lineWidth={2}>
+                        <Timeline.Item bullet={<IconPlayerPlay size={12} />} title={t('calendarManager.bookingStep1Title')}>
+                          <Text size="xs" c="dimmed">{t('calendarManager.bookingStep1')}</Text>
+                        </Timeline.Item>
+                        <Timeline.Item bullet={<IconArrowRight size={12} />} title={t('calendarManager.bookingStep2Title')}>
+                          <Text size="xs" c="dimmed">{t('calendarManager.bookingStep2')}</Text>
+                        </Timeline.Item>
+                        <Timeline.Item bullet={<IconCopy size={12} />} title={t('calendarManager.bookingStep3Title')}>
+                          <Text size="xs" c="dimmed">{t('calendarManager.bookingStep3')}</Text>
+                        </Timeline.Item>
+                      </Timeline>
+                    </Accordion.Panel>
+                  </Accordion.Item>
+                </Accordion>
+              </Stack>
+            </Stepper.Step>
+
+            <Stepper.Completed>
+              <Stack gap="md" mt="md" align="center">
+                <ThemeIcon size={60} radius="xl" variant="light" color="green">
+                  <IconCheck size={30} />
+                </ThemeIcon>
+                <Text size="lg" fw={600}>{t('calendarManager.readyToAdd')}</Text>
+                <Paper p="md" radius="md" withBorder style={{ width: '100%' }}>
+                  <Stack gap="xs">
+                    <Group justify="space-between">
+                      <Text size="sm" c="dimmed">{t('calendarManager.serviceName')}:</Text>
+                      <Text size="sm" fw={600}>{calendarName}</Text>
+                    </Group>
+                    <Group justify="space-between">
+                      <Text size="sm" c="dimmed">{t('calendarManager.icsLink')}:</Text>
+                      <Text size="xs" lineClamp={1}>{icsUrl}</Text>
+                    </Group>
+                  </Stack>
+                </Paper>
+              </Stack>
+            </Stepper.Completed>
+          </Stepper>
+
+          <Group justify="space-between" mt="md">
+            <Button
+              variant="subtle"
+              onClick={() => {
+                closeExternalCalendarModal();
+                setCalendarName('');
+                setIcsUrl('');
+                setAddCalendarStep(0);
+              }}
+            >
+              {t('common.cancel')}
+            </Button>
+            
+            <Group gap="sm">
+              {addCalendarStep > 0 && addCalendarStep < 2 && (
+                <Button variant="light" onClick={() => setAddCalendarStep(addCalendarStep - 1)}>
+                  {t('common.back')}
+                </Button>
+              )}
+              
+              {addCalendarStep < 2 ? (
+                <Button
+                  onClick={() => setAddCalendarStep(addCalendarStep + 1)}
+                  disabled={
+                    (addCalendarStep === 0 && !calendarName.trim()) ||
+                    (addCalendarStep === 1 && !icsUrl.trim())
+                  }
+                >
+                  {t('common.next')}
+                </Button>
+              ) : (
+                <Button
+                  variant="gradient"
+                  gradient={{ from: 'teal', to: 'cyan' }}
+                  onClick={handleSubmitExternalCalendar}
+                >
+                  {t('common.add')}
+                </Button>
+              )}
+            </Group>
+          </Group>
+        </Stack>
       </Modal>
 
+      {/* Модальное окно анализа конфликтов */}
       <Modal
+        opened={analysisModalOpened}
+        onClose={closeAnalysisModal}
         title={
-          <Space>
-            <WarningOutlined style={{ color: '#faad14' }} />
-            <span>{t('calendarManager.conflictAnalysis')}</span>
-          </Space>
+          <Group gap="sm">
+            <IconAlertCircle size={24} style={{ color: 'var(--mantine-color-orange-6)' }} />
+            <Text fw={600}>{t('calendarManager.conflictAnalysis')}</Text>
+          </Group>
         }
-        open={analysisModalVisible}
-        onCancel={() => setAnalysisModalVisible(false)}
-        width={isMobile ? '95%' : 900}
-        footer={[
-          <Button key="cancel" onClick={() => setAnalysisModalVisible(false)}>
-            {t('calendarManager.cancel')}
-          </Button>,
-          <Button
-            key="sync"
-            type="primary"
-            icon={<SyncOutlined />}
-            loading={syncing}
-            onClick={handleSyncCalendars}
-          >
-            {t('calendarManager.continueSync')}
-          </Button>
-        ]}
+        size={isMobile ? 'full' : 'xl'}
+        centered
       >
         {analysisResult && (
-          <Space direction="vertical" style={{ width: '100%' }} size="large">
+          <Stack gap="md">
             <Alert
-              message={
-                analysisResult.totalConflicts === 0
-                  ? t('calendarManager.noConflicts')
-                  : t('calendarManager.conflictsDetected', { count: analysisResult.totalConflicts })
-              }
-              description={
-                analysisResult.totalConflicts === 0
-                  ? t('calendarManager.noConflictsDesc')
-                  : t('calendarManager.conflictsDetectedDesc')
-              }
-              type={analysisResult.totalConflicts === 0 ? 'success' : 'warning'}
-              showIcon
-            />
+              icon={analysisResult.totalConflicts === 0 ? <IconCheck size={18} /> : <IconAlertCircle size={18} />}
+              color={analysisResult.totalConflicts === 0 ? 'green' : 'orange'}
+              variant="light"
+            >
+              <Stack gap="xs">
+                <Text size="sm" fw={600}>
+                  {analysisResult.totalConflicts === 0
+                    ? t('calendarManager.noConflicts')
+                    : t('calendarManager.conflictsDetected', { count: analysisResult.totalConflicts })
+                  }
+                </Text>
+                <Text size="xs">
+                  {analysisResult.totalConflicts === 0
+                    ? t('calendarManager.noConflictsDesc')
+                    : t('calendarManager.conflictsDetectedDesc')
+                  }
+                </Text>
+              </Stack>
+            </Alert>
 
             {analysisResult.totalConflicts > 0 && (
-              <Table
-                dataSource={analysisResult.conflicts}
-                columns={conflictColumns}
-                pagination={{ pageSize: 10 }}
-                rowKey="date"
-                size="small"
-              />
+              <Paper p="md" radius="md" withBorder style={{ maxHeight: '400px', overflow: 'auto' }}>
+                <Stack gap="sm">
+                  {analysisResult.conflicts.map((conflict: any, idx: number) => (
+                    <Paper key={idx} p="sm" radius="md" withBorder>
+                      <Stack gap="xs">
+                        <Group justify="space-between">
+                          <Badge color="red" variant="filled">
+                            {dayjs(conflict.date).format('DD.MM.YYYY')}
+                          </Badge>
+                          <Badge color="orange" variant="light">
+                            {conflict.calendars.length} {t('calendarManager.calendars')}
+                          </Badge>
+                        </Group>
+                        
+                        {conflict.calendars.map((cal: any, calIdx: number) => (
+                          <Paper key={calIdx} p="xs" radius="sm" withBorder bg="dark.6">
+                            <Stack gap={4}>
+                              <Text size="xs" fw={600}>{cal.calendar_name}</Text>
+                              <Text size="xs">{cal.event_summary}</Text>
+                              <Text size="xs" c="dimmed">
+                                {t('calendarManager.period')}: {dayjs(cal.period_start).format('DD.MM.YYYY')} - {dayjs(cal.period_end).format('DD.MM.YYYY')}
+                              </Text>
+                              {cal.event_description && (
+                                <Text size="xs" c="dimmed" fs="italic">
+                                  {cal.event_description}
+                                </Text>
+                              )}
+                            </Stack>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Stack>
+              </Paper>
             )}
 
-            <Alert
-              message={t('calendarManager.whatHappensOnSync')}
-              description={
-                <ul style={{ margin: '8px 0', paddingLeft: 20 }}>
-                  <li>{t('calendarManager.syncStep1')}</li>
-                  <li>{t('calendarManager.syncStep2')}</li>
-                  <li>{t('calendarManager.syncStep3')}</li>
-                  <li>{t('calendarManager.syncStep4')}</li>
-                </ul>
-              }
-              type="info"
-              showIcon
-            />
-          </Space>
+            <Alert icon={<IconInfoCircle size={18} />} color="blue" variant="light">
+              <Stack gap="xs">
+                <Text size="sm" fw={600}>{t('calendarManager.whatHappensOnSync')}</Text>
+                <List size="xs" spacing={4}>
+                  <List.Item>{t('calendarManager.syncStep1')}</List.Item>
+                  <List.Item>{t('calendarManager.syncStep2')}</List.Item>
+                  <List.Item>{t('calendarManager.syncStep3')}</List.Item>
+                  <List.Item>{t('calendarManager.syncStep4')}</List.Item>
+                </List>
+              </Stack>
+            </Alert>
+
+            <Group justify="flex-end" gap="sm">
+              <Button variant="subtle" onClick={closeAnalysisModal}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                variant="gradient"
+                gradient={{ from: 'teal', to: 'cyan' }}
+                leftSection={<IconRefresh size={18} />}
+                onClick={handleSyncCalendars}
+                loading={syncing}
+              >
+                {t('calendarManager.continueSync')}
+              </Button>
+            </Group>
+          </Stack>
         )}
       </Modal>
-    </Card>
+
+      {/* Модальное окно информации об ICS */}
+      <Modal
+        opened={icsInfoModalOpened}
+        onClose={closeIcsInfoModal}
+        title={
+          <Group gap="sm">
+            <IconInfoCircle size={24} style={{ color: 'var(--mantine-color-blue-6)' }} />
+            <Text fw={600}>{t('calendarManager.icsFileInfo')}</Text>
+          </Group>
+        }
+        size={isMobile ? 'full' : 'lg'}
+        centered
+      >
+        {icsInfo && (
+          <Stack gap="lg">
+            <Alert icon={<IconCircleCheck size={18} />} color="green" variant="light">
+              <Text size="sm">{t('calendarManager.icsFileCreated')}</Text>
+            </Alert>
+
+            <Paper p="md" radius="md" withBorder>
+              <Stack gap="md">
+                <Group justify="space-between">
+                  <Text size="sm" c="dimmed">{t('calendarManager.fileName')}:</Text>
+                  <Text size="sm" fw={600}>{icsInfo.ics_filename}</Text>
+                </Group>
+                
+                <Group justify="space-between">
+                  <Text size="sm" c="dimmed">{t('calendarManager.blockedDays')}:</Text>
+                  <Badge color="red" size="lg">{icsInfo.total_blocked_days}</Badge>
+                </Group>
+                
+                <Group justify="space-between">
+                  <Text size="sm" c="dimmed">{t('calendarManager.lastUpdate')}:</Text>
+                  <Text size="sm">{dayjs(icsInfo.updated_at).format('DD.MM.YYYY HH:mm')}</Text>
+                </Group>
+
+                <Divider />
+
+                <Stack gap="xs">
+                  <Text size="sm" fw={600}>{t('calendarManager.yourIcsLink')}:</Text>
+                  <Group gap="xs">
+                    <TextInput
+                      value={`https://admin.novaestate.company${icsInfo.ics_url}`}
+                      readOnly
+                      style={{ flex: 1 }}
+                      size="sm"
+                      leftSection={<IconLink size={16} />}
+                      styles={{ input: { fontSize: '16px' } }}
+                    />
+                    <CopyButton value={`https://admin.novaestate.company${icsInfo.ics_url}`}>
+                      {({ copied, copy }) => (
+                        <Tooltip label={copied ? t('common.copied') : t('common.copy')}>
+                          <ActionIcon
+                            color={copied ? 'teal' : 'blue'}
+                            variant="light"
+                            onClick={copy}
+                          >
+                            {copied ? <IconCheck size={18} /> : <IconCopy size={18} />}
+                          </ActionIcon>
+                        </Tooltip>
+                      )}
+                    </CopyButton>
+                    <Tooltip label={t('calendarManager.openInNewTab')}>
+                      <ActionIcon
+                        color="blue"
+                        variant="light"
+                        onClick={() => window.open(`https://admin.novaestate.company${icsInfo.ics_url}`, '_blank')}
+                      >
+                        <IconExternalLink size={18} />
+                      </ActionIcon>
+                    </Tooltip>
+                  </Group>
+                </Stack>
+              </Stack>
+            </Paper>
+
+            <Alert icon={<IconInfoCircle size={18} />} color="blue" variant="light">
+              <Stack gap="xs">
+                <Text size="sm" fw={600}>{t('calendarManager.howToUseIcs')}</Text>
+                <List size="xs" spacing={4}>
+                  <List.Item>{t('calendarManager.icsUsage1')}</List.Item>
+                  <List.Item>{t('calendarManager.icsUsage2')}</List.Item>
+                  <List.Item>{t('calendarManager.icsUsage3')}</List.Item>
+                </List>
+              </Stack>
+            </Alert>
+
+            <Group justify="flex-end">
+              <Button
+                variant="gradient"
+                gradient={{ from: 'blue', to: 'cyan' }}
+                leftSection={<IconDownload size={18} />}
+                onClick={downloadICS}
+              >
+                {t('calendarManager.downloadIcs')}
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
+
+      {/* Модальное окно удаления периода */}
+      <Modal
+        opened={deleteModalOpened}
+        onClose={() => {
+          closeDeleteModal();
+          setPeriodToDelete(null);
+        }}
+        title={t('calendarManager.deletePeriod')}
+        centered
+      >
+        <Stack gap="md">
+          <Text>
+            {t('calendarManager.daysWillBeDeleted', { count: periodToDelete?.dates.length || 0 })}
+          </Text>
+          <Group justify="flex-end">
+            <Button
+              variant="subtle"
+              onClick={() => {
+                closeDeleteModal();
+                setPeriodToDelete(null);
+              }}
+            >
+              {t('common.no')}
+            </Button>
+            <Button
+              color="red"
+              onClick={() => {
+                if (periodToDelete) {
+                  handleRemoveDates(periodToDelete.dates);
+                  closeDeleteModal();
+                  setPeriodToDelete(null);
+                }
+              }}
+            >
+              {t('common.yes')}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Модальное окно удаления календаря */}
+      <Modal
+        opened={deleteCalendarModalOpened}
+        onClose={() => {
+          closeDeleteCalendarModal();
+          setCalendarToDelete(null);
+        }}
+        title={t('calendarManager.deleteCalendar')}
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm">{t('calendarManager.deleteCalendarDesc')}</Text>
+          <Group justify="center" gap="sm">
+            <Button
+              color="red"
+              onClick={() => {
+                if (calendarToDelete) {
+                  handleRemoveExternalCalendar(calendarToDelete.id, true);
+                }
+              }}
+            >
+              {t('calendarManager.yesDeleteDates')}
+            </Button>
+            <Button
+              variant="light"
+              onClick={() => {
+                if (calendarToDelete) {
+                  handleRemoveExternalCalendar(calendarToDelete.id, false);
+                }
+              }}
+            >
+              {t('calendarManager.noKeepDates')}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Stack>
   );
 };
 

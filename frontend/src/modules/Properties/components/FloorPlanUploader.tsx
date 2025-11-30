@@ -1,8 +1,33 @@
 // frontend/src/modules/Properties/components/FloorPlanUploader.tsx
 import { useState } from 'react';
-import { Card, Button, Image, message, Progress } from 'antd';
-import { UploadOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
+import {
+  Card,
+  Stack,
+  Group,
+  Button,
+  Text,
+  Image,
+  Center,
+  ThemeIcon,
+  Paper,
+  FileButton,
+  Box,
+  ActionIcon,
+  Tooltip,
+  Modal
+} from '@mantine/core';
+import {
+  IconUpload,
+  IconTrash,
+  IconDownload,
+  IconFileDescription,
+  IconCheck,
+  IconX,
+  IconZoomIn
+} from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
+import { notifications } from '@mantine/notifications';
+import { useMediaQuery, useDisclosure } from '@mantine/hooks';
 import { propertiesApi } from '@/api/properties.api';
 
 interface FloorPlanUploaderProps {
@@ -19,153 +44,316 @@ const FloorPlanUploader = ({
   viewMode = false 
 }: FloorPlanUploaderProps) => {
   const { t } = useTranslation();
+  const isMobile = useMediaQuery('(max-width: 768px)');
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [downloading, setDownloading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  
+  const [imageModalOpened, { open: openImageModal, close: closeImageModal }] = useDisclosure(false);
+  const [deleteModalOpened, { open: openDeleteModal, close: closeDeleteModal }] = useDisclosure(false);
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleFileSelect = async (file: File | null) => {
     if (!file) return;
 
     if (file.size > 50 * 1024 * 1024) {
-      message.error(t('floorPlanUploader.fileSizeExceeds'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('floorPlanUploader.fileSizeExceeds'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
       return;
     }
 
     if (!file.type.startsWith('image/')) {
-      message.error(t('floorPlanUploader.fileMustBeImage'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('floorPlanUploader.fileMustBeImage'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
       return;
     }
 
     try {
       setUploading(true);
-      setUploadProgress(0);
 
       const formData = new FormData();
       formData.append('floorPlan', file);
 
       await propertiesApi.uploadFloorPlan(propertyId, formData);
 
-      message.success(t('floorPlanUploader.floorPlanUploaded'));
+      notifications.show({
+        title: t('common.success'),
+        message: t('floorPlanUploader.floorPlanUploaded'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
       onUpdate();
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('floorPlanUploader.errorUploading'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('floorPlanUploader.errorUploading'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     } finally {
       setUploading(false);
-      setUploadProgress(0);
-      e.target.value = '';
     }
   };
 
-  const handleDelete = async () => {
+  const handleDeleteConfirm = async () => {
     try {
-      message.success(t('floorPlanUploader.floorPlanDeleted'));
+      setDeleting(true);
+      closeDeleteModal();
+      
+      // Используем метод обновления свойства, передавая пустое значение для floor_plan
+      await propertiesApi.update(propertyId, { 
+        floor_plan_url: null 
+      });
+      
+      notifications.show({
+        title: t('common.success'),
+        message: t('floorPlanUploader.floorPlanDeleted'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
+      
       onUpdate();
     } catch (error: any) {
-      message.error(t('floorPlanUploader.errorDeleting'));
+      console.error('Delete error:', error);
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('floorPlanUploader.errorDeleting'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
+    } finally {
+      setDeleting(false);
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!floorPlanUrl) return;
     
-    const link = document.createElement('a');
-    link.href = floorPlanUrl;
-    link.download = `floor_plan_${propertyId}.jpg`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    message.success(t('floorPlanUploader.floorPlanDownloaded'));
+    try {
+      setDownloading(true);
+      
+      // Получаем изображение как blob
+      const response = await fetch(floorPlanUrl);
+      const blob = await response.blob();
+      
+      // Создаём временный URL для blob
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      // Создаём ссылку для скачивания
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `floor_plan_${propertyId}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Освобождаем память
+      window.URL.revokeObjectURL(blobUrl);
+      
+      notifications.show({
+        title: t('common.success'),
+        message: t('floorPlanUploader.floorPlanDownloaded'),
+        color: 'blue',
+        icon: <IconDownload size={18} />
+      });
+    } catch (error) {
+      console.error('Download error:', error);
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('floorPlanUploader.errorDownloading'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
-    <Card 
-      title={t('properties.floorPlan')}
-      extra={
-        !viewMode && (
-          <Button
-            type="primary"
-            icon={<UploadOutlined />}
-            onClick={() => document.getElementById('floor-plan-input')?.click()}
-            loading={uploading}
-            disabled={uploading}
-          >
-            {floorPlanUrl ? t('floorPlanUploader.changeFloorPlan') : t('floorPlanUploader.uploadFloorPlan')}
-          </Button>
-        )
-      }
-    >
-      <input
-        id="floor-plan-input"
-        type="file"
-        accept="image/*"
-        style={{ display: 'none' }}
-        onChange={handleFileSelect}
-      />
+    <Stack gap="lg">
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="lg">
+          {/* Header */}
+          <Group justify="space-between">
+            <Group gap="sm">
+              <ThemeIcon size="lg" radius="md" variant="light" color="teal">
+                <IconFileDescription size={20} />
+              </ThemeIcon>
+              <div>
+                <Text fw={600} size="lg">
+                  {t('properties.floorPlan')}
+                </Text>
+                <Text size="sm" c="dimmed">
+                  {floorPlanUrl 
+                    ? t('floorPlanUploader.floorPlanExists') 
+                    : t('floorPlanUploader.noFloorPlan')
+                  }
+                </Text>
+              </div>
+            </Group>
 
-      {uploading && (
-        <div style={{ marginBottom: 24 }}>
-          <Progress percent={uploadProgress} status="active" />
-          <p style={{ textAlign: 'center', marginTop: 8, color: '#666' }}>
-            {t('floorPlanUploader.uploadingProgress', { percent: uploadProgress })}
-          </p>
-        </div>
-      )}
+            {!viewMode && (
+              <FileButton onChange={handleFileSelect} accept="image/*">
+                {(props) => (
+                  <Button
+                    {...props}
+                    variant="gradient"
+                    gradient={{ from: 'teal', to: 'lime', deg: 90 }}
+                    leftSection={<IconUpload size={18} />}
+                    loading={uploading}
+                    size={isMobile ? 'sm' : 'md'}
+                  >
+                    {isMobile 
+                      ? (floorPlanUrl ? t('common.change') : t('common.upload'))
+                      : (floorPlanUrl ? t('floorPlanUploader.changeFloorPlan') : t('floorPlanUploader.uploadFloorPlan'))
+                    }
+                  </Button>
+                )}
+              </FileButton>
+            )}
+          </Group>
 
-      {floorPlanUrl ? (
-        <div style={{ textAlign: 'center' }}>
+          {/* Floor Plan Display */}
+          {floorPlanUrl ? (
+            <Stack gap="md">
+              <Box pos="relative">
+                <Image
+                  src={floorPlanUrl}
+                  alt={t('floorPlanUploader.floorPlanAlt')}
+                  radius="md"
+                  style={{ 
+                    maxHeight: isMobile ? 300 : 600,
+                    cursor: 'pointer'
+                  }}
+                  onClick={openImageModal}
+                />
+                
+                {/* View Full Size Button Overlay */}
+                <Tooltip label={t('floorPlanUploader.viewFullSize')}>
+                  <ActionIcon
+                    variant="filled"
+                    color="dark"
+                    size="lg"
+                    onClick={openImageModal}
+                    style={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 8
+                    }}
+                  >
+                    <IconZoomIn size={20} />
+                  </ActionIcon>
+                </Tooltip>
+              </Box>
+
+              {/* Action Buttons */}
+              <Group justify="center" gap="sm">
+                <Button
+                  variant="light"
+                  color="blue"
+                  leftSection={<IconDownload size={18} />}
+                  onClick={handleDownload}
+                  loading={downloading}
+                  size={isMobile ? 'sm' : 'md'}
+                >
+                  {isMobile ? t('common.download') : t('floorPlanUploader.downloadFloorPlan')}
+                </Button>
+
+                {!viewMode && (
+                  <Button
+                    variant="light"
+                    color="red"
+                    leftSection={<IconTrash size={18} />}
+                    onClick={openDeleteModal}
+                    loading={deleting}
+                    size={isMobile ? 'sm' : 'md'}
+                  >
+                    {t('common.delete')}
+                  </Button>
+                )}
+              </Group>
+            </Stack>
+          ) : (
+            <Paper p="xl" radius="md" withBorder style={{ borderStyle: 'dashed' }}>
+              <Center>
+                <Stack align="center" gap="md">
+                  <ThemeIcon size={80} radius="xl" variant="light" color="gray">
+                    <IconFileDescription size={40} />
+                  </ThemeIcon>
+                  
+                  <Text size="lg" c="dimmed" ta="center">
+                    {t('floorPlanUploader.noFloorPlan')}
+                  </Text>
+
+                  {!viewMode && (
+                    <Stack gap="xs" align="center">
+                      <Text size="sm" c="dimmed" ta="center">
+                        {t('floorPlanUploader.clickButtonAbove')}
+                      </Text>
+                      <Text size="xs" c="dimmed" ta="center">
+                        {t('floorPlanUploader.supportedFormats')}
+                      </Text>
+                      <Text size="xs" c="dimmed" ta="center">
+                        {t('floorPlanUploader.maxSize')}
+                      </Text>
+                    </Stack>
+                  )}
+                </Stack>
+              </Center>
+            </Paper>
+          )}
+        </Stack>
+      </Card>
+
+      {/* Full Size Image Modal */}
+      <Modal
+        opened={imageModalOpened}
+        onClose={closeImageModal}
+        title={t('floorPlanUploader.floorPlanFullSize')}
+        size={isMobile ? 'full' : 'xl'}
+        centered
+        styles={{
+          body: { padding: 0 }
+        }}
+      >
+        {floorPlanUrl && (
           <Image
             src={floorPlanUrl}
             alt={t('floorPlanUploader.floorPlanAlt')}
-            style={{ 
-              maxWidth: '100%', 
-              maxHeight: 600,
-              borderRadius: 8,
-              marginBottom: 16
-            }}
-            preview={{
-              mask: t('floorPlanUploader.viewFullSize')
-            }}
+            fit="contain"
           />
-          <div style={{ marginTop: 16 }}>
-            <Button
-              icon={<DownloadOutlined />}
-              onClick={handleDownload}
-              style={{ marginRight: 8 }}
-              disabled={false}
-            >
-              {t('floorPlanUploader.downloadFloorPlan')}
+        )}
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        opened={deleteModalOpened}
+        onClose={closeDeleteModal}
+        title={t('common.confirmDelete')}
+        centered
+      >
+        <Stack gap="md">
+          <Text>
+            {t('floorPlanUploader.confirmDeleteFloorPlan')}
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="subtle" onClick={closeDeleteModal}>
+              {t('common.no')}
             </Button>
-            {!viewMode && (
-              <Button
-                danger
-                icon={<DeleteOutlined />}
-                onClick={handleDelete}
-              >
-                {t('common.delete')}
-              </Button>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div style={{ 
-          textAlign: 'center', 
-          padding: '60px 20px',
-          color: '#999',
-          border: '2px dashed #d9d9d9',
-          borderRadius: 8
-        }}>
-          <UploadOutlined style={{ fontSize: 48, marginBottom: 16 }} />
-          <p>{t('floorPlanUploader.noFloorPlan')}</p>
-          {!viewMode && (
-            <p style={{ fontSize: 12 }}>
-              {t('floorPlanUploader.clickButtonAbove')}<br />
-              {t('floorPlanUploader.supportedFormats')}<br />
-              {t('floorPlanUploader.maxSize')}
-            </p>
-          )}
-        </div>
-      )}
-    </Card>
+            <Button color="red" onClick={handleDeleteConfirm} loading={deleting}>
+              {t('common.yes')}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Stack>
   );
 };
 

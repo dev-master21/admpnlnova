@@ -1,11 +1,30 @@
 // frontend/src/modules/Properties/components/CalendarModal.tsx
-import { Modal, Spin, Alert, Button } from 'antd';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  Modal,
+  Stack,
+  Group,
+  Text,
+  ActionIcon,
+  Button,
+  Alert,
+  Center,
+  Loader,
+  Box,
+  SimpleGrid,
+  Paper,
+  ThemeIcon
+} from '@mantine/core';
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconInfoCircle,
+  IconCalendar
+} from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
+import { useMediaQuery } from '@mantine/hooks';
 import { propertiesApi } from '@/api/properties.api';
-import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import './CalendarModal.css';
 
 interface CalendarModalProps {
   propertyId: number;
@@ -22,6 +41,8 @@ interface BlockedDate {
 
 const CalendarModal = ({ propertyId, visible, onClose }: CalendarModalProps) => {
   const { t } = useTranslation();
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any>(null);
   const [blockedDatesMap, setBlockedDatesMap] = useState<Map<string, BlockedDate>>(new Map());
@@ -92,9 +113,13 @@ const CalendarModal = ({ propertyId, visible, onClose }: CalendarModalProps) => 
     }
   };
 
+  const goToToday = () => {
+    setSelectedYear(dayjs().year());
+    setSelectedMonth(dayjs().month());
+  };
+
   const getCurrentMonthName = () => {
-    const months = t('calendarManager.months', { returnObjects: true }) as string[];
-    return `${months[selectedMonth]} ${selectedYear}`;
+    return dayjs().year(selectedYear).month(selectedMonth).format('MMMM YYYY');
   };
 
   const generateCalendar = () => {
@@ -144,127 +169,255 @@ const CalendarModal = ({ propertyId, visible, onClose }: CalendarModalProps) => 
     return date.month() === selectedMonth;
   };
 
-  const weekDays = t('calendarManager.weekDays', { returnObjects: true }) as string[];
+  const weekDays = useMemo(() => {
+    const days = t('calendarManager.weekDays', { returnObjects: true }) as string[];
+    return days || ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  }, [t]);
+
   const calendar = generateCalendar();
+
+  const renderCalendarDay = (day: dayjs.Dayjs) => {
+    const dateStr = day.format('YYYY-MM-DD');
+    const status = getDateStatus(day);
+    const current = isCurrentMonth(day);
+    const today = day.isSame(dayjs(), 'day');
+
+    let backgroundColor = 'transparent';
+    let borderColor = '#2C2E33';
+    let textColor = current ? '#C1C2C5' : '#5C5F66';
+    let dayStyle: React.CSSProperties = {};
+
+    if (today) {
+      borderColor = '#228BE6';
+      textColor = '#228BE6';
+    }
+
+    if (status.blocked) {
+      if (status.checkIn && status.checkOut) {
+        dayStyle = {
+          background: 'linear-gradient(135deg, #C92A2A 0%, #C92A2A 50%, #862E9C 50%, #862E9C 100%)',
+          position: 'relative'
+        };
+        textColor = '#FFFFFF';
+        borderColor = '#FA5252';
+      } else if (status.checkIn) {
+        dayStyle = {
+          background: 'linear-gradient(135deg, transparent 50%, #C92A2A 50%)',
+          position: 'relative'
+        };
+        borderColor = '#FA5252';
+      } else if (status.checkOut) {
+        dayStyle = {
+          background: 'linear-gradient(135deg, #C92A2A 0%, #C92A2A 50%, transparent 50%)',
+          position: 'relative'
+        };
+        borderColor = '#FA5252';
+      } else {
+        backgroundColor = '#C92A2A';
+        textColor = '#FFFFFF';
+        borderColor = '#FA5252';
+      }
+    }
+
+    return (
+      <Box
+        key={dateStr}
+        style={{
+          aspectRatio: '1',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          border: `2px solid ${borderColor}`,
+          borderRadius: '8px',
+          cursor: 'default',
+          backgroundColor,
+          minHeight: isMobile ? '45px' : '60px',
+          fontSize: isMobile ? '14px' : '16px',
+          fontWeight: 600,
+          color: textColor,
+          opacity: current ? 1 : 0.4,
+          ...dayStyle
+        }}
+      >
+        {day.date()}
+      </Box>
+    );
+  };
+
+  const CalendarLegend = () => (
+    <Paper p="md" radius="md" withBorder>
+      <Stack gap="sm">
+        <Text size="sm" fw={600}>{t('calendarManager.legend')}</Text>
+        <SimpleGrid cols={{ base: 2, xs: 3, sm: 5 }} spacing="xs">
+          <Group gap={8}>
+            <Box
+              w={24}
+              h={24}
+              style={{
+                border: '2px solid #228BE6',
+                borderRadius: '4px',
+                backgroundColor: 'transparent'
+              }}
+            />
+            <Text size="xs">{t('calendarManager.today')}</Text>
+          </Group>
+          
+          <Group gap={8}>
+            <Box
+              w={24}
+              h={24}
+              style={{
+                backgroundColor: '#C92A2A',
+                borderRadius: '4px',
+                border: '2px solid #FA5252'
+              }}
+            />
+            <Text size="xs">{t('calendarManager.occupied')}</Text>
+          </Group>
+          
+          <Group gap={8}>
+            <Box
+              w={24}
+              h={24}
+              style={{
+                background: 'linear-gradient(135deg, transparent 50%, #C92A2A 50%)',
+                borderRadius: '4px',
+                border: '2px solid #FA5252'
+              }}
+            />
+            <Text size="xs">{t('calendarManager.checkIn')}</Text>
+          </Group>
+          
+          <Group gap={8}>
+            <Box
+              w={24}
+              h={24}
+              style={{
+                background: 'linear-gradient(135deg, #C92A2A 0%, #C92A2A 50%, transparent 50%)',
+                borderRadius: '4px',
+                border: '2px solid #FA5252'
+              }}
+            />
+            <Text size="xs">{t('calendarManager.checkOut')}</Text>
+          </Group>
+          
+          <Group gap={8}>
+            <Box
+              w={24}
+              h={24}
+              style={{
+                background: 'linear-gradient(135deg, #C92A2A 0%, #C92A2A 50%, #862E9C 50%, #862E9C 100%)',
+                borderRadius: '4px',
+                border: '2px solid #FA5252'
+              }}
+            />
+            <Text size="xs">{t('calendarManager.checkInOut')}</Text>
+          </Group>
+        </SimpleGrid>
+      </Stack>
+    </Paper>
+  );
 
   return (
     <Modal
-      title={t('calendarManager.calendarModalTitle')}
-      open={visible}
-      onCancel={onClose}
-      footer={null}
-      width={800}
-      className="calendar-modal"
+      opened={visible}
+      onClose={onClose}
+      title={
+        <Group gap="sm">
+          <ThemeIcon size="lg" radius="md" variant="gradient" gradient={{ from: 'violet', to: 'grape' }}>
+            <IconCalendar size={20} />
+          </ThemeIcon>
+          <Text fw={600} size="lg">{t('calendarManager.calendarModalTitle')}</Text>
+        </Group>
+      }
+      size={isMobile ? 'full' : 'xl'}
+      centered
     >
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <Spin size="large" />
-        </div>
+        <Center p={80}>
+          <Stack align="center" gap="md">
+            <Loader size="lg" />
+            <Text c="dimmed">{t('common.loading')}</Text>
+          </Stack>
+        </Center>
       ) : (
-        <>
+        <Stack gap="lg">
           {!hasCalendarData && (
-            <Alert
-              message={t('calendarManager.noCalendarData')}
-              description={t('calendarManager.noCalendarDataDesc')}
-              type="info"
-              showIcon
-              style={{ marginBottom: 16 }}
-            />
+            <Alert icon={<IconInfoCircle size={18} />} color="blue" variant="light">
+              <Stack gap={4}>
+                <Text size="sm" fw={500}>{t('calendarManager.noCalendarData')}</Text>
+                <Text size="xs" c="dimmed">{t('calendarManager.noCalendarDataDesc')}</Text>
+              </Stack>
+            </Alert>
           )}
 
-          <div style={{ 
-            marginBottom: 16, 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between',
-            padding: '12px 0'
-          }}>
-            <Button
-              type="text"
-              icon={<LeftOutlined />}
-              onClick={goToPreviousMonth}
-              size="large"
-            />
-            <div style={{ 
-              fontSize: 18, 
-              fontWeight: 600,
-              textAlign: 'center',
-              flex: 1
-            }}>
-              {getCurrentMonthName()}
-            </div>
-            <Button
-              type="text"
-              icon={<RightOutlined />}
-              onClick={goToNextMonth}
-              size="large"
-            />
-          </div>
+          {/* Навигация по месяцам */}
+          <Group justify="space-between" wrap="wrap">
+            <Group gap="xs">
+              <ActionIcon
+                variant="light"
+                color="violet"
+                onClick={goToPreviousMonth}
+                size="lg"
+              >
+                <IconChevronLeft size={20} />
+              </ActionIcon>
+              <Text fw={600} size="lg" style={{ minWidth: isMobile ? '140px' : '180px', textAlign: 'center' }}>
+                {getCurrentMonthName()}
+              </Text>
+              <ActionIcon
+                variant="light"
+                color="violet"
+                onClick={goToNextMonth}
+                size="lg"
+              >
+                <IconChevronRight size={20} />
+              </ActionIcon>
+            </Group>
 
-          <div className="modal-calendar-container">
-            <div className="modal-calendar">
-              <div className="modal-calendar-header">
-                {weekDays.map(day => (
-                  <div key={day} className="modal-calendar-weekday">
+            <Button
+              variant="light"
+              color="gray"
+              size="sm"
+              onClick={goToToday}
+            >
+              {t('calendarManager.today')}
+            </Button>
+          </Group>
+
+          {/* Сетка календаря */}
+          <Box>
+            {/* Дни недели */}
+            <SimpleGrid cols={7} spacing={2} mb="xs">
+              {weekDays.map((day) => (
+                <Center key={day}>
+                  <Text size="sm" fw={700} c="dimmed" tt="uppercase">
                     {day}
-                  </div>
-                ))}
-              </div>
+                  </Text>
+                </Center>
+              ))}
+            </SimpleGrid>
 
-              <div className="modal-calendar-body">
-                {calendar.map((week, weekIndex) => (
-                  <div key={weekIndex} className="modal-calendar-week">
-                    {week.map((day) => {
-                      const status = getDateStatus(day);
-                      const current = isCurrentMonth(day);
-                      const today = day.isSame(dayjs(), 'day');
+            {/* Дни месяца */}
+            <Stack gap={2}>
+              {calendar.map((week, weekIndex) => (
+                <SimpleGrid key={weekIndex} cols={7} spacing={2}>
+                  {week.map((day) => renderCalendarDay(day))}
+                </SimpleGrid>
+              ))}
+            </Stack>
+          </Box>
 
-                      return (
-                        <div
-                          key={day.format('YYYY-MM-DD')}
-                          className={`
-                            modal-calendar-day
-                            ${!current ? 'other-month' : ''}
-                            ${today ? 'today' : ''}
-                            ${status.blocked ? 'blocked' : ''}
-                            ${status.checkIn && status.checkOut ? 'both-checks' : ''}
-                            ${status.checkIn && !status.checkOut ? 'check-in' : ''}
-                            ${!status.checkIn && status.checkOut ? 'check-out' : ''}
-                          `}
-                        >
-                          <span className="modal-day-number">{day.date()}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          {/* Легенда */}
+          <CalendarLegend />
 
-          <div className="modal-calendar-legend">
-            <div className="modal-legend-item">
-              <div className="modal-legend-square today-square" />
-              <span>{t('calendarManager.today')}</span>
-            </div>
-            <div className="modal-legend-item">
-              <div className="modal-legend-square blocked-square" />
-              <span>{t('calendarManager.occupied')}</span>
-            </div>
-            <div className="modal-legend-item">
-              <div className="modal-legend-square checkin-square" />
-              <span>{t('calendarManager.checkIn')}</span>
-            </div>
-            <div className="modal-legend-item">
-              <div className="modal-legend-square checkout-square" />
-              <span>{t('calendarManager.checkOut')}</span>
-            </div>
-            <div className="modal-legend-item">
-              <div className="modal-legend-square both-square" />
-              <span>{t('calendarManager.checkInOut')}</span>
-            </div>
-          </div>
-        </>
+          {/* Кнопка закрытия */}
+          <Group justify="flex-end">
+            <Button variant="light" onClick={onClose}>
+              {t('common.close')}
+            </Button>
+          </Group>
+        </Stack>
       )}
     </Modal>
   );

@@ -1,40 +1,62 @@
 // frontend/src/modules/Properties/components/PhotosUploader.tsx
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  Card, 
-  Button, 
-  Space, 
-  Popconfirm, 
-  message, 
-  Progress, 
+  Card,
+  Stack,
+  Group,
+  Button,
+  Text,
+  Progress,
   Badge,
   Modal,
-  Input,
-  Tag,
-  Collapse,
+  NumberInput,
+  Paper,
+  ActionIcon,
+  ThemeIcon,
   Tooltip,
-  Checkbox
-} from 'antd';
+  Checkbox,
+  Alert,
+  Box,
+  SimpleGrid,
+  Image,
+  Divider,
+  Center,
+  FileButton,
+  Collapse
+} from '@mantine/core';
 import {
-  UploadOutlined,
-  DeleteOutlined,
-  StarOutlined,
-  StarFilled,
-  ArrowRightOutlined,
-  PlusOutlined,
-  MinusOutlined,
-  PictureOutlined,
-  NumberOutlined,
-  DownloadOutlined,
-  CheckSquareOutlined,
-  CloseSquareOutlined
-} from '@ant-design/icons';
+  IconUpload,
+  IconTrash,
+  IconStar,
+  IconStarFilled,
+  IconArrowRight,
+  IconPlus,
+  IconMinus,
+  IconPhoto,
+  IconHash,
+  IconDownload,
+  IconCheckbox,
+  IconSquare,
+  IconBed,
+  IconBath,
+  IconToolsKitchen2,
+  IconArmchair,
+  IconHome,
+  IconSwimming,
+  IconEye,
+  IconChevronDown,
+  IconChevronUp,
+  IconInfoCircle,
+  IconX,
+  IconCheck,
+  IconAlertCircle
+} from '@tabler/icons-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
+import { notifications } from '@mantine/notifications';
+import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { propertiesApi } from '@/api/properties.api';
 import { saveAs } from 'file-saver';
-
-const { Panel } = Collapse;
 
 interface Photo {
   id: number;
@@ -52,20 +74,20 @@ interface PhotosUploaderProps {
   viewMode?: boolean;
 }
 
-const CategoryIcons: { [key: string]: React.ReactNode } = {
-  general: <PictureOutlined />,
-  bedroom: '🛏️',
-  bathroom: '🚿',
-  kitchen: '🍳',
-  living: '🛋️',
-  exterior: '🏠',
-  pool: '🏊',
-  view: '👁️'
+const CategoryIcons: { [key: string]: any } = {
+  general: IconPhoto,
+  bedroom: IconBed,
+  bathroom: IconBath,
+  kitchen: IconToolsKitchen2,
+  living: IconArmchair,
+  exterior: IconHome,
+  pool: IconSwimming,
+  view: IconEye
 };
 
 const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdate, viewMode = false }: PhotosUploaderProps) => {
   const { t } = useTranslation();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -74,11 +96,22 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
   const [tempPhotos, setTempPhotos] = useState<Array<{ file: File; category: string; preview: string }>>([]);
   const isCreatingMode = propertyId === 0;
   const [bedroomCount, setBedroomCount] = useState(initialBedrooms || 1);
-  const [movingPhotoId, setMovingPhotoId] = useState<number | null>(null);
-  const [positionChangePhotoId, setPositionChangePhotoId] = useState<number | null>(null);
-  const [newPosition, setNewPosition] = useState('');
-  const [activeCategories, setActiveCategories] = useState<string[]>(['general']);
   
+  const [movingPhotoId, setMovingPhotoId] = useState<number | null>(null);
+  const [moveModalOpened, { open: openMoveModal, close: closeMoveModal }] = useDisclosure(false);
+  
+  const [positionChangePhotoId, setPositionChangePhotoId] = useState<number | null>(null);
+  const [positionModalOpened, { open: openPositionModal, close: closePositionModal }] = useDisclosure(false);
+  const [newPosition, setNewPosition] = useState<number | string>('');
+  
+  // Модальные окна для удаления
+  const [deletePhotoId, setDeletePhotoId] = useState<number | null>(null);
+  const [deleteModalOpened, { open: openDeleteModal, close: closeDeleteModal }] = useDisclosure(false);
+  
+  const [deleteSelectedModalOpened, { open: openDeleteSelectedModal, close: closeDeleteSelectedModal }] = useDisclosure(false);
+  const [deletingSelected, setDeletingSelected] = useState(false);
+  
+  const [activeCategories, setActiveCategories] = useState<string[]>(['general']);
   const [selectedPhotos, setSelectedPhotos] = useState<Set<number>>(new Set());
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [downloadingSelected, setDownloadingSelected] = useState(false);
@@ -88,23 +121,24 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
   }, [photos]);
 
   const baseCategories = [
-    { value: 'general', label: t('photosUploader.categories.general') },
-    { value: 'bedroom', label: t('photosUploader.categories.bedroom') },
-    { value: 'bathroom', label: t('photosUploader.categories.bathroom') },
-    { value: 'kitchen', label: t('photosUploader.categories.kitchen') },
-    { value: 'living', label: t('photosUploader.categories.living') },
-    { value: 'exterior', label: t('photosUploader.categories.exterior') },
-    { value: 'pool', label: t('photosUploader.categories.pool') },
-    { value: 'view', label: t('photosUploader.categories.view') }
+    { value: 'general', label: t('photosUploader.categories.general'), color: 'blue' },
+    { value: 'bedroom', label: t('photosUploader.categories.bedroom'), color: 'violet' },
+    { value: 'bathroom', label: t('photosUploader.categories.bathroom'), color: 'cyan' },
+    { value: 'kitchen', label: t('photosUploader.categories.kitchen'), color: 'orange' },
+    { value: 'living', label: t('photosUploader.categories.living'), color: 'grape' },
+    { value: 'exterior', label: t('photosUploader.categories.exterior'), color: 'green' },
+    { value: 'pool', label: t('photosUploader.categories.pool'), color: 'teal' },
+    { value: 'view', label: t('photosUploader.categories.view'), color: 'indigo' }
   ];
 
   const generateCategories = () => {
-    const cats: Array<{ value: string; label: string; isSubcategory?: boolean }> = [...baseCategories];
+    const cats: Array<{ value: string; label: string; color: string; isSubcategory?: boolean }> = [...baseCategories];
     
     for (let i = 1; i <= bedroomCount; i++) {
       cats.push({
         value: `bedroom-${i}`,
         label: t('photosUploader.bedroomNumber', { number: i }),
+        color: 'violet',
         isSubcategory: true
       });
     }
@@ -128,14 +162,19 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
 
   const getCategoryIcon = (category: string) => {
     if (category.startsWith('bedroom-')) {
-      return '🛏️';
+      return IconBed;
     }
-    return CategoryIcons[category] || <PictureOutlined />;
+    return CategoryIcons[category] || IconPhoto;
   };
 
   const handleAddBedroom = () => {
     setBedroomCount(prev => prev + 1);
-    message.success(t('photosUploader.bedroomAdded', { number: bedroomCount + 1 }));
+    notifications.show({
+      title: t('common.success'),
+      message: t('photosUploader.bedroomAdded', { number: bedroomCount + 1 }),
+      color: 'green',
+      icon: <IconCheck size={18} />
+    });
   };
 
   const handleRemoveBedroom = (bedroomNumber: number) => {
@@ -143,16 +182,11 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
     const bedroomPhotos = groupedPhotos[category] || [];
 
     if (bedroomPhotos.length > 0) {
-      Modal.confirm({
-        title: t('photosUploader.removeBedroom'),
-        content: t('photosUploader.removeBedroomConfirm', { 
-          number: bedroomNumber, 
-          count: bedroomPhotos.length 
-        }),
-        okText: t('common.delete'),
-        okType: 'danger',
-        cancelText: t('common.cancel'),
-        onOk: async () => {
+      if (window.confirm(t('photosUploader.removeBedroomConfirm', { 
+        number: bedroomNumber, 
+        count: bedroomPhotos.length 
+      }))) {
+        (async () => {
           if (!isCreatingMode) {
             for (const photo of bedroomPhotos) {
               try {
@@ -166,32 +200,51 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
           if (!isCreatingMode) {
             onUpdate();
           }
-          message.success(t('photosUploader.bedroomRemoved', { number: bedroomNumber }));
-        }
-      });
+          notifications.show({
+            title: t('common.success'),
+            message: t('photosUploader.bedroomRemoved', { number: bedroomNumber }),
+            color: 'green',
+            icon: <IconCheck size={18} />
+          });
+        })();
+      }
     } else {
       setBedroomCount(prev => Math.max(1, prev - 1));
-      message.success(t('photosUploader.bedroomRemoved', { number: bedroomNumber }));
+      notifications.show({
+        title: t('common.success'),
+        message: t('photosUploader.bedroomRemoved', { number: bedroomNumber }),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
     }
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+  const handleFileSelect = async (files: File[]) => {
     if (files.length === 0) return;
 
     const oversizedFiles = files.filter(file => file.size > 5000 * 1024 * 1024);
     if (oversizedFiles.length > 0) {
-      message.error(t('photosUploader.filesExceedSize', { 
-        files: oversizedFiles.map(f => f.name).join(', ') 
-      }));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('photosUploader.filesExceedSize', { 
+          files: oversizedFiles.map(f => f.name).join(', ') 
+        }),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
       return;
     }
 
     const invalidFiles = files.filter(file => !file.type.startsWith('image/'));
     if (invalidFiles.length > 0) {
-      message.error(t('photosUploader.filesNotImages', { 
-        files: invalidFiles.map(f => f.name).join(', ') 
-      }));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('photosUploader.filesNotImages', { 
+          files: invalidFiles.map(f => f.name).join(', ') 
+        }),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
       return;
     }
 
@@ -213,9 +266,13 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
       );
 
       setTempPhotos([...tempPhotos, ...newTempPhotos]);
-      message.success(t('photosUploader.photosAddedTemp', { count: files.length }));
+      notifications.show({
+        title: t('common.success'),
+        message: t('photosUploader.photosAddedTemp', { count: files.length }),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
       setSelectedCategory('general');
-      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
@@ -233,43 +290,108 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
         setUploadProgress(progress);
       });
     
-      message.success(t('photosUploader.photosUploaded', { count: files.length }));
+      notifications.show({
+        title: t('common.success'),
+        message: t('photosUploader.photosUploaded', { count: files.length }),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
       onUpdate();
       setSelectedCategory('general');
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('photosUploader.errorUploading'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('photosUploader.errorUploading'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     } finally {
       setUploading(false);
       setUploadProgress(0);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   const handleDeleteTempPhoto = (index: number) => {
     setTempPhotos(tempPhotos.filter((_, i) => i !== index));
-    message.success(t('photosUploader.photoDeleted'));
+    notifications.show({
+      title: t('common.success'),
+      message: t('photosUploader.photoDeleted'),
+      color: 'green',
+      icon: <IconCheck size={18} />
+    });
   };
 
-  const handleDeletePhoto = async (photoId: number) => {
+  const handleDeletePhotoConfirm = async () => {
+    if (!deletePhotoId) return;
+    
     const oldPhotos = [...localPhotos];
-    setLocalPhotos(localPhotos.filter(p => p.id !== photoId));
+    setLocalPhotos(localPhotos.filter(p => p.id !== deletePhotoId));
+    closeDeleteModal();
 
     try {
-      await propertiesApi.deletePhoto(propertyId, photoId);
-      message.success(t('photosUploader.photoDeleted'));
+      await propertiesApi.deletePhoto(propertyId, deletePhotoId);
+      notifications.show({
+        title: t('common.success'),
+        message: t('photosUploader.photoDeleted'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
       onUpdate();
       setSelectedPhotos(prev => {
         const newSet = new Set(prev);
-        newSet.delete(photoId);
+        newSet.delete(deletePhotoId);
         return newSet;
       });
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('photosUploader.errorDeleting'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('photosUploader.errorDeleting'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
       setLocalPhotos(oldPhotos);
+    } finally {
+      setDeletePhotoId(null);
     }
   };
 
-  const handleSetPrimary = async (photoId: number) => {
+  const handleDeleteSelectedConfirm = async () => {
+    if (selectedPhotos.size === 0) return;
+
+    const photosToDelete = Array.from(selectedPhotos);
+    const oldPhotos = [...localPhotos];
+    
+    setLocalPhotos(localPhotos.filter(p => !selectedPhotos.has(p.id)));
+    closeDeleteSelectedModal();
+    setDeletingSelected(true);
+
+    try {
+      await Promise.all(
+        photosToDelete.map(photoId => propertiesApi.deletePhoto(propertyId, photoId))
+      );
+      
+      notifications.show({
+        title: t('common.success'),
+        message: t('photosUploader.photosDeleted', { count: photosToDelete.length }),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
+      
+      setSelectedPhotos(new Set());
+      onUpdate();
+    } catch (error: any) {
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('photosUploader.errorDeleting'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
+      setLocalPhotos(oldPhotos);
+    } finally {
+      setDeletingSelected(false);
+    }
+  };
+const handleSetPrimary = async (photoId: number) => {
     const oldPhotos = [...localPhotos];
     setLocalPhotos(localPhotos.map(p => ({
       ...p,
@@ -278,10 +400,20 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
 
     try {
       await propertiesApi.setPrimaryPhoto(propertyId, photoId);
-      message.success(t('photosUploader.primaryPhotoSet'));
+      notifications.show({
+        title: t('common.success'),
+        message: t('photosUploader.primaryPhotoSet'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
       onUpdate();
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('photosUploader.error'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('photosUploader.error'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
       setLocalPhotos(oldPhotos);
     }
   };
@@ -306,6 +438,7 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
       photosToMove.includes(p.id) ? { ...p, category: newCategory } : p
     ));
 
+    closeMoveModal();
     setMovingPhotoId(null);
 
     try {
@@ -318,29 +451,49 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
       await propertiesApi.updatePhotosOrder(propertyId, updates);
       
       if (photosToMove.length > 1) {
-        message.success(t('photosUploader.photosMoved', { count: photosToMove.length }));
+        notifications.show({
+          title: t('common.success'),
+          message: t('photosUploader.photosMoved', { count: photosToMove.length }),
+          color: 'green',
+          icon: <IconCheck size={18} />
+        });
         setSelectedPhotos(new Set());
       } else {
-        message.success(t('photosUploader.photoMoved'));
+        notifications.show({
+          title: t('common.success'),
+          message: t('photosUploader.photoMoved'),
+          color: 'green',
+          icon: <IconCheck size={18} />
+        });
       }
       
       onUpdate();
     } catch (error) {
       console.error('Failed to move photo:', error);
-      message.error(t('photosUploader.errorMoving'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('photosUploader.errorMoving'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
       setLocalPhotos(oldPhotos);
     }
   };
 
   const handleChangePosition = async () => {
-    const position = parseInt(newPosition);
+    const position = typeof newPosition === 'number' ? newPosition : parseInt(String(newPosition));
     const photo = localPhotos.find(p => p.id === positionChangePhotoId);
     if (!photo) return;
 
     const categoryPhotos = groupedPhotos[photo.category || 'general'];
 
     if (isNaN(position) || position < 1 || position > categoryPhotos.length) {
-      message.error(t('photosUploader.positionRange', { max: categoryPhotos.length }));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('photosUploader.positionRange', { max: categoryPhotos.length }),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
       return;
     }
 
@@ -369,12 +522,23 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
       }));
 
       await propertiesApi.updatePhotosOrder(propertyId, photosToUpdate);
-      message.success(t('photosUploader.positionChanged'));
+      notifications.show({
+        title: t('common.success'),
+        message: t('photosUploader.positionChanged'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
+      closePositionModal();
       setPositionChangePhotoId(null);
       setNewPosition('');
     } catch (error) {
       console.error('Failed to change position:', error);
-      message.error(t('photosUploader.errorChangingPosition'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('photosUploader.errorChangingPosition'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     }
   };
 
@@ -409,11 +573,21 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
         }];
       
         await propertiesApi.updatePhotosOrder(propertyId, updates);
-        message.success(t('photosUploader.photoMoved'));
+        notifications.show({
+          title: t('common.success'),
+          message: t('photosUploader.photoMoved'),
+          color: 'green',
+          icon: <IconCheck size={18} />
+        });
         onUpdate();
       } catch (error) {
         console.error('Failed to move photo:', error);
-        message.error(t('photosUploader.errorMoving'));
+        notifications.show({
+          title: t('errors.generic'),
+          message: t('photosUploader.errorMoving'),
+          color: 'red',
+          icon: <IconX size={18} />
+        });
         setLocalPhotos(oldPhotos);
       }
     } else {
@@ -443,7 +617,12 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
         await propertiesApi.updatePhotosOrder(propertyId, photosToUpdate);
       } catch (error) {
         console.error('Failed to reorder photos:', error);
-        message.error(t('photosUploader.errorReordering'));
+        notifications.show({
+          title: t('errors.generic'),
+          message: t('photosUploader.errorReordering'),
+          color: 'red',
+          icon: <IconX size={18} />
+        });
         setLocalPhotos(oldPhotos);
       }
     }
@@ -471,7 +650,12 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
 
   const handleDownloadSelected = async () => {
     if (selectedPhotos.size === 0) {
-      message.warning(t('photosUploader.selectPhotosToDownload'));
+      notifications.show({
+        title: t('photosUploader.selectPhotosToDownload'),
+        message: '',
+        color: 'orange',
+        icon: <IconAlertCircle size={18} />
+      });
       return;
     }
 
@@ -487,10 +671,20 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
       const blob = new Blob([response.data]);
       saveAs(blob, filename);
       
-      message.success(t('photosUploader.photosDownloaded', { count: photoIds.length }));
+      notifications.show({
+        title: t('common.success'),
+        message: t('photosUploader.photosDownloaded', { count: photoIds.length }),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
     } catch (error) {
       console.error('Download error:', error);
-      message.error(t('photosUploader.errorDownloading'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('photosUploader.errorDownloading'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     } finally {
       setDownloadingSelected(false);
     }
@@ -498,7 +692,12 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
 
   const handleDownloadAll = async () => {
     if (localPhotos.length === 0) {
-      message.warning(t('photosUploader.noPhotosToDownload'));
+      notifications.show({
+        title: t('photosUploader.noPhotosToDownload'),
+        message: '',
+        color: 'orange',
+        icon: <IconAlertCircle size={18} />
+      });
       return;
     }
 
@@ -513,536 +712,699 @@ const PhotosUploader = ({ propertyId, photos, bedrooms: initialBedrooms, onUpdat
       const blob = new Blob([response.data]);
       saveAs(blob, filename);
       
-      message.success(t('photosUploader.photosDownloaded', { count: localPhotos.length }));
+      notifications.show({
+        title: t('common.success'),
+        message: t('photosUploader.photosDownloaded', { count: localPhotos.length }),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
     } catch (error) {
       console.error('Download error:', error);
-      message.error(t('photosUploader.errorDownloading'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('photosUploader.errorDownloading'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     } finally {
       setDownloadingAll(false);
     }
   };
-
-  return (
-    <Card>
+return (
+    <Stack gap="lg">
+      {/* Selection and Download Panel */}
       {!isCreatingMode && localPhotos.length > 0 && (
-        <Card
-          type="inner"
-          size="small"
-          style={{ marginBottom: 16, background: '#1a1a1a' }}
-        >
-          <Space wrap style={{ width: '100%', justifyContent: 'space-between' }}>
-            <Space wrap>
-              <Button
-                size="small"
-                icon={<CheckSquareOutlined />}
-                onClick={handleSelectAll}
-                disabled={false}
-              >
-                {t('photosUploader.selectAll', { count: localPhotos.length })}
-              </Button>
-              <Button
-                size="small"
-                icon={<CloseSquareOutlined />}
-                onClick={handleDeselectAll}
-                disabled={selectedPhotos.size === 0 ? true : false}
-              >
-                {t('photosUploader.deselectAll')}
-              </Button>
-              {selectedPhotos.size > 0 && (
-                <Tag color="blue">{t('photosUploader.selected', { count: selectedPhotos.size })}</Tag>
-              )}
-            </Space>
-            <Space wrap>
-              <Button
-                type="primary"
-                size="small"
-                icon={<DownloadOutlined />}
-                onClick={handleDownloadSelected}
-                loading={downloadingSelected}
-                disabled={selectedPhotos.size === 0 ? true : false}
-              >
-                {t('photosUploader.downloadSelected', { count: selectedPhotos.size })}
-              </Button>
-              <Button
-                size="small"
-                icon={<DownloadOutlined />}
-                onClick={handleDownloadAll}
-                loading={downloadingAll}
-                disabled={false}
-              >
-                {t('photosUploader.downloadAll', { count: localPhotos.length })}
-              </Button>
-            </Space>
-          </Space>
-        </Card>
+        <Paper p="md" radius="md" withBorder bg="dark.6">
+          <Stack gap="md">
+            <Group justify="space-between" wrap="wrap" gap="md">
+              <Group wrap="wrap">
+                <Button
+                  size="sm"
+                  variant="light"
+                  leftSection={<IconCheckbox size={16} />}
+                  onClick={handleSelectAll}
+                >
+                  {t('photosUploader.selectAll', { count: localPhotos.length })}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="subtle"
+                  leftSection={<IconSquare size={16} />}
+                  onClick={handleDeselectAll}
+                  disabled={selectedPhotos.size === 0}
+                >
+                  {t('photosUploader.deselectAll')}
+                </Button>
+                {selectedPhotos.size > 0 && (
+                  <Badge size="lg" variant="filled" color="blue">
+                    {t('photosUploader.selected', { count: selectedPhotos.size })}
+                  </Badge>
+                )}
+              </Group>
+              <Group wrap="wrap">
+                <Button
+                  size="sm"
+                  variant="filled"
+                  leftSection={<IconDownload size={16} />}
+                  onClick={handleDownloadSelected}
+                  loading={downloadingSelected}
+                  disabled={selectedPhotos.size === 0}
+                >
+                  {isMobile ? t('photosUploader.download') : t('photosUploader.downloadSelected', { count: selectedPhotos.size })}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="light"
+                  leftSection={<IconDownload size={16} />}
+                  onClick={handleDownloadAll}
+                  loading={downloadingAll}
+                >
+                  {isMobile ? t('common.all') : t('photosUploader.downloadAll', { count: localPhotos.length })}
+                </Button>
+              </Group>
+            </Group>
+
+            {/* Массовые действия */}
+            {selectedPhotos.size > 0 && (
+              <>
+                <Divider />
+                <Group wrap="wrap">
+                  <Button
+                    size="sm"
+                    variant="light"
+                    color="blue"
+                    leftSection={<IconArrowRight size={16} />}
+                    onClick={() => {
+                      const firstSelectedId = Array.from(selectedPhotos)[0];
+                      setMovingPhotoId(firstSelectedId);
+                      openMoveModal();
+                    }}
+                  >
+                    {t('photosUploader.changeCategory')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="light"
+                    color="red"
+                    leftSection={<IconTrash size={16} />}
+                    onClick={openDeleteSelectedModal}
+                    loading={deletingSelected}
+                  >
+                    {t('photosUploader.deleteSelected', { count: selectedPhotos.size })}
+                  </Button>
+                </Group>
+              </>
+            )}
+          </Stack>
+        </Paper>
       )}
 
+      {/* Upload Section */}
       {!viewMode && (
-        <Card
-          type="inner"
-          title={
-            <Space>
-              <UploadOutlined />
-              <span>{t('photosUploader.uploadingPhotos')}</span>
-            </Space>
-          }
-          style={{ marginBottom: 24 }}
-        >
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 500 }}>{t('photosUploader.selectCategory')}</span>
-              {selectedCategory.startsWith('bedroom-') && (
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="lg">
+            <Group>
+              <ThemeIcon size="lg" radius="md" variant="light" color="blue">
+                <IconUpload size={20} />
+              </ThemeIcon>
+              <div>
+                <Text fw={600} size="lg">
+                  {t('photosUploader.uploadingPhotos')}
+                </Text>
+                <Text size="sm" c="dimmed">
+                  {isCreatingMode 
+                    ? t('photosUploader.uploadInfoCreating')
+                    : t('photosUploader.uploadInfo')
+                  }
+                </Text>
+              </div>
+            </Group>
+
+            <Divider />
+
+            {/* Category Selection */}
+            <Stack gap="md">
+              <Group justify="space-between">
+                <Text fw={500}>{t('photosUploader.selectCategory')}</Text>
+                {selectedCategory.startsWith('bedroom-') && (
+                  <Button
+                    size="xs"
+                    variant="light"
+                    leftSection={<IconPlus size={14} />}
+                    onClick={handleAddBedroom}
+                  >
+                    {t('photosUploader.addBedroom')}
+                  </Button>
+                )}
+              </Group>
+
+              <SimpleGrid cols={{ base: 2, xs: 3, sm: 4, md: 5 }} spacing="xs">
+                {categories.map((cat) => {
+                  const isSelected = selectedCategory === cat.value;
+                  const photoCount = groupedPhotos[cat.value]?.length || 0;
+                  const tempPhotoCount = tempPhotos.filter(p => p.category === cat.value).length;
+                  const totalCount = photoCount + tempPhotoCount;
+                  const Icon = getCategoryIcon(cat.value);
+
+                  return (
+                    <Box key={cat.value} pos="relative">
+                      <Button
+                        variant={isSelected ? 'filled' : 'light'}
+                        color={cat.color}
+                        onClick={() => setSelectedCategory(cat.value)}
+                        fullWidth
+                        styles={{
+                          root: {
+                            height: 'auto',
+                            padding: isMobile ? '8px 4px' : '12px 8px'
+                          },
+                          inner: {
+                            flexDirection: 'column',
+                            gap: 4
+                          }
+                        }}
+                      >
+                        <Icon size={isMobile ? 18 : 24} />
+                        <Text size={isMobile ? 'xs' : 'sm'} ta="center" lineClamp={1}>
+                          {cat.label}
+                        </Text>
+                        {totalCount > 0 && (
+                          <Badge size="sm" variant="filled" color={cat.color}>
+                            {totalCount}
+                          </Badge>
+                        )}
+                      </Button>
+
+                      {cat.value.startsWith('bedroom-') && totalCount === 0 && bedroomCount > 1 && (
+                        <Tooltip label={t('photosUploader.removeBedroom')}>
+                          <ActionIcon
+                            color="red"
+                            variant="filled"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveBedroom(parseInt(cat.value.split('-')[1]));
+                            }}
+                            style={{
+                              position: 'absolute',
+                              top: -6,
+                              right: -6,
+                              zIndex: 1
+                            }}
+                          >
+                            <IconMinus size={14} />
+                          </ActionIcon>
+                        </Tooltip>
+                      )}
+                    </Box>
+                  );
+                })}
+              </SimpleGrid>
+            </Stack>
+
+            {/* Upload Button */}
+            <FileButton onChange={handleFileSelect} accept="image/*" multiple>
+              {(props) => (
                 <Button
-                  type="primary"
-                  size="small"
-                  icon={<PlusOutlined />}
-                  onClick={handleAddBedroom}
+                  {...props}
+                  size="lg"
+                  variant="gradient"
+                  gradient={{ from: 'blue', to: 'cyan', deg: 90 }}
+                  leftSection={<IconUpload size={20} />}
+                  disabled={uploading}
+                  fullWidth
                 >
-                  {t('photosUploader.addBedroom')}
+                  {uploading 
+                    ? t('photosUploader.uploadingProgress', { percent: uploadProgress }) 
+                    : t('photosUploader.selectFiles')
+                  }
                 </Button>
               )}
-            </div>
+            </FileButton>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
-              {categories.map((cat) => {
-                const isSelected = selectedCategory === cat.value;
-                const photoCount = groupedPhotos[cat.value]?.length || 0;
-                const tempPhotoCount = tempPhotos.filter(p => p.category === cat.value).length;
-                const totalCount = photoCount + tempPhotoCount;
-
-                return (
-                  <div key={cat.value} style={{ position: 'relative' }}>
-                    <Button
-                      type={isSelected ? 'primary' : 'default'}
-                      onClick={() => setSelectedCategory(cat.value)}
-                      style={{ 
-                        width: '100%', 
-                        height: 'auto', 
-                        padding: '12px 8px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: 4
-                      }}
-                    >
-                      <span style={{ fontSize: 20 }}>{getCategoryIcon(cat.value)}</span>
-                      <span style={{ fontSize: 12, textAlign: 'center' }}>{cat.label}</span>
-                      <Badge count={totalCount} style={{ fontSize: 10 }} />
-                    </Button>
-
-                    {cat.value.startsWith('bedroom-') && totalCount === 0 && bedroomCount > 1 && (
-                      <Tooltip title={t('photosUploader.removeBedroom')}>
-                        <Button
-                          type="text"
-                          danger
-                          size="small"
-                          icon={<MinusOutlined />}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveBedroom(parseInt(cat.value.split('-')[1]));
-                          }}
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            right: 0,
-                            padding: 2,
-                            minWidth: 20,
-                            height: 20
-                          }}
-                        />
-                      </Tooltip>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*"
-            onChange={handleFileSelect}
-            style={{ display: 'none' }}
-          />
-
-          <Button
-            type="primary"
-            icon={<UploadOutlined />}
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            block
-            size="large"
-          >
-            {uploading ? t('photosUploader.uploadingProgress', { percent: uploadProgress }) : t('photosUploader.selectFiles')}
-          </Button>
-
-          {uploading && (
-            <Progress percent={uploadProgress} status="active" style={{ marginTop: 12 }} />
-          )}
-
-          <div style={{ marginTop: 8, textAlign: 'center', color: '#999', fontSize: 12 }}>
-            {isCreatingMode 
-              ? t('photosUploader.uploadInfoCreating')
-              : t('photosUploader.uploadInfo')
-            }
-          </div>
+            {uploading && (
+              <Progress value={uploadProgress} size="lg" radius="xl" striped animated />
+            )}
+          </Stack>
         </Card>
       )}
 
+      {/* Temporary Photos (Creation Mode) */}
       {isCreatingMode && tempPhotos.length > 0 && (
-        <Card
-          title={
-            <Space>
-              <PictureOutlined />
-              <span>{t('photosUploader.photosForUpload')}</span>
-              <Tag color="blue">{t('photosUploader.photoCount', { count: tempPhotos.length })}</Tag>
-            </Space>
-          }
-          extra={<Tag color="orange">{t('photosUploader.willBeUploadedAfterSave')}</Tag>}
-          style={{ marginBottom: 24 }}
-        >
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-            gap: 16,
-            padding: 16
-          }}>
-            {tempPhotos.map((photo, index) => (
-              <div key={index} style={{ position: 'relative' }}>
-                <img
-                  src={photo.preview}
-                  alt={t('photosUploader.tempPhotoAlt', { index: index })}
-                  style={{
-                    width: '100%',
-                    height: 180,
-                    objectFit: 'cover',
-                    borderRadius: 8,
-                    border: '2px dashed #1890ff'
-                  }}
-                />
-                <Tag
-                  color="blue"
-                  style={{
-                    position: 'absolute',
-                    top: 8,
-                    right: 8,
-                    fontSize: 11
-                  }}
-                >
-                  {categories.find(c => c.value === photo.category)?.label || photo.category}
-                </Tag>
-                <div
-                  style={{
-                    position: 'absolute',
-                    bottom: 8,
-                    left: 8,
-                    background: 'rgba(0, 0, 0, 0.7)',
-                    color: 'white',
-                    padding: '2px 8px',
-                    borderRadius: 4,
-                    fontSize: 12,
-                    fontWeight: 600
-                  }}
-                >
-                  #{index + 1}
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="md">
+            <Group justify="space-between">
+              <Group gap="sm">
+                <ThemeIcon size="lg" radius="md" variant="light" color="orange">
+                  <IconPhoto size={20} />
+                </ThemeIcon>
+                <div>
+                  <Text fw={600}>{t('photosUploader.photosForUpload')}</Text>
+                  <Badge variant="light" color="orange">
+                    {t('photosUploader.willBeUploadedAfterSave')}
+                  </Badge>
                 </div>
-                {!viewMode && (
-                  <Popconfirm
-                    title={t('photosUploader.deletePhoto')}
-                    onConfirm={() => handleDeleteTempPhoto(index)}
-                    okText={t('common.yes')}
-                    cancelText={t('common.no')}
+              </Group>
+              <Badge size="lg" variant="filled" color="blue">
+                {tempPhotos.length}
+              </Badge>
+            </Group>
+
+            <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 5 }} spacing="md">
+              {tempPhotos.map((photo, index) => (
+                <Paper key={index} pos="relative" radius="md" style={{ overflow: 'hidden' }}>
+                  <Image
+                    src={photo.preview}
+                    alt={`Temp ${index + 1}`}
+                    height={180}
+                    fit="cover"
+                    style={{ border: '2px dashed var(--mantine-color-blue-6)' }}
+                  />
+                  
+                  <Badge
+                    variant="filled"
+                    color="blue"
+                    style={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 8
+                    }}
                   >
-                    <Button
-                      type="text"
-                      danger
-                      icon={<DeleteOutlined />}
+                    {categories.find(c => c.value === photo.category)?.label}
+                  </Badge>
+
+                  <Badge
+                    variant="filled"
+                    color="dark"
+                    style={{
+                      position: 'absolute',
+                      bottom: 8,
+                      left: 8
+                    }}
+                  >
+                    #{index + 1}
+                  </Badge>
+
+                  {!viewMode && (
+                    <ActionIcon
+                      color="red"
+                      variant="filled"
+                      onClick={() => handleDeleteTempPhoto(index)}
                       style={{
                         position: 'absolute',
                         bottom: 8,
-                        right: 8,
-                        background: 'rgba(0, 0, 0, 0.7)',
-                        color: '#ff4d4f'
+                        right: 8
                       }}
-                    />
-                  </Popconfirm>
-                )}
-              </div>
-            ))}
-          </div>
+                    >
+                      <IconTrash size={16} />
+                    </ActionIcon>
+                  )}
+                </Paper>
+              ))}
+            </SimpleGrid>
+          </Stack>
         </Card>
       )}
 
+      {/* Empty State */}
       {!isCreatingMode && localPhotos.length === 0 && tempPhotos.length === 0 ? (
-        <Card style={{ textAlign: 'center', padding: 48 }}>
-          <PictureOutlined style={{ fontSize: 64, color: '#ccc' }} />
-          <div style={{ marginTop: 16, fontSize: 16, color: '#999' }}>
-            {t('photosUploader.noPhotos')}
-          </div>
-          <div style={{ marginTop: 8, fontSize: 14, color: '#bbb' }}>
-            {t('photosUploader.uploadPhotosInstruction')}
-          </div>
-        </Card>
+        <Paper shadow="sm" p="xl" radius="md" withBorder>
+          <Center>
+            <Stack align="center" gap="md">
+              <ThemeIcon size={80} radius="xl" variant="light" color="gray">
+                <IconPhoto size={40} />
+              </ThemeIcon>
+              <Text size="lg" c="dimmed" ta="center">
+                {t('photosUploader.noPhotos')}
+              </Text>
+              <Text size="sm" c="dimmed" ta="center">
+                {t('photosUploader.uploadPhotosInstruction')}
+              </Text>
+            </Stack>
+          </Center>
+        </Paper>
       ) : !isCreatingMode && localPhotos.length > 0 && (
+        /* Photos Grid with Drag & Drop */
         <DragDropContext onDragEnd={handleDragEnd}>
-          <Collapse
-            activeKey={activeCategories}
-            onChange={(keys) => setActiveCategories(keys as string[])}
-          >
+          <Stack gap="md">
             {categories
               .filter(cat => groupedPhotos[cat.value])
               .map((category) => {
                 const categoryPhotos = groupedPhotos[category.value];
+                const isOpened = activeCategories.includes(category.value);
+                const Icon = getCategoryIcon(category.value);
 
                 return (
-                  <Panel
-                    header={
-                      <Space>
-                        <span style={{ fontSize: 20 }}>{getCategoryIcon(category.value)}</span>
-                        <span style={{ fontWeight: 600 }}>{category.label}</span>
-                        <Badge count={categoryPhotos.length} />
-                      </Space>
-                    }
-                    key={category.value}
-                  >
-                    <Droppable droppableId={category.value} direction="horizontal" isDropDisabled={viewMode}>
-                      {(provided, snapshot) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.droppableProps}
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-                            gap: 16,
-                            padding: 16,
-                            backgroundColor: snapshot.isDraggingOver ? '#f0f5ff' : 'transparent',
-                            border: snapshot.isDraggingOver ? '2px dashed #1890ff' : 'none',
-                            borderRadius: 8,
-                            minHeight: 100
-                          }}
-                        >
-                          {categoryPhotos.map((photo, index) => (
-                            <Draggable
-                              key={photo.id}
-                              draggableId={String(photo.id)}
-                              index={index}
-                              isDragDisabled={viewMode}
-                            >
-                              {(provided, snapshot) => (
-                                <div
-                                  ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  {...provided.dragHandleProps}
-                                  style={{
-                                    ...provided.draggableProps.style,
-                                    opacity: snapshot.isDragging ? 0.5 : 1,
-                                    position: 'relative'
-                                  }}
+                  <Paper key={category.value} shadow="sm" radius="md" withBorder>
+                    <Group
+                      p="md"
+                      justify="space-between"
+                      onClick={() => {
+                        setActiveCategories(prev =>
+                          prev.includes(category.value)
+                            ? prev.filter(c => c !== category.value)
+                            : [...prev, category.value]
+                        );
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <Group gap="sm">
+                        <ThemeIcon size="lg" radius="md" variant="light" color={category.color}>
+                          <Icon size={20} />
+                        </ThemeIcon>
+                        <Text fw={600}>{category.label}</Text>
+                        <Badge variant="filled" color={category.color}>
+                          {categoryPhotos.length}
+                        </Badge>
+                      </Group>
+                      <ActionIcon variant="subtle" size="lg">
+                        {isOpened ? <IconChevronUp size={20} /> : <IconChevronDown size={20} />}
+                      </ActionIcon>
+                    </Group>
+
+                    <Collapse in={isOpened}>
+                      <Divider />
+                      <Droppable droppableId={category.value} direction="horizontal" isDropDisabled={viewMode}>
+                        {(provided, snapshot) => (
+                          <Box
+                            ref={provided.innerRef}
+                            {...provided.droppableProps}
+                            p="md"
+                            style={{
+                              backgroundColor: snapshot.isDraggingOver 
+                                ? 'var(--mantine-color-blue-0)' 
+                                : 'transparent',
+                              border: snapshot.isDraggingOver 
+                                ? '2px dashed var(--mantine-color-blue-6)' 
+                                : 'none',
+                              borderRadius: 8,
+                              minHeight: 200
+                            }}
+                          >
+                            <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 5 }} spacing="md">
+                              {categoryPhotos.map((photo, index) => (
+                                <Draggable
+                                  key={photo.id}
+                                  draggableId={String(photo.id)}
+                                  index={index}
+                                  isDragDisabled={viewMode}
                                 >
-                                  <Checkbox
-                                    checked={selectedPhotos.has(photo.id)}
-                                    onChange={() => handleTogglePhoto(photo.id)}
-                                    disabled={false}
-                                    style={{
-                                      position: 'absolute',
-                                      top: 8,
-                                      left: 8,
-                                      zIndex: 10,
-                                      background: 'rgba(0,0,0,0.6)',
-                                      borderRadius: 4,
-                                      padding: 4
-                                    }}
-                                  />
-
-                                  <img
-                                    src={`${photo.photo_url}`}
-                                    alt={t('photosUploader.photoAlt', { id: photo.id })}
-                                    style={{
-                                      width: '100%',
-                                      height: 180,
-                                      objectFit: 'cover',
-                                      borderRadius: 8,
-                                      cursor: viewMode ? 'default' : 'move'
-                                    }}
-                                  />
-
-                                  {photo.is_primary && (
-                                    <Tag
-                                      color="gold"
-                                      icon={<StarFilled />}
+                                  {(provided, snapshot) => (
+                                    <Paper
+                                      ref={provided.innerRef}
+                                      {...provided.draggableProps}
+                                      {...provided.dragHandleProps}
+                                      pos="relative"
+                                      radius="md"
                                       style={{
-                                        position: 'absolute',
-                                        top: 8,
-                                        right: 8,
-                                        fontSize: 11
+                                        ...provided.draggableProps.style,
+                                        opacity: snapshot.isDragging ? 0.5 : 1,
+                                        overflow: 'hidden',
+                                        cursor: viewMode ? 'default' : 'move'
                                       }}
                                     >
-                                      {t('photosUploader.primary')}
-                                    </Tag>
-                                  )}
+                                      {/* Selection Checkbox */}
+                                      <Checkbox
+                                        checked={selectedPhotos.has(photo.id)}
+                                        onChange={() => handleTogglePhoto(photo.id)}
+                                        style={{
+                                          position: 'absolute',
+                                          top: 8,
+                                          left: 8,
+                                          zIndex: 10,
+                                          background: 'rgba(0,0,0,0.6)',
+                                          borderRadius: 4,
+                                          padding: 4
+                                        }}
+                                        styles={{
+                                          input: { cursor: 'pointer' }
+                                        }}
+                                      />
 
-                                  <div
-                                    style={{
-                                      position: 'absolute',
-                                      bottom: 8,
-                                      left: 8,
-                                      background: 'rgba(0, 0, 0, 0.7)',
-                                      color: 'white',
-                                      padding: '2px 8px',
-                                      borderRadius: 4,
-                                      fontSize: 12,
-                                      fontWeight: 600
-                                    }}
-                                  >
-                                    #{index + 1}
-                                  </div>
+                                      {/* Photo Image */}
+                                      <Image
+                                        src={photo.photo_url}
+                                        alt={`Photo ${photo.id}`}
+                                        height={180}
+                                        fit="cover"
+                                      />
 
-                                  {!viewMode && (
-                                    <div
-                                      style={{
-                                        position: 'absolute',
-                                        bottom: 0,
-                                        left: 0,
-                                        right: 0,
-                                        background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)',
-                                        padding: '24px 8px 8px 8px',
-                                        display: 'flex',
-                                        justifyContent: 'space-around',
-                                        gap: 4
-                                      }}
-                                    >
-                                      {!photo.is_primary && (
-                                        <Tooltip title={t('photosUploader.makePrimary')}>
-                                          <Button
-                                            type="text"
-                                            size="small"
-                                            icon={<StarOutlined />}
-                                            onClick={() => handleSetPrimary(photo.id)}
-                                            style={{ color: 'white' }}
-                                          />
-                                        </Tooltip>
-                                      )}
-                                      <Tooltip title={
-                                        selectedPhotos.has(photo.id) && selectedPhotos.size > 1
-                                          ? t('photosUploader.moveMultiplePhotos', { count: selectedPhotos.size })
-                                          : t('photosUploader.moveToCategory')
-                                      }>
-                                        <Button
-                                          type="text"
-                                          size="small"
-                                          icon={<ArrowRightOutlined />}
-                                          onClick={() => setMovingPhotoId(photo.id)}
-                                          style={{ color: 'white' }}
-                                        />
-                                      </Tooltip>
-                                      <Tooltip title={t('photosUploader.changePosition')}>
-                                        <Button
-                                          type="text"
-                                          size="small"
-                                          icon={<NumberOutlined />}
-                                          onClick={() => {
-                                            setPositionChangePhotoId(photo.id);
-                                            setNewPosition(String(index + 1));
+                                      {/* Primary Badge */}
+                                      {photo.is_primary && (
+                                        <Badge
+                                          variant="filled"
+                                          color="yellow"
+                                          leftSection={<IconStarFilled size={12} />}
+                                          style={{
+                                            position: 'absolute',
+                                            top: 8,
+                                            right: 8
                                           }}
-                                          style={{ color: 'white' }}
-                                        />
-                                      </Tooltip>
-                                      <Popconfirm
-                                        title={t('photosUploader.deletePhoto')}
-                                        onConfirm={() => handleDeletePhoto(photo.id)}
-                                        okText={t('common.yes')}
-                                        cancelText={t('common.no')}
+                                        >
+                                          {t('photosUploader.primary')}
+                                        </Badge>
+                                      )}
+
+                                      {/* Position Badge */}
+                                      <Badge
+                                        variant="filled"
+                                        color="dark"
+                                        style={{
+                                          position: 'absolute',
+                                          bottom: 8,
+                                          left: 8
+                                        }}
                                       >
-                                        <Tooltip title={t('common.delete')}>
-                                          <Button
-                                            type="text"
-                                            size="small"
-                                            danger
-                                            icon={<DeleteOutlined />}
-                                            style={{ color: '#ff4d4f' }}
-                                          />
-                                        </Tooltip>
-                                      </Popconfirm>
-                                    </div>
+                                        #{index + 1}
+                                      </Badge>
+
+                                      {/* Action Buttons */}
+                                      {!viewMode && (
+                                        <Group
+                                          gap={4}
+                                          justify="center"
+                                          style={{
+                                            position: 'absolute',
+                                            bottom: 0,
+                                            left: 0,
+                                            right: 0,
+                                            background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)',
+                                            padding: '24px 8px 8px 8px'
+                                          }}
+                                        >
+                                          {!photo.is_primary && (
+                                            <Tooltip label={t('photosUploader.makePrimary')}>
+                                              <ActionIcon
+                                                variant="subtle"
+                                                color="yellow"
+                                                onClick={() => handleSetPrimary(photo.id)}
+                                              >
+                                                <IconStar size={16} />
+                                              </ActionIcon>
+                                            </Tooltip>
+                                          )}
+                                          
+                                          <Tooltip label={
+                                            selectedPhotos.has(photo.id) && selectedPhotos.size > 1
+                                              ? t('photosUploader.moveMultiplePhotos', { count: selectedPhotos.size })
+                                              : t('photosUploader.moveToCategory')
+                                          }>
+                                            <ActionIcon
+                                              variant="subtle"
+                                              color="blue"
+                                              onClick={() => {
+                                                setMovingPhotoId(photo.id);
+                                                openMoveModal();
+                                              }}
+                                            >
+                                              <IconArrowRight size={16} />
+                                            </ActionIcon>
+                                          </Tooltip>
+
+                                          <Tooltip label={t('photosUploader.changePosition')}>
+                                            <ActionIcon
+                                              variant="subtle"
+                                              color="cyan"
+                                              onClick={() => {
+                                                setPositionChangePhotoId(photo.id);
+                                                setNewPosition(index + 1);
+                                                openPositionModal();
+                                              }}
+                                            >
+                                              <IconHash size={16} />
+                                            </ActionIcon>
+                                          </Tooltip>
+
+                                          <Tooltip label={t('common.delete')}>
+                                            <ActionIcon
+                                              variant="subtle"
+                                              color="red"
+                                              onClick={() => {
+                                                setDeletePhotoId(photo.id);
+                                                openDeleteModal();
+                                              }}
+                                            >
+                                              <IconTrash size={16} />
+                                            </ActionIcon>
+                                          </Tooltip>
+                                        </Group>
+                                      )}
+                                    </Paper>
                                   )}
-                                </div>
-                              )}
-                            </Draggable>
-                          ))}
-                          {provided.placeholder}
-                        </div>
-                      )}
-                    </Droppable>
-                  </Panel>
+                                </Draggable>
+                              ))}
+                              {provided.placeholder}
+                            </SimpleGrid>
+                          </Box>
+                        )}
+                      </Droppable>
+                    </Collapse>
+                  </Paper>
                 );
               })}
-          </Collapse>
+          </Stack>
         </DragDropContext>
       )}
 
+      {/* Delete Single Photo Modal */}
       <Modal
+        opened={deleteModalOpened}
+        onClose={() => {
+          closeDeleteModal();
+          setDeletePhotoId(null);
+        }}
+        title={t('photosUploader.deletePhoto')}
+        centered
+      >
+        <Stack gap="md">
+          <Text>{t('common.confirmDelete')}</Text>
+          <Group justify="flex-end">
+            <Button variant="subtle" onClick={() => {
+              closeDeleteModal();
+              setDeletePhotoId(null);
+            }}>
+              {t('common.no')}
+            </Button>
+            <Button color="red" onClick={handleDeletePhotoConfirm}>
+              {t('common.yes')}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Delete Selected Photos Modal */}
+      <Modal
+        opened={deleteSelectedModalOpened}
+        onClose={closeDeleteSelectedModal}
+        title={t('photosUploader.deleteSelectedPhotos')}
+        centered
+      >
+        <Stack gap="md">
+          <Text>
+            {t('photosUploader.confirmDeleteSelected', { count: selectedPhotos.size })}
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="subtle" onClick={closeDeleteSelectedModal}>
+              {t('common.no')}
+            </Button>
+            <Button color="red" onClick={handleDeleteSelectedConfirm} loading={deletingSelected}>
+              {t('common.yes')}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Move Photo Modal */}
+      <Modal
+        opened={moveModalOpened}
+        onClose={() => {
+          closeMoveModal();
+          setMovingPhotoId(null);
+        }}
         title={
           movingPhotoId && selectedPhotos.has(movingPhotoId) && selectedPhotos.size > 1
             ? t('photosUploader.moveSelectedPhotosTitle', { count: selectedPhotos.size })
             : t('photosUploader.movePhotoTitle')
         }
-        open={movingPhotoId !== null}
-        onCancel={() => setMovingPhotoId(null)}
-        footer={null}
+        size="lg"
+        centered
       >
-        {movingPhotoId && selectedPhotos.has(movingPhotoId) && selectedPhotos.size > 1 && (
-          <div style={{ marginBottom: 16, padding: 12, background: '#e6f7ff', borderRadius: 8, border: '1px solid #91d5ff' }}>
-            <Space>
-              <CheckSquareOutlined style={{ color: '#1890ff' }} />
-              <span style={{ color: '#1890ff' }}>
-                {t('photosUploader.willBeMoved', { count: selectedPhotos.size })}
-              </span>
-            </Space>
-          </div>
-        )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-          {categories.map((cat) => (
-            <Button
-              key={cat.value}
-              onClick={() => handleMovePhoto(movingPhotoId!, cat.value)}
-              disabled={getPhotoCategory(movingPhotoId!) === cat.value}
-              style={{ height: 'auto', padding: '12px 8px' }}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <span style={{ fontSize: 20 }}>{getCategoryIcon(cat.value)}</span>
-                <span style={{ fontSize: 12 }}>{cat.label}</span>
-              </div>
-            </Button>
-          ))}
-        </div>
+        <Stack gap="md">
+          {movingPhotoId && selectedPhotos.has(movingPhotoId) && selectedPhotos.size > 1 && (
+            <Alert icon={<IconInfoCircle size={18} />} color="blue" variant="light">
+              {t('photosUploader.willBeMoved', { count: selectedPhotos.size })}
+            </Alert>
+          )}
+
+          <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="md">
+            {categories.map((cat) => {
+              const Icon = getCategoryIcon(cat.value);
+              const isCurrentCategory = movingPhotoId ? getPhotoCategory(movingPhotoId) === cat.value : false;
+              
+              return (
+                <Button
+                  key={cat.value}
+                  variant={isCurrentCategory ? 'filled' : 'light'}
+                  color={cat.color}
+                  onClick={() => movingPhotoId && handleMovePhoto(movingPhotoId, cat.value)}
+                  disabled={Boolean(isCurrentCategory)}
+                  styles={{
+                    root: { height: 'auto', padding: '12px 8px' },
+                    inner: { flexDirection: 'column', gap: 4 }
+                  }}
+                >
+                  <Icon size={24} />
+                  <Text size="sm" ta="center">
+                    {cat.label}
+                  </Text>
+                </Button>
+              );
+            })}
+          </SimpleGrid>
+        </Stack>
       </Modal>
 
+      {/* Change Position Modal */}
       <Modal
-        title={t('photosUploader.changePositionTitle')}
-        open={positionChangePhotoId !== null}
-        onOk={handleChangePosition}
-        onCancel={() => {
+        opened={positionModalOpened}
+        onClose={() => {
+          closePositionModal();
           setPositionChangePhotoId(null);
           setNewPosition('');
         }}
-        okText={t('photosUploader.change')}
-        cancelText={t('common.cancel')}
+        title={t('photosUploader.changePositionTitle')}
+        centered
       >
-        <div>
-          <p>{t('photosUploader.enterNewPosition')}</p>
-          <Input
-            type="number"
+        <Stack gap="md">
+          <Text size="sm">
+            {t('photosUploader.enterNewPosition')}
+          </Text>
+          <NumberInput
+            label={t('photosUploader.position')}
+            placeholder="1"
             min={1}
-            max={groupedPhotos[getPhotoCategory(positionChangePhotoId!)]?.length || 1}
+            max={positionChangePhotoId ? (groupedPhotos[getPhotoCategory(positionChangePhotoId)]?.length || 1) : 1}
             value={newPosition}
-            onChange={(e) => setNewPosition(e.target.value)}
-            placeholder={t('photosUploader.position')}
+            onChange={setNewPosition}
+            styles={{
+              input: { fontSize: '16px' }
+            }}
           />
-        </div>
+          <Group justify="flex-end">
+            <Button variant="subtle" onClick={() => {
+              closePositionModal();
+              setPositionChangePhotoId(null);
+              setNewPosition('');
+            }}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={handleChangePosition}>
+              {t('photosUploader.change')}
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
-    </Card>
+    </Stack>
   );
 };
 

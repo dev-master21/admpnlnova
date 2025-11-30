@@ -1,34 +1,39 @@
 // frontend/src/modules/Properties/components/AIPropertyCreationModal.tsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Modal,
-  Input,
+  Textarea,
   Button,
+  Stack,
+  Group,
+  Text,
+  Card,
+  Grid,
+  ThemeIcon,
+  Badge,
   Alert,
-  Space,
-  Typography,
   Progress,
-  message,
-  Card
-} from 'antd';
+  Paper
+} from '@mantine/core';
 import {
-  RobotOutlined,
-  ThunderboltOutlined,
-  InfoCircleOutlined,
-  CheckCircleOutlined,
-  FileTextOutlined,
-  DollarOutlined,
-  CalendarOutlined,
-  PictureOutlined,
-  UserOutlined,
-  HomeOutlined
-} from '@ant-design/icons';
+  IconRobot,
+  IconBolt,
+  IconInfoCircle,
+  IconCheck,
+  IconFileText,
+  IconCurrencyDollar,
+  IconCalendar,
+  IconPhoto,
+  IconUser,
+  IconHome,
+  IconX,
+  IconAlertTriangle
+} from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
+import { useMediaQuery } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
+import { modals } from '@mantine/modals';
 import { propertiesApi } from '@/api/properties.api';
-import './AIPropertyCreationModal.css';
-
-const { TextArea } = Input;
-const { Text, Paragraph, Title } = Typography;
 
 interface AIPropertyCreationModalProps {
   visible: boolean;
@@ -42,6 +47,7 @@ const AIPropertyCreationModal: React.FC<AIPropertyCreationModalProps> = ({
   onSuccess
 }) => {
   const { t } = useTranslation();
+  const isMobile = useMediaQuery('(max-width: 768px)');
   
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -50,7 +56,12 @@ const AIPropertyCreationModal: React.FC<AIPropertyCreationModalProps> = ({
 
   const handleCreate = async () => {
     if (!text.trim()) {
-      message.warning(t('aiPropertyCreation.enterDescription'));
+      notifications.show({
+        title: t('aiPropertyCreation.enterDescription'),
+        message: t('aiPropertyCreation.pleaseEnterText'),
+        color: 'orange',
+        icon: <IconInfoCircle size={16} />
+      });
       return;
     }
 
@@ -83,43 +94,84 @@ const AIPropertyCreationModal: React.FC<AIPropertyCreationModalProps> = ({
       setCurrentStep(t('aiPropertyCreation.done'));
 
       if (data.success) {
-        message.success(t('aiPropertyCreation.dataExtracted'));
+        notifications.show({
+          title: t('aiPropertyCreation.success'),
+          message: t('aiPropertyCreation.dataExtracted'),
+          color: 'green',
+          icon: <IconCheck size={16} />
+        });
         
         if (data.data.warnings && data.data.warnings.length > 0) {
-          Modal.warning({
-            title: t('aiPropertyCreation.warnings'),
-            content: (
-              <div>
+          modals.open({
+            title: (
+              <Group gap="sm">
+                <ThemeIcon size="lg" color="yellow" variant="light">
+                  <IconAlertTriangle size={20} />
+                </ThemeIcon>
+                <Text fw={600}>{t('aiPropertyCreation.warnings')}</Text>
+              </Group>
+            ),
+            children: (
+              <Stack gap="xs">
                 {data.data.warnings.map((warning: string, idx: number) => (
-                  <p key={idx}>{warning}</p>
+                  <Alert key={idx} icon={<IconAlertTriangle size={16} />} color="yellow" variant="light">
+                    <Text size="sm">{warning}</Text>
+                  </Alert>
                 ))}
-              </div>
-            )
+              </Stack>
+            ),
+            centered: true
           });
         }
         
         if (data.data.downloadedPhotosCount > 0) {
-          Modal.success({
-            title: t('aiPropertyCreation.photosDownloaded'),
-            width: 600,
-            content: (
-              <div>
-                <Paragraph>
-                  {t('aiPropertyCreation.downloadedCount', { count: data.data.downloadedPhotosCount })}
-                </Paragraph>
+          modals.open({
+            title: (
+              <Group gap="sm">
+                <ThemeIcon size="lg" color="green" variant="light">
+                  <IconPhoto size={20} />
+                </ThemeIcon>
+                <Text fw={600}>{t('aiPropertyCreation.photosDownloaded')}</Text>
+              </Group>
+            ),
+            size: 'lg',
+            children: (
+              <Stack gap="md">
+                <Alert icon={<IconCheck size={16} />} color="green" variant="light">
+                  <Text size="sm">
+                    {t('aiPropertyCreation.downloadedCount', { count: data.data.downloadedPhotosCount })}
+                  </Text>
+                </Alert>
                 {data.data.photosInfo && (
-                  <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                    {data.data.photosInfo.map((photo: any, index: number) => (
-                      <div key={index} style={{ marginBottom: 8 }}>
-                        <Text>
-                          {index + 1}. {photo.filename} - {t('aiPropertyCreation.category')}: <strong>{photo.category}</strong>
-                        </Text>
-                      </div>
-                    ))}
-                  </div>
+                  <Paper 
+                    p="md" 
+                    withBorder 
+                    style={{ 
+                      maxHeight: 300, 
+                      overflowY: 'auto',
+                      background: 'var(--mantine-color-dark-6)'
+                    }}
+                  >
+                    <Stack gap="xs">
+                      {data.data.photosInfo.map((photo: any, index: number) => (
+                        <Group key={index} gap="xs">
+                          <Badge size="lg" variant="light" color="blue">
+                            {index + 1}
+                          </Badge>
+                          <Text size="sm" style={{ flex: 1 }}>
+                            {photo.filename}
+                          </Text>
+                          <Badge size="sm" variant="filled" color="violet">
+                            {photo.category}
+                          </Badge>
+                        </Group>
+                      ))}
+                    </Stack>
+                  </Paper>
                 )}
-              </div>
-            )
+              </Stack>
+            ),
+            centered: true
           });
         }
 
@@ -130,29 +182,50 @@ const AIPropertyCreationModal: React.FC<AIPropertyCreationModalProps> = ({
       const errorMessage = error.response?.data?.message || t('aiPropertyCreation.errorCreating');
       
       if (errorMessage.includes('Google Drive') || errorMessage.includes('доступ') || errorMessage.includes('permission')) {
-        Modal.error({
-          title: t('aiPropertyCreation.driveAccessError'),
-          content: (
-            <div>
-              <p>{errorMessage}</p>
-              <p style={{ marginTop: 16 }}>
-                <strong>{t('aiPropertyCreation.howToFix')}</strong>
-              </p>
-              <ol style={{ paddingLeft: 20 }}>
-                <li>{t('aiPropertyCreation.fixStep1')}</li>
-                <li>{t('aiPropertyCreation.fixStep2')}</li>
-                <li>{t('aiPropertyCreation.fixStep3')}</li>
-                <li>{t('aiPropertyCreation.fixStep4')}</li>
-              </ol>
-              <p style={{ marginTop: 16, color: '#999', fontSize: 12 }}>
-                {t('aiPropertyCreation.alternativeOption')}
-              </p>
-            </div>
+        modals.open({
+          title: (
+            <Group gap="sm">
+              <ThemeIcon size="lg" color="red" variant="light">
+                <IconAlertTriangle size={20} />
+              </ThemeIcon>
+              <Text fw={600}>{t('aiPropertyCreation.driveAccessError')}</Text>
+            </Group>
           ),
-          width: 600
+          size: 'lg',
+          children: (
+            <Stack gap="md">
+              <Alert icon={<IconAlertTriangle size={16} />} color="red" variant="light">
+                <Text size="sm">{errorMessage}</Text>
+              </Alert>
+
+              <Card shadow="sm" padding="md" radius="md" withBorder>
+                <Stack gap="sm">
+                  <Text fw={600} size="sm">{t('aiPropertyCreation.howToFix')}</Text>
+                  <Stack gap="xs" style={{ paddingLeft: 20 }}>
+                    <Text size="sm">1. {t('aiPropertyCreation.fixStep1')}</Text>
+                    <Text size="sm">2. {t('aiPropertyCreation.fixStep2')}</Text>
+                    <Text size="sm">3. {t('aiPropertyCreation.fixStep3')}</Text>
+                    <Text size="sm">4. {t('aiPropertyCreation.fixStep4')}</Text>
+                  </Stack>
+                </Stack>
+              </Card>
+
+              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+                <Text size="xs" c="dimmed">
+                  {t('aiPropertyCreation.alternativeOption')}
+                </Text>
+              </Alert>
+            </Stack>
+          ),
+          centered: true
         });
       } else {
-        message.error(errorMessage);
+        notifications.show({
+          title: t('aiPropertyCreation.error'),
+          message: errorMessage,
+          color: 'red',
+          icon: <IconX size={16} />
+        });
       }
     } finally {
       setLoading(false);
@@ -161,180 +234,218 @@ const AIPropertyCreationModal: React.FC<AIPropertyCreationModalProps> = ({
     }
   };
 
+  const features = [
+    { icon: <IconHome size={18} />, text: t('aiPropertyCreation.basicInfo'), color: 'blue' },
+    { icon: <IconCurrencyDollar size={18} />, text: t('aiPropertyCreation.pricesCommissions'), color: 'green' },
+    { icon: <IconCalendar size={18} />, text: t('aiPropertyCreation.calendarOccupancy'), color: 'orange' },
+    { icon: <IconUser size={18} />, text: t('aiPropertyCreation.ownerData'), color: 'cyan' },
+    { icon: <IconCheck size={18} />, text: t('aiPropertyCreation.propertyFeatures'), color: 'teal' },
+    { icon: <IconPhoto size={18} />, text: t('aiPropertyCreation.photosFromDrive'), color: 'violet' }
+  ];
+
   return (
     <Modal
+      opened={visible}
+      onClose={onCancel}
+      size={isMobile ? 'full' : 'xl'}
       title={
-        <Space style={{ fontSize: '18px', fontWeight: 600 }}>
-          <RobotOutlined style={{ fontSize: 28, color: '#667eea' }} />
-          <span>{t('aiPropertyCreation.title')}</span>
-        </Space>
+        <Group gap="sm">
+          <ThemeIcon size="xl" radius="md" variant="gradient" gradient={{ from: 'violet', to: 'grape' }}>
+            <IconRobot size={24} />
+          </ThemeIcon>
+          <div>
+            <Text fw={700} size="xl">{t('aiPropertyCreation.title')}</Text>
+            <Text size="xs" c="dimmed">{t('aiPropertyCreation.subtitle')}</Text>
+          </div>
+        </Group>
       }
-      open={visible}
-      onCancel={onCancel}
-      width={900}
-      style={{ top: 20 }}
+      centered
       styles={{
-        body: { maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }
+        body: { 
+          padding: isMobile ? 12 : 24,
+          maxHeight: 'calc(100vh - 200px)',
+          overflowY: 'auto'
+        }
       }}
-      footer={[
-        <Button 
-          key="cancel" 
-          onClick={onCancel} 
-          disabled={loading}
-          size="large"
-        >
-          {t('aiPropertyCreation.cancel')}
-        </Button>,
-        <Button
-          key="create"
-          type="primary"
-          icon={<ThunderboltOutlined />}
-          onClick={handleCreate}
-          loading={loading}
-          disabled={!text.trim()}
-          size="large"
-          style={{
-            background: loading ? undefined : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            borderColor: loading ? undefined : '#667eea'
-          }}
-        >
-          {loading ? t('aiPropertyCreation.processing') : t('aiPropertyCreation.createButton')}
-        </Button>
-      ]}
     >
-      <Space direction="vertical" style={{ width: '100%' }} size="large">
+      <Stack gap="lg">
+        {/* How It Works Card */}
         <Card
+          shadow="sm"
+          padding="lg"
+          radius="md"
+          withBorder
           style={{
             background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)',
-            border: '1px solid rgba(102, 126, 234, 0.3)',
-            borderRadius: '12px'
+            borderColor: 'rgba(102, 126, 234, 0.3)'
           }}
         >
-          <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <InfoCircleOutlined style={{ fontSize: 24, color: '#667eea' }} />
-              <Title level={5} style={{ margin: 0, color: '#fff' }}>
-                {t('aiPropertyCreation.howItWorks')}
-              </Title>
-            </div>
+          <Stack gap="md">
+            <Group gap="sm">
+              <ThemeIcon size="lg" radius="md" variant="light" color="violet">
+                <IconInfoCircle size={20} />
+              </ThemeIcon>
+              <Text fw={600} size="lg">{t('aiPropertyCreation.howItWorks')}</Text>
+            </Group>
             
-            <Paragraph style={{ margin: 0, color: 'rgba(255,255,255,0.85)', fontSize: 15 }}>
+            <Text size="sm" style={{ lineHeight: 1.6 }}>
               {t('aiPropertyCreation.howItWorksDescription')}
-            </Paragraph>
+            </Text>
 
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: 12,
-              marginTop: 8
-            }}>
-              {[
-                { icon: <HomeOutlined />, text: t('aiPropertyCreation.basicInfo') },
-                { icon: <DollarOutlined />, text: t('aiPropertyCreation.pricesCommissions') },
-                { icon: <CalendarOutlined />, text: t('aiPropertyCreation.calendarOccupancy') },
-                { icon: <UserOutlined />, text: t('aiPropertyCreation.ownerData') },
-                { icon: <CheckCircleOutlined />, text: t('aiPropertyCreation.propertyFeatures') },
-                { icon: <PictureOutlined />, text: t('aiPropertyCreation.photosFromDrive') }
-              ].map((item, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '8px 12px',
-                    background: 'rgba(255,255,255,0.05)',
-                    borderRadius: 8,
-                    border: '1px solid rgba(255,255,255,0.1)'
-                  }}
-                >
-                  <span style={{ color: '#667eea', fontSize: 18 }}>{item.icon}</span>
-                  <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>
-                    {item.text}
-                  </Text>
-                </div>
+            <Grid gutter="xs">
+              {features.map((item, idx) => (
+                <Grid.Col key={idx} span={{ base: 12, xs: 6, sm: 4 }}>
+                  <Paper
+                    p="sm"
+                    radius="md"
+                    withBorder
+                    style={{
+                      background: 'rgba(255,255,255,0.03)',
+                      borderColor: 'rgba(255,255,255,0.1)',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.borderColor = `var(--mantine-color-${item.color}-5)`;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
+                    }}
+                  >
+                    <Group gap="xs">
+                      <ThemeIcon size="md" radius="md" variant="light" color={item.color}>
+                        {item.icon}
+                      </ThemeIcon>
+                      <Text size="xs" style={{ flex: 1 }}>
+                        {item.text}
+                      </Text>
+                    </Group>
+                  </Paper>
+                </Grid.Col>
               ))}
-            </div>
-          </Space>
+            </Grid>
+          </Stack>
         </Card>
 
-        <div>
-          <div style={{ 
-            marginBottom: 12, 
-            display: 'flex', 
-            alignItems: 'center',
-            gap: 8
-          }}>
-            <FileTextOutlined style={{ fontSize: 18, color: '#667eea' }} />
-            <Text strong style={{ fontSize: 16 }}>
-              {t('aiPropertyCreation.pasteDescription')}
-            </Text>
-          </div>
-          
-          <TextArea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={t('aiPropertyCreation.placeholder')}
-            rows={14}
-            maxLength={10000}
-            showCount
-            disabled={loading}
-            style={{
-              fontSize: 14,
-              lineHeight: 1.6,
-              borderRadius: 8,
-              border: '1px solid rgba(255,255,255,0.15)'
-            }}
-          />
-        </div>
+        {/* Textarea Card */}
+        <Card shadow="sm" padding="md" radius="md" withBorder>
+          <Stack gap="md">
+            <Group gap="xs">
+              <ThemeIcon size="md" radius="md" variant="light" color="blue">
+                <IconFileText size={18} />
+              </ThemeIcon>
+              <Text fw={500} size="sm">{t('aiPropertyCreation.pasteDescription')}</Text>
+            </Group>
+            
+            <Textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={t('aiPropertyCreation.placeholder')}
+              minRows={isMobile ? 10 : 14}
+              maxRows={20}
+              maxLength={10000}
+              disabled={loading}
+              autosize
+              styles={{
+                input: { 
+                  fontSize: '16px',
+                  lineHeight: 1.6
+                }
+              }}
+            />
 
+            <Group justify="space-between">
+              <Text size="xs" c="dimmed">
+                {t('aiPropertyCreation.maxCharacters')}
+              </Text>
+              <Badge 
+                size="lg" 
+                variant={text.length > 9000 ? 'filled' : 'light'} 
+                color={text.length > 9000 ? 'red' : 'blue'}
+              >
+                {text.length} / 10000
+              </Badge>
+            </Group>
+          </Stack>
+        </Card>
+
+        {/* Progress Card */}
         {loading && (
           <Card
+            shadow="sm"
+            padding="md"
+            radius="md"
+            withBorder
             style={{
               background: 'rgba(102, 126, 234, 0.05)',
-              border: '1px solid rgba(102, 126, 234, 0.2)',
-              borderRadius: 8
+              borderColor: 'rgba(102, 126, 234, 0.2)'
             }}
           >
-            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            <Stack gap="md">
               <Progress 
-                percent={progress} 
-                status="active"
-                strokeColor={{
-                  '0%': '#667eea',
-                  '100%': '#764ba2',
-                }}
-                style={{ margin: 0 }}
+                value={progress}
+                size="lg"
+                radius="md"
+                animated
+                color="violet"
+                striped
               />
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <RobotOutlined style={{ fontSize: 20, color: '#667eea' }} />
-                <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 15 }}>
+              <Group gap="sm">
+                <ThemeIcon size="lg" radius="md" variant="light" color="violet">
+                  <IconRobot size={20} />
+                </ThemeIcon>
+                <Text size="sm" fw={500}>
                   {currentStep}
                 </Text>
-              </div>
-            </Space>
+              </Group>
+            </Stack>
           </Card>
         )}
 
+        {/* Warning Alert */}
         <Alert
-          message={
-            <span style={{ fontWeight: 600, fontSize: 15 }}>
-              {t('aiPropertyCreation.importantWarning')}
-            </span>
-          }
-          description={
-            <Paragraph style={{ margin: '8px 0 0 0', fontSize: 14 }}>
-              {t('aiPropertyCreation.importantDescription')}
-            </Paragraph>
-          }
-          type="warning"
-          showIcon
-          style={{
-            border: '1px solid rgba(250, 173, 20, 0.3)',
-            background: 'rgba(250, 173, 20, 0.05)'
-          }}
-        />
-      </Space>
+          icon={<IconAlertTriangle size={20} />}
+          title={<Text fw={600}>{t('aiPropertyCreation.importantWarning')}</Text>}
+          color="yellow"
+          variant="light"
+        >
+          <Text size="sm">
+            {t('aiPropertyCreation.importantDescription')}
+          </Text>
+        </Alert>
+
+        {/* Action Buttons */}
+        <Grid gutter="md">
+          <Grid.Col span={{ base: 12, sm: 6 }}>
+            <Button
+              variant="light"
+              color="gray"
+              size="lg"
+              fullWidth
+              leftSection={<IconX size={18} />}
+              onClick={onCancel}
+              disabled={loading}
+            >
+              {t('aiPropertyCreation.cancel')}
+            </Button>
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 6 }}>
+            <Button
+              variant="gradient"
+              gradient={{ from: 'violet', to: 'grape' }}
+              size="lg"
+              fullWidth
+              leftSection={<IconBolt size={18} />}
+              onClick={handleCreate}
+              loading={loading}
+              disabled={!text.trim()}
+            >
+              {loading ? t('aiPropertyCreation.processing') : t('aiPropertyCreation.createButton')}
+            </Button>
+          </Grid.Col>
+        </Grid>
+      </Stack>
     </Modal>
   );
 };

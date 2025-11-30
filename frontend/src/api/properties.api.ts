@@ -288,6 +288,9 @@ export const propertiesApi = {
   getPropertyPrices: (id: number): Promise<{ data: PropertyPricesInfo }> =>
     api.get(`/properties/${id}/prices`),
   
+deleteFloorPlan: (propertyId: number) => 
+  api.delete(`/properties/${propertyId}/floor-plan`),
+
   generateHTML: (id: number, options: {
     language: string;
     displayMode?: 'rent' | 'sale' | 'both';

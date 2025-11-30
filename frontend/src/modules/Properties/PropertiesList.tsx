@@ -3,32 +3,48 @@ import { useState, useEffect } from 'react';
 import {
   Card,
   Button,
-  Space,
-  message,
-  Input,
+  TextInput,
   Select,
   Table,
-  Tag,
-  Popconfirm,
-  Row,
-  Col,
+  Badge,
+  Group,
+  Stack,
+  Grid,
   Tooltip,
-  Image
-} from 'antd';
+  Image,
+  ActionIcon,
+  Modal,
+  Text,
+  Paper,
+  Box,
+  Center,
+  Skeleton,
+  Pagination,
+  SegmentedControl,
+  Divider,
+  Transition,
+  useMantineTheme
+} from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { useMediaQuery, useDisclosure } from '@mantine/hooks';
 import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  SearchOutlined,
-  HomeOutlined,
-  EyeOutlined,
-  EyeInvisibleOutlined,
-  ReloadOutlined,
-  DollarOutlined,
-  CalendarOutlined,
-  UserOutlined,
-  FileTextOutlined
-} from '@ant-design/icons';
+  IconPlus,
+  IconEdit,
+  IconTrash,
+  IconSearch,
+  IconHome,
+  IconEye,
+  IconEyeOff,
+  IconRefresh,
+  IconCurrencyDollar,
+  IconCalendar,
+  IconUser,
+  IconFileText,
+  IconFilter,
+  IconLayoutGrid,
+  IconLayoutList,
+  IconX
+} from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { propertiesApi } from '@/api/properties.api';
@@ -38,12 +54,11 @@ import CalendarModal from './components/CalendarModal';
 import OwnerInfoModal from './components/OwnerInfoModal';
 import PropertyHTMLGeneratorModal from './components/PropertyHTMLGeneratorModal';
 import type { Property } from './types';
-import type { ColumnsType } from 'antd/es/table';
-import './PropertiesList.css';
 
 const PropertiesList = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const theme = useMantineTheme();
   
   const { 
     hasPermission, 
@@ -62,30 +77,33 @@ const PropertiesList = () => {
   });
   const [filters, setFilters] = useState({
     search: '',
-    status: undefined,
-    deal_type: undefined,
-    property_type: undefined,
-    owner_name: undefined
+    status: undefined as string | undefined,
+    deal_type: undefined as string | undefined,
+    property_type: undefined as string | undefined,
+    owner_name: undefined as string | undefined
   });
-  const [isMobile, setIsMobile] = useState(false);
 
+  // Медиа запросы для адаптивности
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  
+  // Режим просмотра (список/сетка)
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+
+  // Модальные окна
   const [pricingModalVisible, setPricingModalVisible] = useState(false);
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
   const [ownerInfoModalVisible, setOwnerInfoModalVisible] = useState(false);
   const [selectedPropertyId, setSelectedPropertyId] = useState<number | null>(null);
   const [selectedOwnerData, setSelectedOwnerData] = useState<any>(null);
-
   const [htmlGeneratorVisible, setHtmlGeneratorVisible] = useState(false);
   const [selectedPropertyForHTML, setSelectedPropertyForHTML] = useState<{id: number, number: string} | null>(null);
 
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  // Модальное окно подтверждения удаления
+  const [deleteModalOpened, { open: openDeleteModal, close: closeDeleteModal }] = useDisclosure(false);
+  const [propertyToDelete, setPropertyToDelete] = useState<number | null>(null);
+
+  // Показ фильтров на мобильных
+  const [filtersOpened, { toggle: toggleFilters }] = useDisclosure(false);
 
   useEffect(() => {
     loadProperties();
@@ -109,7 +127,12 @@ const PropertiesList = () => {
         total: data.data.pagination.total
       }));
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('errors.generic'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('errors.generic'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     } finally {
       setLoading(false);
     }
@@ -127,19 +150,44 @@ const PropertiesList = () => {
   const handleDelete = async (id: number) => {
     try {
       await propertiesApi.delete(id);
-      message.success(t('properties.deleteSuccess'));
+      notifications.show({
+        title: t('common.success'),
+        message: t('properties.deleteSuccess'),
+        color: 'green',
+        icon: <IconTrash size={18} />
+      });
+      closeDeleteModal();
+      setPropertyToDelete(null);
       loadProperties();
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('errors.generic'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('errors.generic'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     }
   };
 
-  const handleTableChange = (newPagination: any) => {
-    setPagination({
-      current: newPagination.current,
-      pageSize: newPagination.pageSize,
-      total: pagination.total
-    });
+  const confirmDelete = (id: number) => {
+    setPropertyToDelete(id);
+    openDeleteModal();
+  };
+
+  const handleTableChange = (page: number) => {
+    setPagination(prev => ({
+      ...prev,
+      current: page
+    }));
+  };
+
+  const handlePageSizeChange = (size: string) => {
+    setPagination(prev => ({
+      ...prev,
+      pageSize: parseInt(size),
+      current: 1
+    }));
+    setTimeout(loadProperties, 100);
   };
 
   const handleSearch = () => {
@@ -186,490 +234,659 @@ const PropertiesList = () => {
     setHtmlGeneratorVisible(true);
   };
 
-  const MobileView = () => (
-    <>
-      <Space direction="vertical" style={{ width: '100%' }} size="middle">
-        {properties.map((property: any) => (
-          <Card
-            key={property.id}
-            size="small"
-            style={{ borderRadius: 8 }}
-            bodyStyle={{ padding: 12 }}
-          >
-            <Row gutter={[12, 12]}>
-              <Col span={8}>
-                {property.cover_photo ? (
-                  <Image
-                    src={property.cover_photo}
-                    alt={property.property_name || property.property_number}
-                    style={{
-                      width: '100%',
-                      height: 80,
-                      objectFit: 'cover',
-                      borderRadius: 6
-                    }}
-                    preview={{
-                      mask: <EyeOutlined />
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: '100%',
-                      height: 80,
-                      background: '#1f1f1f',
-                      borderRadius: 6,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                  >
-                    <HomeOutlined style={{ fontSize: 32, color: '#666' }} />
-                  </div>
-                )}
-              </Col>
+  const getDealTypeColor = (type: string) => {
+    switch(type) {
+      case 'sale': return 'green';
+      case 'rent': return 'blue';
+      case 'both': return 'grape';
+      default: return 'gray';
+    }
+  };
 
-              <Col span={16}>
-                <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                  <div style={{ fontWeight: 'bold', fontSize: 16 }}>
-                    {property.property_name || property.property_number}
-                  </div>
+  const getDealTypeLabel = (type: string) => {
+    switch(type) {
+      case 'sale': return t('properties.dealTypes.sale');
+      case 'rent': return t('properties.dealTypes.rent');
+      case 'both': return t('properties.dealTypes.both');
+      default: return type;
+    }
+  };
 
-                  <div style={{ color: '#666', fontSize: 12 }}>
-                    #{property.property_number}
-                  </div>
-
-                  {property.owner_name && canViewPropertyOwner(property.created_by) && (
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<UserOutlined />}
-                      onClick={() => openOwnerInfoModal(property)}
-                      style={{ padding: 0, height: 'auto', fontSize: 12 }}
-                    >
-                      {property.owner_name}
-                    </Button>
-                  )}
-
-                  <div style={{ color: '#666', fontSize: 11 }}>
-                    {t('properties.addedBy')}: {property.creator_name}
-                  </div>
-
-                  <Space wrap size={4}>
-                    <Tag 
-                      color={property.deal_type === 'sale' ? 'green' : property.deal_type === 'rent' ? 'blue' : 'purple'} 
-                      style={{ fontSize: 11, margin: 0 }}
-                    >
-                      {property.deal_type === 'sale' 
-                        ? t('properties.dealTypes.sale') 
-                        : property.deal_type === 'rent'
-                        ? t('properties.dealTypes.rent')
-                        : t('properties.dealTypes.both')}
-                    </Tag>
-                    {property.status === 'published' ? (
-                      <Tag color="success" icon={<EyeOutlined />} style={{ fontSize: 11, margin: 0 }}>
-                        {t('properties.published')}
-                      </Tag>
-                    ) : (
-                      <Tag color="default" icon={<EyeInvisibleOutlined />} style={{ fontSize: 11, margin: 0 }}>
-                        {t('properties.draft')}
-                      </Tag>
-                    )}
-                  </Space>
-                </Space>
-              </Col>
-
-              <Col span={24}>
-                <Space size="small" style={{ width: '100%', justifyContent: 'space-between' }}>
-                  <Space size="small" wrap>
-                    <Button
-                      size="small"
-                      icon={<EyeOutlined />}
-                      onClick={() => navigate(`/properties/view/${property.id}`)}
-                    >
-                      {t('common.view')}
-                    </Button>
-                    <Button
-                      size="small"
-                      icon={<FileTextOutlined />}
-                      onClick={() => openHTMLGenerator(property.id, property.property_number)}
-                    >
-                      HTML
-                    </Button>
-                    <Button
-                      size="small"
-                      icon={<DollarOutlined />}
-                      onClick={() => openPricingModal(property.id)}
-                    >
-                      {t('properties.prices')}
-                    </Button>
-                    <Button
-                      size="small"
-                      icon={<CalendarOutlined />}
-                      onClick={() => openCalendarModal(property.id)}
-                    >
-                      {t('properties.calendar.button')}
-                    </Button>
-                  </Space>
-                  <Space size="small">
-                    {canEditProperty(property.created_by) && (
-                      <Button
-                        size="small"
-                        icon={<EditOutlined />}
-                        onClick={() => navigate(`/properties/edit/${property.id}`)}
-                      />
-                    )}
-                    {canDeleteProperty() && (
-                      <Popconfirm
-                        title={t('properties.confirmDelete')}
-                        onConfirm={() => handleDelete(property.id)}
-                        okText={t('common.yes')}
-                        cancelText={t('common.no')}
-                      >
-                        <Button
-                          size="small"
-                          danger
-                          icon={<DeleteOutlined />}
-                        />
-                      </Popconfirm>
-                    )}
-                  </Space>
-                </Space>
-              </Col>
-            </Row>
-          </Card>
-        ))}
-      </Space>
-
-      <div style={{ marginTop: 24, textAlign: 'center' }}>
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <div style={{ color: '#888', fontSize: 13 }}>
-            {t('common.total', { total: pagination.total })}
-          </div>
-          <Space>
-            <Button
-              disabled={pagination.current === 1}
-              onClick={() => setPagination(prev => ({ ...prev, current: prev.current - 1 }))}
-            >
-              {t('common.previous')}
-            </Button>
-            <span style={{ padding: '0 12px' }}>
-              {pagination.current} / {Math.ceil(pagination.total / pagination.pageSize)}
-            </span>
-            <Button
-              disabled={pagination.current >= Math.ceil(pagination.total / pagination.pageSize)}
-              onClick={() => setPagination(prev => ({ ...prev, current: prev.current + 1 }))}
-            >
-              {t('common.next')}
-            </Button>
-          </Space>
-        </Space>
-      </div>
-    </>
-  );
-
-  const columns: ColumnsType<any> = [
-    {
-      title: t('properties.photo'),
-      key: 'cover_photo',
-      width: 80,
-      render: (_: any, record: any) => (
-        record.cover_photo ? (
+  // Компонент карточки для мобильной версии и сетки
+  const PropertyCard = ({ property }: { property: any }) => (
+    <Card
+      shadow="sm"
+      padding="md"
+      radius="md"
+      withBorder
+      style={{
+        height: '100%',
+        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+        cursor: 'pointer'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-4px)';
+        e.currentTarget.style.boxShadow = theme.shadows.md;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = theme.shadows.sm;
+      }}
+    >
+      <Card.Section>
+        {property.cover_photo ? (
           <Image
-            src={record.cover_photo}
-            alt={record.property_number}
-            width={60}
-            height={60}
-            style={{ objectFit: 'cover', borderRadius: 4 }}
+            src={property.cover_photo}
+            alt={property.property_name || property.property_number}
+            height={180}
+            fit="cover"
           />
         ) : (
-          <div
+          <Center
+            h={180}
             style={{
-              width: 60,
-              height: 60,
-              background: '#1f1f1f',
-              borderRadius: 4,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+              background: theme.colors.dark[6],
             }}
           >
-            <HomeOutlined style={{ fontSize: 24, color: '#666' }} />
-          </div>
-        )
-      )
-    },
-    {
-      title: t('properties.name'),
-      dataIndex: 'property_name',
-      key: 'property_name',
-      width: 200,
-      ellipsis: true,
-      render: (text: string) => <strong>{text || '—'}</strong>
-    },
-    {
-      title: '#',
-      dataIndex: 'property_number',
-      key: 'property_number',
-      width: 80,
-      render: (text: string) => <span style={{ color: '#888' }}>{text}</span>
-    },
-    ...(canViewPropertyOwner(undefined) ? [{
-      title: t('properties.source'),
-      key: 'owner_name',
-      width: 150,
-      ellipsis: true,
-      render: (_: any, record: any) => 
-        record.owner_name && canViewPropertyOwner(record.created_by) ? (
+            <IconHome size={48} color={theme.colors.dark[3]} />
+          </Center>
+        )}
+      </Card.Section>
+
+      <Stack gap="xs" mt="md">
+        <Group justify="space-between" align="flex-start">
+          <Text fw={600} size="lg" lineClamp={1} style={{ flex: 1 }}>
+            {property.property_name || property.property_number}
+          </Text>
+          {property.status === 'published' ? (
+            <Badge color="green" variant="light" leftSection={<IconEye size={14} />}>
+              {t('properties.published')}
+            </Badge>
+          ) : (
+            <Badge color="gray" variant="light" leftSection={<IconEyeOff size={14} />}>
+              {t('properties.draft')}
+            </Badge>
+          )}
+        </Group>
+
+        <Group gap="xs">
+          <Badge color="gray" variant="dot" size="sm">
+            #{property.property_number}
+          </Badge>
+          <Badge color={getDealTypeColor(property.deal_type)} variant="light" size="sm">
+            {getDealTypeLabel(property.deal_type)}
+          </Badge>
+        </Group>
+
+        {property.owner_name && canViewPropertyOwner(property.created_by) && (
           <Button
-            type="link"
-            size="small"
-            icon={<UserOutlined />}
-            onClick={() => openOwnerInfoModal(record)}
-            style={{ padding: 0, height: 'auto' }}
+            variant="subtle"
+            size="xs"
+            leftSection={<IconUser size={14} />}
+            onClick={(e) => {
+              e.stopPropagation();
+              openOwnerInfoModal(property);
+            }}
+            styles={{ root: { padding: '4px 8px' } }}
           >
-            {record.owner_name}
+            {property.owner_name}
           </Button>
+        )}
+
+        <Text size="xs" c="dimmed">
+          {t('properties.addedBy')}: {property.creator_name}
+        </Text>
+
+        <Divider my="xs" />
+
+        <Group gap="xs" wrap="wrap">
+          <Tooltip label={t('common.view')}>
+            <ActionIcon
+              variant="light"
+              color="blue"
+              size="lg"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/properties/view/${property.id}`);
+              }}
+            >
+              <IconEye size={18} />
+            </ActionIcon>
+          </Tooltip>
+
+          <Tooltip label={t('htmlGenerator.downloadButton')}>
+            <ActionIcon
+              variant="light"
+              color="violet"
+              size="lg"
+              onClick={(e) => {
+                e.stopPropagation();
+                openHTMLGenerator(property.id, property.property_number);
+              }}
+            >
+              <IconFileText size={18} />
+            </ActionIcon>
+          </Tooltip>
+
+          <Tooltip label={t('properties.prices')}>
+            <ActionIcon
+              variant="light"
+              color="green"
+              size="lg"
+              onClick={(e) => {
+                e.stopPropagation();
+                openPricingModal(property.id);
+              }}
+            >
+              <IconCurrencyDollar size={18} />
+            </ActionIcon>
+          </Tooltip>
+
+          <Tooltip label={t('properties.calendar.button')}>
+            <ActionIcon
+              variant="light"
+              color="cyan"
+              size="lg"
+              onClick={(e) => {
+                e.stopPropagation();
+                openCalendarModal(property.id);
+              }}
+            >
+              <IconCalendar size={18} />
+            </ActionIcon>
+          </Tooltip>
+
+          {canEditProperty(property.created_by) && (
+            <Tooltip label={t('common.edit')}>
+              <ActionIcon
+                variant="light"
+                color="orange"
+                size="lg"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/properties/edit/${property.id}`);
+                }}
+              >
+                <IconEdit size={18} />
+              </ActionIcon>
+            </Tooltip>
+          )}
+
+          {canDeleteProperty() && (
+            <Tooltip label={t('common.delete')}>
+              <ActionIcon
+                variant="light"
+                color="red"
+                size="lg"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  confirmDelete(property.id);
+                }}
+              >
+                <IconTrash size={18} />
+              </ActionIcon>
+            </Tooltip>
+          )}
+        </Group>
+      </Stack>
+    </Card>
+  );
+
+  // Компонент строки таблицы
+  const TableRow = ({ property }: { property: any }) => (
+    <Table.Tr
+      style={{
+        transition: 'background-color 0.2s ease',
+        cursor: 'pointer'
+      }}
+    >
+      <Table.Td>
+        {property.cover_photo ? (
+          <Image
+            src={property.cover_photo}
+            alt={property.property_number}
+            width={60}
+            height={60}
+            radius="sm"
+            fit="cover"
+          />
         ) : (
-          <span>—</span>
-        )
-    }] : []),
-    {
-      title: t('properties.addedBy'),
-      dataIndex: 'creator_name',
-      key: 'creator_name',
-      width: 150,
-      render: (text: string) => (
-        <Tooltip title={text}>
-          <span>{text}</span>
+          <Center
+            w={60}
+            h={60}
+            style={{
+              background: theme.colors.dark[6],
+              borderRadius: theme.radius.sm
+            }}
+          >
+            <IconHome size={24} color={theme.colors.dark[3]} />
+          </Center>
+        )}
+      </Table.Td>
+      <Table.Td>
+        <Text fw={600}>{property.property_name || '—'}</Text>
+      </Table.Td>
+      <Table.Td>
+        <Text c="dimmed" size="sm">#{property.property_number}</Text>
+      </Table.Td>
+      {canViewPropertyOwner(undefined) && (
+        <Table.Td>
+          {property.owner_name && canViewPropertyOwner(property.created_by) ? (
+            <Button
+              variant="subtle"
+              size="xs"
+              leftSection={<IconUser size={14} />}
+              onClick={() => openOwnerInfoModal(property)}
+            >
+              {property.owner_name}
+            </Button>
+          ) : (
+            <Text>—</Text>
+          )}
+        </Table.Td>
+      )}
+      <Table.Td>
+        <Tooltip label={property.creator_name}>
+          <Text size="sm" lineClamp={1}>{property.creator_name}</Text>
         </Tooltip>
-      )
-    },
-    {
-      title: t('properties.dealType'),
-      dataIndex: 'deal_type',
-      key: 'deal_type',
-      width: 120,
-      render: (type: string) => {
-        if (type === 'sale') {
-          return <Tag color="green">{t('properties.dealTypes.sale')}</Tag>;
-        } else if (type === 'rent') {
-          return <Tag color="blue">{t('properties.dealTypes.rent')}</Tag>;
-        } else if (type === 'both') {
-          return <Tag color="purple">{t('properties.dealTypes.both')}</Tag>;
-        }
-        return <Tag>{type}</Tag>;
-      }
-    },
-    {
-      title: t('properties.status'),
-      dataIndex: 'status',
-      key: 'status',
-      width: 120,
-      align: 'center',
-      render: (status: string) => (
-        status === 'published' ? (
-          <Tag color="success" icon={<EyeOutlined />}>
+      </Table.Td>
+      <Table.Td>
+        <Badge color={getDealTypeColor(property.deal_type)} variant="light">
+          {getDealTypeLabel(property.deal_type)}
+        </Badge>
+      </Table.Td>
+      <Table.Td>
+        {property.status === 'published' ? (
+          <Badge color="green" variant="light" leftSection={<IconEye size={14} />}>
             {t('properties.published')}
-          </Tag>
+          </Badge>
         ) : (
-          <Tag color="default" icon={<EyeInvisibleOutlined />}>
+          <Badge color="gray" variant="light" leftSection={<IconEyeOff size={14} />}>
             {t('properties.draft')}
-          </Tag>
-        )
-      )
-    },
-    {
-      title: t('common.actions'),
-      key: 'actions',
-      width: 280,
-      fixed: 'right' as const,
-      render: (_: any, record: any) => (
-        <Space size="small">
-          <Tooltip title={t('common.view')}>
-            <Button
-              size="small"
-              icon={<EyeOutlined />}
-              onClick={() => navigate(`/properties/view/${record.id}`)}
-            />
+          </Badge>
+        )}
+      </Table.Td>
+      <Table.Td>
+        <Group gap="xs" wrap="nowrap">
+          <Tooltip label={t('common.view')}>
+            <ActionIcon
+              variant="light"
+              color="blue"
+              size="sm"
+              onClick={() => navigate(`/properties/view/${property.id}`)}
+            >
+              <IconEye size={16} />
+            </ActionIcon>
           </Tooltip>
-          <Tooltip title={t('htmlGenerator.downloadButton')}>
-            <Button
-              size="small"
-              icon={<FileTextOutlined />}
-              onClick={() => openHTMLGenerator(record.id, record.property_number)}
-            />
+          <Tooltip label={t('htmlGenerator.downloadButton')}>
+            <ActionIcon
+              variant="light"
+              color="violet"
+              size="sm"
+              onClick={() => openHTMLGenerator(property.id, property.property_number)}
+            >
+              <IconFileText size={16} />
+            </ActionIcon>
           </Tooltip>
-          <Tooltip title={t('properties.prices')}>
-            <Button
-              size="small"
-              icon={<DollarOutlined />}
-              onClick={() => openPricingModal(record.id)}
-            />
+          <Tooltip label={t('properties.prices')}>
+            <ActionIcon
+              variant="light"
+              color="green"
+              size="sm"
+              onClick={() => openPricingModal(property.id)}
+            >
+              <IconCurrencyDollar size={16} />
+            </ActionIcon>
           </Tooltip>
-          <Tooltip title={t('properties.calendar.button')}>
-            <Button
-              size="small"
-              icon={<CalendarOutlined />}
-              onClick={() => openCalendarModal(record.id)}
-            />
+          <Tooltip label={t('properties.calendar.button')}>
+            <ActionIcon
+              variant="light"
+              color="cyan"
+              size="sm"
+              onClick={() => openCalendarModal(property.id)}
+            >
+              <IconCalendar size={16} />
+            </ActionIcon>
           </Tooltip>
-          {canEditProperty(record.created_by) && (
-            <Tooltip title={t('common.edit')}>
-              <Button
-                size="small"
-                icon={<EditOutlined />}
-                onClick={() => navigate(`/properties/edit/${record.id}`)}
-              />
+          {canEditProperty(property.created_by) && (
+            <Tooltip label={t('common.edit')}>
+              <ActionIcon
+                variant="light"
+                color="orange"
+                size="sm"
+                onClick={() => navigate(`/properties/edit/${property.id}`)}
+              >
+                <IconEdit size={16} />
+              </ActionIcon>
             </Tooltip>
           )}
           {canDeleteProperty() && (
-            <Popconfirm
-              title={t('properties.confirmDelete')}
-              onConfirm={() => handleDelete(record.id)}
-              okText={t('common.yes')}
-              cancelText={t('common.no')}
-            >
-              <Tooltip title={t('common.delete')}>
-                <Button
-                  size="small"
-                  danger
-                  icon={<DeleteOutlined />}
-                />
-              </Tooltip>
-            </Popconfirm>
+            <Tooltip label={t('common.delete')}>
+              <ActionIcon
+                variant="light"
+                color="red"
+                size="sm"
+                onClick={() => confirmDelete(property.id)}
+              >
+                <IconTrash size={16} />
+              </ActionIcon>
+            </Tooltip>
           )}
-        </Space>
-      )
-    }
-  ];
+        </Group>
+      </Table.Td>
+    </Table.Tr>
+  );
+
+  // Skeleton для загрузки
+  const LoadingSkeleton = () => (
+    <Stack gap="md">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Paper key={i} shadow="sm" p="md" radius="md" withBorder>
+          <Group>
+            <Skeleton height={60} width={60} radius="sm" />
+            <Stack gap="xs" style={{ flex: 1 }}>
+              <Skeleton height={20} width="60%" />
+              <Skeleton height={16} width="40%" />
+            </Stack>
+          </Group>
+        </Paper>
+      ))}
+    </Stack>
+  );
 
   return (
-    <Card
-      title={t('properties.list')}
-      extra={
-        <Space>
-          {hasPermission('properties.read') && (
-            <Button
-              type="default"
-              icon={<SearchOutlined />}
-              onClick={() => navigate('/properties/search')}
-              size={isMobile ? 'middle' : 'large'}
-            >
-              {!isMobile && t('properties.searchButton')}
-            </Button>
-          )}
-          {hasPermission('properties.create') && (
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => navigate('/properties/create')}
-              size={isMobile ? 'middle' : 'large'}
-            >
-              {!isMobile && t('properties.add')}
-            </Button>
-          )}
-        </Space>
-      }
-    >
-      <Space direction="vertical" style={{ width: '100%' }} size="large">
-        <Row gutter={[12, 12]}>
-          <Col xs={24} sm={12} md={6}>
-            <Input
-              placeholder={t('properties.search')}
-              prefix={<SearchOutlined />}
-              value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-              onPressEnter={handleSearch}
-              allowClear
-            />
-          </Col>
-          <Col xs={12} sm={6} md={4}>
-            <Select
-              placeholder={t('properties.status')}
-              value={filters.status}
-              onChange={(value) => setFilters({ ...filters, status: value })}
-              allowClear
-              style={{ width: '100%' }}
-              options={[
-                { value: 'draft', label: t('properties.draft') },
-                { value: 'published', label: t('properties.published') }
-              ]}
-            />
-          </Col>
-          <Col xs={12} sm={6} md={4}>
-            <Select
-              placeholder={t('properties.dealType')}
-              value={filters.deal_type}
-              onChange={(value) => setFilters({ ...filters, deal_type: value })}
-              allowClear
-              style={{ width: '100%' }}
-              options={[
-                { value: 'sale', label: t('properties.dealTypes.sale') },
-                { value: 'rent', label: t('properties.dealTypes.rent') },
-                { value: 'both', label: t('properties.dealTypes.both') }
-              ]}
-            />
-          </Col>
-          {canViewPropertyOwner(undefined) && (
-            <Col xs={12} sm={6} md={4}>
-              <Select
-                placeholder={t('properties.source')}
-                value={filters.owner_name}
-                onChange={(value) => setFilters({ ...filters, owner_name: value })}
-                allowClear
-                showSearch
-                optionFilterProp="label"
-                style={{ width: '100%' }}
-                options={uniqueOwners.map(owner => ({
-                  value: owner,
-                  label: owner
-                }))}
-              />
-            </Col>
-          )}
-          <Col xs={24} sm={12} md={canViewPropertyOwner(undefined) ? 6 : 10}>
-            <Space size="small" style={{ width: '100%' }}>
+    <Card shadow="sm" padding="lg" radius="md" withBorder>
+      <Stack gap="lg">
+        {/* Заголовок и действия */}
+        <Group justify="space-between" wrap="wrap">
+          <Text size="xl" fw={700}>{t('properties.list')}</Text>
+          <Group gap="xs">
+            {hasPermission('properties.read') && (
               <Button
-                type="primary"
-                icon={<SearchOutlined />}
-                onClick={handleSearch}
-                block={isMobile}
+                variant="light"
+                leftSection={<IconSearch size={18} />}
+                onClick={() => navigate('/properties/search')}
+                size={isMobile ? 'sm' : 'md'}
               >
-                {t('common.search')}
+                {!isMobile && t('properties.searchButton')}
               </Button>
+            )}
+            {hasPermission('properties.create') && (
               <Button
-                icon={<ReloadOutlined />}
-                onClick={handleReset}
+                leftSection={<IconPlus size={18} />}
+                onClick={() => navigate('/properties/create')}
+                size={isMobile ? 'sm' : 'md'}
               >
-                {t('common.reset')}
+                {!isMobile && t('properties.add')}
               </Button>
-            </Space>
-          </Col>
-        </Row>
+            )}
+          </Group>
+        </Group>
 
+        {/* Фильтры */}
         {isMobile ? (
-          <MobileView />
+          <>
+            <Button
+              variant="light"
+              leftSection={<IconFilter size={18} />}
+              onClick={toggleFilters}
+              fullWidth
+            >
+              {filtersOpened ? t('common.hideFilters') : t('common.showFilters')}
+            </Button>
+            
+            <Transition mounted={filtersOpened} transition="slide-down" duration={200}>
+              {(styles) => (
+                <div style={styles}>
+                  <Stack gap="sm">
+                    <TextInput
+                      placeholder={t('properties.search')}
+                      leftSection={<IconSearch size={18} />}
+                      value={filters.search}
+                      onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                      onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                    />
+                    <Select
+                      placeholder={t('properties.status')}
+                      value={filters.status}
+                      onChange={(value) => setFilters({ ...filters, status: value || undefined })}
+                      clearable
+                      data={[
+                        { value: 'draft', label: t('properties.draft') },
+                        { value: 'published', label: t('properties.published') }
+                      ]}
+                    />
+                    <Select
+                      placeholder={t('properties.dealType')}
+                      value={filters.deal_type}
+                      onChange={(value) => setFilters({ ...filters, deal_type: value || undefined })}
+                      clearable
+                      data={[
+                        { value: 'sale', label: t('properties.dealTypes.sale') },
+                        { value: 'rent', label: t('properties.dealTypes.rent') },
+                        { value: 'both', label: t('properties.dealTypes.both') }
+                      ]}
+                    />
+                    {canViewPropertyOwner(undefined) && (
+                      <Select
+                        placeholder={t('properties.source')}
+                        value={filters.owner_name}
+                        onChange={(value) => setFilters({ ...filters, owner_name: value || undefined })}
+                        clearable
+                        searchable
+                        data={uniqueOwners.map(owner => ({
+                          value: owner,
+                          label: owner
+                        }))}
+                      />
+                    )}
+                    <Group grow>
+                      <Button
+                        leftSection={<IconSearch size={18} />}
+                        onClick={handleSearch}
+                      >
+                        {t('common.search')}
+                      </Button>
+                      <Button
+                        variant="light"
+                        leftSection={<IconRefresh size={18} />}
+                        onClick={handleReset}
+                      >
+                        {t('common.reset')}
+                      </Button>
+                    </Group>
+                  </Stack>
+                </div>
+              )}
+            </Transition>
+          </>
         ) : (
-          <Table
-            columns={columns}
-            dataSource={properties}
-            rowKey="id"
-            loading={loading}
-            pagination={{
-              current: pagination.current,
-              pageSize: pagination.pageSize,
-              total: pagination.total,
-              showSizeChanger: true,
-              showTotal: (total) => t('common.total', { total }),
-              pageSizeOptions: ['10', '20', '50', '100']
-            }}
-            onChange={handleTableChange}
-            scroll={{ x: 1200 }}
-          />
+          <Grid gutter="sm">
+            <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+              <TextInput
+                placeholder={t('properties.search')}
+                leftSection={<IconSearch size={18} />}
+                value={filters.search}
+                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 6, sm: 3, md: 2 }}>
+              <Select
+                placeholder={t('properties.status')}
+                value={filters.status}
+                onChange={(value) => setFilters({ ...filters, status: value || undefined })}
+                clearable
+                data={[
+                  { value: 'draft', label: t('properties.draft') },
+                  { value: 'published', label: t('properties.published') }
+                ]}
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 6, sm: 3, md: 2 }}>
+              <Select
+                placeholder={t('properties.dealType')}
+                value={filters.deal_type}
+                onChange={(value) => setFilters({ ...filters, deal_type: value || undefined })}
+                clearable
+                data={[
+                  { value: 'sale', label: t('properties.dealTypes.sale') },
+                  { value: 'rent', label: t('properties.dealTypes.rent') },
+                  { value: 'both', label: t('properties.dealTypes.both') }
+                ]}
+              />
+            </Grid.Col>
+            {canViewPropertyOwner(undefined) && (
+              <Grid.Col span={{ base: 12, sm: 6, md: 2 }}>
+                <Select
+                  placeholder={t('properties.source')}
+                  value={filters.owner_name}
+                  onChange={(value) => setFilters({ ...filters, owner_name: value || undefined })}
+                  clearable
+                  searchable
+                  data={uniqueOwners.map(owner => ({
+                    value: owner,
+                    label: owner
+                  }))}
+                />
+              </Grid.Col>
+            )}
+            <Grid.Col span={{ base: 12, sm: 6, md: canViewPropertyOwner(undefined) ? 3 : 5 }}>
+              <Group gap="xs">
+                <Button
+                  leftSection={<IconSearch size={18} />}
+                  onClick={handleSearch}
+                >
+                  {t('common.search')}
+                </Button>
+                <Button
+                  variant="light"
+                  leftSection={<IconRefresh size={18} />}
+                  onClick={handleReset}
+                >
+                  {t('common.reset')}
+                </Button>
+              </Group>
+            </Grid.Col>
+          </Grid>
         )}
-      </Space>
 
+        {/* Переключатель режима просмотра (только на десктопе) */}
+        {!isMobile && (
+          <Group justify="space-between">
+            <SegmentedControl
+              value={viewMode}
+              onChange={(value) => setViewMode(value as 'grid' | 'list')}
+              data={[
+                {
+                  value: 'list',
+                  label: (
+                    <Center>
+                      <IconLayoutList size={16} />
+                      <Box ml={10}>{t('common.list')}</Box>
+                    </Center>
+                  ),
+                },
+                {
+                  value: 'grid',
+                  label: (
+                    <Center>
+                      <IconLayoutGrid size={16} />
+                      <Box ml={10}>{t('common.grid')}</Box>
+                    </Center>
+                  ),
+                },
+              ]}
+            />
+            <Select
+              value={pagination.pageSize.toString()}
+              onChange={(value) => handlePageSizeChange(value!)}
+              data={['10', '20', '50', '100']}
+              w={100}
+            />
+          </Group>
+        )}
+
+        {/* Контент */}
+        {loading ? (
+          <LoadingSkeleton />
+        ) : properties.length === 0 ? (
+          <Paper shadow="sm" p="xl" radius="md" withBorder>
+            <Center>
+              <Stack align="center" gap="md">
+                <IconHome size={48} color={theme.colors.gray[5]} />
+                <Text size="lg" c="dimmed">{t('properties.noProperties')}</Text>
+                {hasPermission('properties.create') && (
+                  <Button
+                    leftSection={<IconPlus size={18} />}
+                    onClick={() => navigate('/properties/create')}
+                  >
+                    {t('properties.add')}
+                  </Button>
+                )}
+              </Stack>
+            </Center>
+          </Paper>
+        ) : (
+          <>
+            {isMobile || viewMode === 'grid' ? (
+              <Grid gutter="md">
+                {properties.map((property) => (
+                  <Grid.Col key={property.id} span={{ base: 12, sm: 6, md: 4, lg: 3 }}>
+                    <PropertyCard property={property} />
+                  </Grid.Col>
+                ))}
+              </Grid>
+            ) : (
+              <Box style={{ overflowX: 'auto' }}>
+                <Table
+                  striped
+                  highlightOnHover
+                  withTableBorder
+                  withColumnBorders
+                  stickyHeader
+                  stickyHeaderOffset={0}
+                >
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>{t('properties.photo')}</Table.Th>
+                      <Table.Th>{t('properties.name')}</Table.Th>
+                      <Table.Th>#</Table.Th>
+                      {canViewPropertyOwner(undefined) && (
+                        <Table.Th>{t('properties.source')}</Table.Th>
+                      )}
+                      <Table.Th>{t('properties.addedBy')}</Table.Th>
+                      <Table.Th>{t('properties.dealType')}</Table.Th>
+                      <Table.Th>{t('properties.status')}</Table.Th>
+                      <Table.Th>{t('common.actions')}</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {properties.map((property) => (
+                      <TableRow key={property.id} property={property} />
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Box>
+            )}
+
+            {/* Пагинация */}
+            <Group justify="space-between" mt="lg" wrap="wrap">
+              <Text size="sm" c="dimmed">
+                {t('common.total', { total: pagination.total })}
+              </Text>
+              <Pagination
+                total={Math.ceil(pagination.total / pagination.pageSize)}
+                value={pagination.current}
+                onChange={handleTableChange}
+                size={isMobile ? 'sm' : 'md'}
+              />
+            </Group>
+          </>
+        )}
+      </Stack>
+
+      {/* Модальные окна */}
       {selectedPropertyId && (
         <>
           <PricingModal
@@ -711,6 +928,29 @@ const PropertiesList = () => {
           propertyNumber={selectedPropertyForHTML.number}
         />
       )}
+
+      {/* Модальное окно подтверждения удаления */}
+      <Modal
+        opened={deleteModalOpened}
+        onClose={closeDeleteModal}
+        title={t('properties.confirmDelete')}
+        centered
+      >
+        <Stack gap="md">
+          <Text>{t('common.confirmDeleteMessage')}</Text>
+          <Group justify="flex-end" gap="xs">
+            <Button variant="light" onClick={closeDeleteModal}>
+              {t('common.no')}
+            </Button>
+            <Button
+              color="red"
+              onClick={() => propertyToDelete && handleDelete(propertyToDelete)}
+            >
+              {t('common.yes')}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Card>
   );
 };

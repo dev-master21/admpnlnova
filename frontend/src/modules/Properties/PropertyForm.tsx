@@ -1,35 +1,68 @@
 // frontend/src/modules/Properties/PropertyForm.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
-  Form,
-  Input,
-  InputNumber,
-  Select,
-  Button,
   Card,
-  Row,
-  Col,
-  Space,
-  message,
+  Stack,
+  Group,
+  Grid,
+  Text,
+  Badge,
+  Stepper,
+  Progress,
+  Paper,
+  ActionIcon,
+  Divider,
+  Accordion,
+  Affix,
+  Transition,
+  Box,
+  Title,
+  ThemeIcon,
+  Button,
+  Alert,
   Tabs,
+  TextInput,
+  NumberInput,
+  Select,
+  Textarea,
   Checkbox,
-  Typography,
-  DatePicker,
   Radio,
   Modal,
-  Alert,
   Tooltip,
-  Tag,
-  Badge
-} from 'antd';
+  useMantineTheme,
+  Loader,
+  Center
+} from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { useMediaQuery, useDisclosure, useScrollIntoView } from '@mantine/hooks';
+import { useForm } from '@mantine/form';
+import { modals } from '@mantine/modals';
 import {
-  SaveOutlined,
-  InfoCircleOutlined,
-  EnvironmentOutlined,
-  EyeOutlined,
-  RobotOutlined,
-  UserOutlined
-} from '@ant-design/icons';
+  IconDeviceFloppy,
+  IconInfoCircle,
+  IconMapPin,
+  IconEye,
+  IconRobot,
+  IconUser,
+  IconHome,
+  IconLanguage,
+  IconTags,
+  IconCurrencyDollar,
+  IconPhoto,
+  IconCalendar,
+  IconChevronRight,
+  IconChevronLeft,
+  IconCheck,
+  IconX,
+  IconAlertCircle,
+  IconArrowLeft,
+  IconBuildingEstate,
+  IconPencil,
+  IconClipboardText,
+  IconSettings,
+  IconChevronDown,
+  IconChevronUp
+} from '@tabler/icons-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { propertiesApi } from '@/api/properties.api';
@@ -52,9 +85,6 @@ import TranslationsEditor from './components/TranslationsEditor';
 import AIPropertyCreationModal from './components/AIPropertyCreationModal';
 import OwnerAccessModal from './components/OwnerAccessModal';
 
-const { Paragraph } = Typography;
-const { TextArea } = Input;
-
 interface PropertyFormProps {
   viewMode?: boolean;
 }
@@ -63,12 +93,18 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams();
-  const [form] = Form.useForm();
-  
+  const theme = useMantineTheme();
+  const [depositType, setDepositType] = useState<'one_month' | 'two_months' | 'custom'>('one_month');
+  const [depositAmount, setDepositAmount] = useState<number>(0);
+  const [saleCommissionType, setSaleCommissionType] = useState<'percentage' | 'fixed' | null>(null);
+  const [saleCommissionValue, setSaleCommissionValue] = useState<number>(0);
+  const [rentCommissionType, setRentCommissionType] = useState<'percentage' | 'monthly_rent' | 'fixed' | null>(null);
+  const [rentCommissionValue, setRentCommissionValue] = useState<number>(0);
+
   const { canEditProperty, canViewPropertyOwner, canChangePropertyStatus } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [detectingCoords, setDetectingCoords] = useState(false);
-  const [activeTab, setActiveTab] = useState('basic');
+  const [activeStep, setActiveStep] = useState(0);
   const [dealType, setDealType] = useState<'sale' | 'rent' | 'both'>('sale');
   const [showRenovationDate, setShowRenovationDate] = useState(false);
   const [propertyData, setPropertyData] = useState<any>(null);
@@ -83,12 +119,236 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
     photosFromGoogleDrive?: string | null;
   }>({});
 
+  // Состояния для "Показать больше/Скрыть" в особенностях
+  const [showAllPropertyFeatures, setShowAllPropertyFeatures] = useState(false);
+  const [showAllOutdoorFeatures, setShowAllOutdoorFeatures] = useState(false);
+  const [showAllRentalFeatures, setShowAllRentalFeatures] = useState(false);
+  const [showAllLocationFeatures, setShowAllLocationFeatures] = useState(false);
+  const [showAllViews, setShowAllViews] = useState(false);
+
   const isEdit = !!id;
   const isViewMode = viewMode;
   
   const [canEdit, setCanEdit] = useState(false);
   const [showOwnerTab, setShowOwnerTab] = useState(false);
   const [canEditStatus, setCanEditStatus] = useState(false);
+
+  // Медиа запросы
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isTablet = useMediaQuery('(max-width: 1024px)');
+
+  // Scroll into view
+  const { scrollIntoView, targetRef } = useScrollIntoView<HTMLDivElement>({
+    offset: 60,
+  });
+
+  // Модальные окна
+  const [complexInfoOpened, { open: openComplexInfo, close: closeComplexInfo }] = useDisclosure(false);
+
+  // Форма Mantine
+  const form = useForm({
+    initialValues: {
+      property_number: '',
+      property_name: '',
+      complex_name: '',
+      deal_type: 'sale',
+      property_type: '',
+      region: '',
+      address: '',
+      google_maps_link: '',
+      latitude: null as number | null,
+      longitude: null as number | null,
+      bedrooms: null as number | null,
+      bathrooms: null as number | null,
+      indoor_area: null as number | null,
+      outdoor_area: null as number | null,
+      plot_size: null as number | null,
+      floors: null as number | null,
+      floor: '',
+      penthouse_floors: null as number | null,
+      construction_year: null as number | null,
+      construction_month: '',
+      furniture_status: '',
+      parking_spaces: null as number | null,
+      pets_allowed: 'yes',
+      pets_custom: '',
+      building_ownership: '',
+      land_ownership: '',
+      ownership_type: '',
+      sale_price: null as number | null,
+      year_price: null as number | null,
+      minimum_nights: null as number | null,
+      ics_calendar_url: '',
+      video_url: '',
+      status: 'draft',
+      owner_name: '',
+      owner_phone: '',
+      owner_email: '',
+      owner_telegram: '',
+      owner_instagram: '',
+      owner_notes: '',
+      sale_commission_type: '',
+      sale_commission_value: null as number | null,
+      rent_commission_type: '',
+      rent_commission_value: null as number | null,
+      renovation_type: '',
+      renovation_date: null as Date | null,
+      rental_includes: '',
+      deposit_type: '',
+      deposit_amount: null as number | null,
+      electricity_rate: null as number | null,
+      water_rate: null as number | null,
+      distance_to_beach: null as number | null,
+      features: {
+        property: [] as string[],
+        outdoor: [] as string[],
+        rental: [] as string[],
+        location: [] as string[],
+        views: [] as string[]
+      },
+      translations: {
+        ru: { description: '' },
+        en: { description: '' },
+        th: { description: '' },
+        zh: { description: '' },
+        he: { description: '' }
+      },
+      seasonalPricing: [] as any[]
+    },
+    validate: {
+      property_number: (value) => (!value ? t('validation.required') : null),
+      deal_type: (value) => (!value ? t('validation.required') : null),
+      property_type: (value) => (!value ? t('validation.required') : null),
+      region: (value) => (!value ? t('validation.required') : null),
+      address: (value) => (!value ? t('validation.required') : null),
+      property_name: (value) => (!value ? t('validation.required') : null),
+    },
+  });
+
+  // Шаги формы - НОВЫЙ ПОРЯДОК
+  const steps = useMemo(() => {
+    const baseSteps = [
+      { 
+        value: 0, 
+        key: 'basic',
+        label: t('properties.tabs.basic'), 
+        icon: IconHome,
+        description: t('properties.steps.basicDescription') || 'Основная информация'
+      },
+      {
+        value: 1,
+        key: 'media',
+        label: t('properties.tabs.media'),
+        icon: IconPhoto,
+        description: t('properties.steps.mediaDescription') || 'Медиа'
+      },
+      {
+        value: 2,
+        key: 'features',
+        label: t('properties.tabs.features'),
+        icon: IconTags,
+        description: t('properties.steps.featuresDescription') || 'Характеристики'
+      },
+      {
+        value: 3,
+        key: 'pricing',
+        label: t('properties.tabs.pricing'),
+        icon: IconCurrencyDollar,
+        description: t('properties.steps.pricingDescription') || 'Цены'
+      },
+      {
+        value: 4,
+        key: 'calendar',
+        label: t('properties.tabs.calendar'),
+        icon: IconCalendar,
+        description: t('properties.steps.calendarDescription') || 'Календарь'
+      }
+    ];
+
+    if (showOwnerTab) {
+      baseSteps.push({
+        value: 5,
+        key: 'owner',
+        label: t('properties.tabs.owner'),
+        icon: IconUser,
+        description: t('properties.steps.ownerDescription') || 'Владелец'
+      });
+    }
+
+    baseSteps.push({
+      value: showOwnerTab ? 6 : 5,
+      key: 'translations',
+      label: t('properties.tabs.translations'),
+      icon: IconLanguage,
+      description: t('properties.steps.translationsDescription') || 'Переводы'
+    });
+
+    return baseSteps;
+  }, [showOwnerTab, t]);
+
+  // Вычисление прогресса
+  const calculateProgress = () => {
+    const values = form.values;
+    let filled = 0;
+    let total = 0;
+
+    // Базовые обязательные поля
+    const requiredFields = ['property_number', 'deal_type', 'property_type', 'region', 'address', 'property_name'];
+    requiredFields.forEach(field => {
+      total++;
+      if (values[field as keyof typeof values]) filled++;
+    });
+
+    // Координаты
+    total += 2;
+    if (values.latitude) filled++;
+    if (values.longitude) filled++;
+
+    // Спальни и ванные
+    total += 2;
+    if (values.bedrooms) filled++;
+    if (values.bathrooms) filled++;
+
+    // Площади
+    total += 3;
+    if (values.indoor_area) filled++;
+    if (values.outdoor_area) filled++;
+    if (values.plot_size) filled++;
+
+    // Переводы (хотя бы один)
+    total++;
+    if (values.translations.ru?.description || 
+        values.translations.en?.description ||
+        values.translations.th?.description ||
+        values.translations.zh?.description ||
+        values.translations.he?.description) {
+      filled++;
+    }
+
+    // Фичи
+    total++;
+    if (values.features.property.length > 0 ||
+        values.features.outdoor.length > 0 ||
+        values.features.rental.length > 0 ||
+        values.features.location.length > 0 ||
+        values.features.views.length > 0) {
+      filled++;
+    }
+
+    // Цены
+    if (dealType === 'sale' || dealType === 'both') {
+      total++;
+      if (values.sale_price) filled++;
+    }
+    if (dealType === 'rent' || dealType === 'both') {
+      total++;
+      if (values.year_price || values.seasonalPricing.length > 0) filled++;
+    }
+
+    return Math.round((filled / total) * 100);
+  };
+
+  const progress = calculateProgress();
 
   useEffect(() => {
     if (isEdit) {
@@ -97,15 +357,12 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
   }, [id]);
 
   useEffect(() => {
-    const latitude = form.getFieldValue('latitude');
-    const longitude = form.getFieldValue('longitude');
-    
-    if (googleMapsLink && (!latitude || !longitude)) {
+    if (form.values.google_maps_link && (!form.values.latitude || !form.values.longitude)) {
       setHasCoordinatesForCurrentLink(false);
     } else {
       setHasCoordinatesForCurrentLink(true);
     }
-  }, [googleMapsLink, form]);
+  }, [form.values.google_maps_link, form.values.latitude, form.values.longitude]);
 
   useEffect(() => {
     if (propertyData) {
@@ -118,7 +375,12 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
       setCanEditStatus(canEditStatusFlag);
       
       if (isEdit && !isViewMode && !userCanEdit) {
-        message.warning(t('properties.messages.noEditPermission'));
+        notifications.show({
+          title: t('properties.messages.noEditPermission'),
+          message: t('properties.messages.noEditPermissionDescription') || 'У вас нет прав на редактирование',
+          color: 'orange',
+          icon: <IconAlertCircle size={18} />
+        });
         navigate(`/properties/view/${id}`);
       }
     } else if (!isEdit) {
@@ -138,8 +400,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
       setDealType(property.deal_type);
       setGoogleMapsLink(property.google_maps_link || '');
       
-      // ✅ КРИТИЧЕСКИ ВАЖНО: Сохраняем месячные цены в aiTempData
-      // Это гарантирует, что при сохранении объекта месячные цены не потеряются
       console.log('Loading monthly pricing from DB:', property.monthly_pricing);
       setAiTempData({
         monthlyPricing: property.monthly_pricing || [],
@@ -148,7 +408,14 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
       });
       
       // Парсим features
-      let parsedFeatures = {};
+      let parsedFeatures = {
+        property: [] as string[],
+        outdoor: [] as string[],
+        rental: [] as string[],
+        location: [] as string[],
+        views: [] as string[]
+      };
+      
       if (property.features) {
         try {
           if (Array.isArray(property.features)) {
@@ -180,13 +447,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
           }
         } catch (e) {
           console.error('Error parsing features:', e);
-          parsedFeatures = {
-            property: [],
-            outdoor: [],
-            rental: [],
-            location: [],
-            views: []
-          };
         }
       }
 
@@ -219,16 +479,13 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         }
       }
 
-      console.log('Loaded translations:', translations);
-      console.log('Loaded monthly pricing:', property.monthly_pricing);
-
       // Устанавливаем все значения в форму
-      form.setFieldsValue({
+      form.setValues({
         property_number: property.property_number || '',
         property_name: property.property_name || '',
         complex_name: property.complex_name || '',
         deal_type: property.deal_type,
-        property_type: property.property_type,
+        property_type: property.property_type || '',
         region: property.region || '',
         address: property.address || '',
         google_maps_link: property.google_maps_link || '',
@@ -240,37 +497,37 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         outdoor_area: property.outdoor_area,
         plot_size: property.plot_size,
         floors: property.floors,
-        floor: property.floor,
+        floor: property.floor || '',
         penthouse_floors: property.penthouse_floors,
         construction_year: property.construction_year,
-        construction_month: property.construction_month,
-        furniture_status: property.furniture_status,
+        construction_month: property.construction_month || '',
+        furniture_status: property.furniture_status || '',
         parking_spaces: property.parking_spaces,
-        pets_allowed: property.pets_allowed,
-        pets_custom: property.pets_custom,
-        building_ownership: property.building_ownership,
-        land_ownership: property.land_ownership,
-        ownership_type: property.ownership_type,
+        pets_allowed: property.pets_allowed || 'yes',
+        pets_custom: property.pets_custom || '',
+        building_ownership: property.building_ownership || '',
+        land_ownership: property.land_ownership || '',
+        ownership_type: property.ownership_type || '',
         sale_price: property.sale_price,
         year_price: property.year_price,
         minimum_nights: property.minimum_nights,
-        ics_calendar_url: property.ics_calendar_url,
-        video_url: property.video_url,
+        ics_calendar_url: property.ics_calendar_url || '',
+        video_url: property.video_url || '',
         status: property.status,
-        owner_name: property.owner_name,
-        owner_phone: property.owner_phone,
-        owner_email: property.owner_email,
-        owner_telegram: property.owner_telegram,
-        owner_instagram: property.owner_instagram,
-        owner_notes: property.owner_notes,
-        sale_commission_type: property.sale_commission_type,
+        owner_name: property.owner_name || '',
+        owner_phone: property.owner_phone || '',
+        owner_email: property.owner_email || '',
+        owner_telegram: property.owner_telegram || '',
+        owner_instagram: property.owner_instagram || '',
+        owner_notes: property.owner_notes || '',
+        sale_commission_type: property.sale_commission_type || '',
         sale_commission_value: property.sale_commission_value,
-        rent_commission_type: property.rent_commission_type,
+        rent_commission_type: property.rent_commission_type || '',
         rent_commission_value: property.rent_commission_value,
-        renovation_type: property.renovation_type,
-        renovation_date: property.renovation_date ? dayjs(property.renovation_date) : null,
-        rental_includes: property.rental_includes,
-        deposit_type: property.deposit_type,
+        renovation_type: property.renovation_type || '',
+        renovation_date: property.renovation_date ? new Date(property.renovation_date) : null,
+        rental_includes: property.rental_includes || '',
+        deposit_type: property.deposit_type || '',
         deposit_amount: property.deposit_amount,
         electricity_rate: property.electricity_rate,
         water_rate: property.water_rate,
@@ -284,44 +541,38 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         setShowRenovationDate(true);
       }
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('errors.generic'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('errors.generic'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const handleAIGenerated = (descriptions: any, featuresFound: string[]) => {
-    const currentTranslations = form.getFieldValue('translations') || {};
-    
-    form.setFieldsValue({
-      translations: {
-        ru: {
-          description: descriptions.ru?.description || currentTranslations.ru?.description || ''
-        },
-        en: {
-          description: descriptions.en?.description || currentTranslations.en?.description || ''
-        },
-        th: {
-          description: descriptions.th?.description || currentTranslations.th?.description || ''
-        },
-        zh: {
-          description: descriptions.zh?.description || currentTranslations.zh?.description || ''
-        },
-        he: {
-          description: descriptions.he?.description || currentTranslations.he?.description || ''
-        }
+    form.setFieldValue('translations', {
+      ru: {
+        description: descriptions.ru?.description || form.values.translations.ru?.description || ''
+      },
+      en: {
+        description: descriptions.en?.description || form.values.translations.en?.description || ''
+      },
+      th: {
+        description: descriptions.th?.description || form.values.translations.th?.description || ''
+      },
+      zh: {
+        description: descriptions.zh?.description || form.values.translations.zh?.description || ''
+      },
+      he: {
+        description: descriptions.he?.description || form.values.translations.he?.description || ''
       }
     });
   
     if (featuresFound && featuresFound.length > 0) {
-      const currentFeatures = form.getFieldValue('features') || {
-        property: [],
-        outdoor: [],
-        rental: [],
-        location: [],
-        views: []
-      };
-    
+      const currentFeatures = form.values.features;
       const updatedFeatures = { ...currentFeatures };
       
       featuresFound.forEach((feature: string) => {
@@ -348,19 +599,34 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         }
       });
     
-      form.setFieldsValue({ features: updatedFeatures });
+      form.setFieldValue('features', updatedFeatures);
       
-      message.success(t('properties.messages.aiFeaturesFound', { count: featuresFound.length }));
+      notifications.show({
+        title: t('common.success'),
+        message: t('properties.messages.aiFeaturesFound', { count: featuresFound.length }),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
     }
   
-    message.success(t('properties.messages.aiDescriptionsGenerated'));
+    notifications.show({
+      title: t('common.success'),
+      message: t('properties.messages.aiDescriptionsGenerated'),
+      color: 'green',
+      icon: <IconCheck size={18} />
+    });
   };
 
   const handleAutoDetectCoordinates = async () => {
-    const link = form.getFieldValue('google_maps_link');
+    const link = form.values.google_maps_link;
 
     if (!link) {
-      message.warning(t('properties.messages.coordinatesWarning'));
+      notifications.show({
+        title: t('properties.messages.coordinatesWarning'),
+        message: t('properties.messages.coordinatesWarningDescription') || 'Введите ссылку на Google Maps',
+        color: 'orange',
+        icon: <IconAlertCircle size={18} />
+      });
       return;
     }
 
@@ -368,61 +634,69 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
     try {
       const coords = await extractCoordinatesFromGoogleMapsLink(link);
 
-      form.setFieldsValue({
-        latitude: coords.lat,
-        longitude: coords.lng
-      });
+      form.setFieldValue('latitude', coords.lat);
+      form.setFieldValue('longitude', coords.lng);
 
       setHasCoordinatesForCurrentLink(true);
-      message.success(t('properties.messages.coordinatesDetected'));
+      notifications.show({
+        title: t('common.success'),
+        message: t('properties.messages.coordinatesDetected'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
 
       try {
         const { data } = await propertiesApi.calculateBeachDistance(coords.lat, coords.lng);
 
-        form.setFieldsValue({
-          distance_to_beach: data.data.distance
-        });
+        form.setFieldValue('distance_to_beach', data.data.distance);
 
-        message.success(t('properties.messages.beachDistanceCalculated', { 
-          distance: data.data.distanceFormatted,
-          beach: data.data.nearestBeach
-        }));
+        notifications.show({
+          title: t('common.success'),
+          message: t('properties.messages.beachDistanceCalculated', { 
+            distance: data.data.distanceFormatted,
+            beach: data.data.nearestBeach
+          }),
+          color: 'green',
+          icon: <IconCheck size={18} />
+        });
       } catch (error) {
         console.error('Failed to calculate beach distance:', error);
       }
     } catch (error: any) {
-      message.error(t('properties.messages.coordinatesError'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('properties.messages.coordinatesError'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
       console.error(error);
     } finally {
       setDetectingCoords(false);
     }
   };
 
-  const handleGoogleMapsLinkChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newLink = e.target.value;
-    setGoogleMapsLink(newLink);
+  const handleGoogleMapsLinkChange = (value: string) => {
+    form.setFieldValue('google_maps_link', value);
+    setGoogleMapsLink(value);
     
-    if (newLink !== propertyData?.google_maps_link) {
+    if (value !== propertyData?.google_maps_link) {
       setHasCoordinatesForCurrentLink(false);
     }
   };
 
   const showComplexInfo = () => {
-    Modal.info({
-      title: t('properties.complexInfo'),
-      content: (
-        <div style={{ marginTop: 16 }}>
-          <Paragraph>{t('properties.complexInfoText')}</Paragraph>
-        </div>
-      ),
-      width: 600
-    });
+    openComplexInfo();
   };
 
-  const handleSubmit = async (values: any) => {
+  const handleSubmit = async (values: typeof form.values) => {
     if (!values.property_name) {
-      message.error(t('properties.messages.propertyNameRequired'));
-      setActiveTab('basic');
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('properties.messages.propertyNameRequired'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
+      setActiveStep(0);
       return;
     }
 
@@ -434,17 +708,20 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
                                 values.translations?.he?.description;
 
       if (!hasAnyDescription) {
-        message.error(t('properties.messages.descriptionRequired'));
-        setActiveTab('translations');
+        notifications.show({
+          title: t('errors.generic'),
+          message: t('properties.messages.descriptionRequired'),
+          color: 'red',
+          icon: <IconX size={18} />
+        });
+        // Переходим на вкладку translations (последняя)
+        setActiveStep(steps.length - 1);
         return;
       }
     }
 
     setLoading(true);
     try {
-      console.log('AI Temp Data before submit:', aiTempData);
-      console.log('Form values before submit:', values);
-
       const formData = {
         ...values,
         renovation_date: values.renovation_date 
@@ -463,32 +740,46 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         photosFromGoogleDrive: aiTempData.photosFromGoogleDrive || null
       };
     
-      delete formData.features;
-
-      console.log('Final form data to submit:', {
-        monthlyPricing: formData.monthlyPricing,
-        blockedDates: formData.blockedDates,
-        photosFromGoogleDrive: formData.photosFromGoogleDrive
-      });
-    
       if (isEdit) {
         await propertiesApi.update(Number(id), formData);
-        message.success(t('properties.updateSuccess'));
+        notifications.show({
+          title: t('common.success'),
+          message: t('properties.updateSuccess'),
+          color: 'green',
+          icon: <IconCheck size={18} />
+        });
         loadProperty();
       } else {
         const { data } = await propertiesApi.create(formData);
-        message.success(t('properties.createSuccess'));
+        notifications.show({
+          title: t('common.success'),
+          message: t('properties.createSuccess'),
+          color: 'green',
+          icon: <IconCheck size={18} />
+        });
         
         if (aiTempData.monthlyPricing && aiTempData.monthlyPricing.length > 0) {
-          message.success(t('properties.messages.savedMonthlyPrices', { count: aiTempData.monthlyPricing.length }));
+          notifications.show({
+            title: t('common.success'),
+            message: t('properties.messages.savedMonthlyPrices', { count: aiTempData.monthlyPricing.length }),
+            color: 'green'
+          });
         }
         
         if (aiTempData.blockedDates && aiTempData.blockedDates.length > 0) {
-          message.success(t('properties.messages.savedBlockedDates', { count: aiTempData.blockedDates.length }));
+          notifications.show({
+            title: t('common.success'),
+            message: t('properties.messages.savedBlockedDates', { count: aiTempData.blockedDates.length }),
+            color: 'green'
+          });
         }
         
         if (aiTempData.photosFromGoogleDrive) {
-          message.info(t('properties.messages.googleDrivePhotosLoading'));
+          notifications.show({
+            title: t('common.info'),
+            message: t('properties.messages.googleDrivePhotosLoading'),
+            color: 'blue'
+          });
         }
         
         setAiTempData({});
@@ -497,7 +788,12 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
       }
     } catch (error: any) {
       console.error('Submit error:', error);
-      message.error(error.response?.data?.message || t('errors.generic'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('errors.generic'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     } finally {
       setLoading(false);
     }
@@ -505,10 +801,10 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
 
   const handleDealTypeChange = (value: string) => {
     setDealType(value as 'sale' | 'rent' | 'both');
+    form.setFieldValue('deal_type', value);
   };
 
-  const handleRenovationChange = (e: any) => {
-    const value = e.target.value;
+  const handleRenovationChange = (value: string | null) => {
     if (value) {
       setShowRenovationDate(true);
     } else {
@@ -522,21 +818,38 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
     setAiModalVisible(false);
 
     try {
-      message.loading({ content: t('properties.messages.aiFillingForm'), key: 'ai-fill', duration: 0 });
-
-      console.log('AI Data received:', {
-        monthlyPricing: propertyData.monthlyPricing,
-        blockedDates: propertyData.blockedDates,
-        photosFromGoogleDrive: propertyData.photosFromGoogleDrive
+      notifications.show({
+        id: 'ai-fill',
+        title: t('properties.messages.aiFillingForm'),
+        message: t('properties.messages.pleaseWait') || 'Подождите...',
+        loading: true,
+        autoClose: false,
+        withCloseButton: false
       });
 
-      const formValues: any = {
+      const tempData: any = {
+        monthlyPricing: propertyData.monthlyPricing || [],
+        blockedDates: propertyData.blockedDates || [],
+        photosFromGoogleDrive: propertyData.photosFromGoogleDrive || null
+      };
+      
+      setAiTempData(tempData);
+
+      const features = {
+        property: propertyData.propertyFeatures || [],
+        outdoor: propertyData.outdoorFeatures || [],
+        rental: propertyData.rentalFeatures || [],
+        location: propertyData.locationFeatures || [],
+        views: propertyData.views || []
+      };
+
+      form.setValues({
         property_number: propertyData.property_number || '',
         property_name: propertyData.property_name || '',
         complex_name: propertyData.complex_name || '',
         deal_type: propertyData.deal_type || 'sale',
-        property_type: propertyData.property_type || null,
-        region: propertyData.region || null,
+        property_type: propertyData.property_type || '',
+        region: propertyData.region || '',
         address: propertyData.address || '',
         google_maps_link: propertyData.google_maps_link || '',
         latitude: propertyData.latitude || null,
@@ -547,24 +860,24 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         outdoor_area: propertyData.outdoor_area || null,
         plot_size: propertyData.plot_size || null,
         floors: propertyData.floors || null,
-        floor: propertyData.floor || null,
+        floor: propertyData.floor || '',
         construction_year: propertyData.construction_year || null,
-        construction_month: propertyData.construction_month || null,
-        furniture_status: propertyData.furniture_status || null,
+        construction_month: propertyData.construction_month || '',
+        furniture_status: propertyData.furniture_status || '',
         parking_spaces: propertyData.parking_spaces || null,
         pets_allowed: propertyData.pets_allowed || 'yes',
-        building_ownership: propertyData.building_ownership || null,
-        land_ownership: propertyData.land_ownership || null,
-        ownership_type: propertyData.ownership_type || null,
+        building_ownership: propertyData.building_ownership || '',
+        land_ownership: propertyData.land_ownership || '',
+        ownership_type: propertyData.ownership_type || '',
         sale_price: propertyData.sale_price || null,
         year_price: propertyData.year_price || null,
         status: 'draft',
         video_url: propertyData.video_url || '',
-        renovation_type: propertyData.renovation_type || null,
-        renovation_date: propertyData.renovation_date ? dayjs(propertyData.renovation_date) : null,
-        sale_commission_type: propertyData.sale_commission_type || null,
+        renovation_type: propertyData.renovation_type || '',
+        renovation_date: propertyData.renovation_date ? new Date(propertyData.renovation_date) : null,
+        sale_commission_type: propertyData.sale_commission_type || '',
         sale_commission_value: propertyData.sale_commission_value || null,
-        rent_commission_type: propertyData.rent_commission_type || null,
+        rent_commission_type: propertyData.rent_commission_type || '',
         rent_commission_value: propertyData.rent_commission_value || null,
         owner_name: propertyData.owner_name || '',
         owner_phone: propertyData.owner_phone || '',
@@ -572,46 +885,43 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         owner_telegram: propertyData.owner_telegram || '',
         owner_instagram: propertyData.owner_instagram || '',
         owner_notes: propertyData.owner_notes || '',
-        deposit_type: propertyData.deposit_type || null,
+        deposit_type: propertyData.deposit_type || '',
         deposit_amount: propertyData.deposit_amount || null,
         electricity_rate: propertyData.electricity_rate || null,
         water_rate: propertyData.water_rate || null,
-        rental_includes: propertyData.rental_includes || ''
-      };
-
-      const features: any = {
-        property: propertyData.propertyFeatures || [],
-        outdoor: propertyData.outdoorFeatures || [],
-        rental: propertyData.rentalFeatures || [],
-        location: propertyData.locationFeatures || [],
-        views: propertyData.views || []
-      };
-      formValues.features = features;
-
-      if (propertyData.seasonalPricing && propertyData.seasonalPricing.length > 0) {
-        formValues.seasonalPricing = propertyData.seasonalPricing;
-      }
-
-      const tempData: any = {
-        monthlyPricing: propertyData.monthlyPricing || [],
-        blockedDates: propertyData.blockedDates || [],
-        photosFromGoogleDrive: propertyData.photosFromGoogleDrive || null
-      };
-      
-      setAiTempData(tempData);
-      
-      console.log('Saved to aiTempData:', tempData);
+        rental_includes: propertyData.rental_includes || '',
+        features: features,
+        seasonalPricing: propertyData.seasonalPricing || [],
+        translations: form.values.translations,
+        minimum_nights: null,
+        ics_calendar_url: '',
+        pets_custom: '',
+        penthouse_floors: null,
+        distance_to_beach: null
+      });
 
       if (tempData.monthlyPricing.length > 0) {
-        message.info(t('properties.messages.aiMonthlyPrices', { count: tempData.monthlyPricing.length }));
+        notifications.show({
+          title: t('common.info'),
+          message: t('properties.messages.aiMonthlyPrices', { count: tempData.monthlyPricing.length }),
+          color: 'blue'
+        });
       }
       
       if (tempData.blockedDates.length > 0) {
-        message.info(t('properties.messages.aiBlockedDates', { count: tempData.blockedDates.length }));
+        notifications.show({
+          title: t('common.info'),
+          message: t('properties.messages.aiBlockedDates', { count: tempData.blockedDates.length }),
+          color: 'blue'
+        });
       }
       
       if (tempData.photosFromGoogleDrive) {
-        message.info(t('properties.messages.aiGoogleDrivePhotos'));
+        notifications.show({
+          title: t('common.info'),
+          message: t('properties.messages.aiGoogleDrivePhotos'),
+          color: 'blue'
+        });
       }
 
       if (propertyData.deal_type) {
@@ -622,12 +932,22 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         setGoogleMapsLink(propertyData.google_maps_link);
       }
 
-      form.setFieldsValue(formValues);
-
-      message.success({ content: t('properties.messages.aiFormFilled'), key: 'ai-fill', duration: 3 });
+      notifications.update({
+        id: 'ai-fill',
+        title: t('common.success'),
+        message: t('properties.messages.aiFormFilled'),
+        color: 'green',
+        icon: <IconCheck size={18} />,
+        loading: false,
+        autoClose: 3000
+      });
 
       if (propertyData.google_maps_link && !propertyData.latitude && !propertyData.longitude) {
-        message.info(t('properties.messages.aiCoordinatesDetecting'));
+        notifications.show({
+          title: t('common.info'),
+          message: t('properties.messages.aiCoordinatesDetecting'),
+          color: 'blue'
+        });
         setHasCoordinatesForCurrentLink(false);
         
         setTimeout(() => {
@@ -635,966 +955,1366 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         }, 500);
       }
 
-      Modal.info({
+      modals.openConfirmModal({
         title: t('properties.ai.modalTitle'),
-        content: (
-          <div>
-            <p>{t('properties.ai.modalDescription')}</p>
-            <p><strong>{t('properties.ai.modalWarning')}</strong></p>
-            <p>{t('properties.ai.modalCheckTitle')}</p>
-            <ul>
-              <li>{t('properties.ai.modalCheckPrices', { 
+        children: (
+          <Stack gap="sm">
+            <Text>{t('properties.ai.modalDescription')}</Text>
+            <Text fw={600}>{t('properties.ai.modalWarning')}</Text>
+            <Text>{t('properties.ai.modalCheckTitle')}</Text>
+            <Stack gap="xs" pl="md">
+              <Text size="sm">• {t('properties.ai.modalCheckPrices', { 
                 info: tempData.monthlyPricing.length > 0 
                   ? t('properties.ai.modalPricesSet', { count: tempData.monthlyPricing.length })
                   : t('properties.ai.modalPricesNotSet')
-              })}</li>
-              <li>{t('properties.ai.modalCheckCoordinates')}</li>
-              <li>{t('properties.ai.modalCheckFeatures')}</li>
-              <li>{t('properties.ai.modalCheckOwner')}</li>
+              })}</Text>
+              <Text size="sm">• {t('properties.ai.modalCheckCoordinates')}</Text>
+              <Text size="sm">• {t('properties.ai.modalCheckFeatures')}</Text>
+              <Text size="sm">• {t('properties.ai.modalCheckOwner')}</Text>
               {tempData.blockedDates.length > 0 && (
-                <li>{t('properties.ai.modalCheckCalendar', { count: tempData.blockedDates.length })}</li>
+                <Text size="sm">• {t('properties.ai.modalCheckCalendar', { count: tempData.blockedDates.length })}</Text>
               )}
               {tempData.photosFromGoogleDrive && (
-                <li>{t('properties.ai.modalCheckPhotos')}</li>
+                <Text size="sm">• {t('properties.ai.modalCheckPhotos')}</Text>
               )}
-            </ul>
-          </div>
+            </Stack>
+          </Stack>
         ),
-        width: 600,
-        okText: t('properties.ai.modalOkButton')
+        labels: { confirm: t('properties.ai.modalOkButton') || 'OK', cancel: '' },
+        confirmProps: { color: 'blue' },
+        withCloseButton: false,
+        onConfirm: () => {}
       });
 
-      setActiveTab('basic');
+      setActiveStep(0);
 
     } catch (error) {
       console.error('AI fill error:', error);
-      message.error(t('properties.messages.aiFillError'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('properties.messages.aiFillError'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     } finally {
       setFillingFromAI(false);
     }
   };
 
   const handleSaveClick = async () => {
-    try {
-      const values = form.getFieldsValue(true);
-
-      if (!values.property_name) {
-        message.error(t('properties.messages.propertyNameRequired'));
-        setActiveTab('basic');
-        return;
-      }
+    const validation = form.validate();
     
-      if (values.status !== 'draft') {
-        const hasAnyDescription = values.translations?.ru?.description || 
-                                  values.translations?.en?.description || 
-                                  values.translations?.th?.description ||
-                                  values.translations?.zh?.description ||
-                                  values.translations?.he?.description;
+    if (validation.hasErrors) {
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('properties.messages.fillRequiredFields'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
+      setActiveStep(0);
+      return;
+    }
 
-        if (!hasAnyDescription) {
-          message.error(t('properties.messages.descriptionRequired'));
-          setActiveTab('translations');
-          return;
-        }
-      }
+    await handleSubmit(form.values);
+  };
 
-      try {
-        await form.validateFields([
-          'property_number', 
-          'deal_type', 
-          'property_type', 
-          'region', 
-          'address', 
-          'status', 
-          'property_name'
-        ]);
-      } catch (errorInfo: any) {
-        const errorFields = errorInfo.errorFields || [];
-        if (errorFields.length > 0) {
-          setActiveTab('basic');
-          message.error(t('properties.messages.fillRequiredFields'));
-        }
-        return;
-      }
-
-      await handleSubmit(values);
-    } catch (error) {
-      console.error('Save error:', error);
+  const nextStep = () => {
+    if (activeStep < steps.length - 1) {
+      setActiveStep(activeStep + 1);
+      scrollIntoView();
     }
   };
 
-  return (
-    <Card 
-      title={
-        <Space>
-          {isViewMode && <EyeOutlined />}
-          {isViewMode ? t('properties.form.viewMode') : (isEdit ? t('properties.form.editMode') : t('properties.form.createMode'))}
-        </Space>
-      }
-      extra={
-        <>
-          {!isEdit && !isViewMode && (
-            <Button
-              type="default"
-              size="large"
-              icon={<RobotOutlined />}
-              onClick={() => setAiModalVisible(true)}
-              style={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                borderColor: '#667eea',
-                color: 'white',
-                fontWeight: 500
-              }}
-            >
-              {t('properties.form.createWithAI')}
-            </Button>
-          )}
+  const prevStep = () => {
+    if (activeStep > 0) {
+      setActiveStep(activeStep - 1);
+      scrollIntoView();
+    }
+  };
 
-          {isViewMode && canEdit && (
-            <Button
-              type="primary"
-              size="large"
-              onClick={() => navigate(`/properties/edit/${id}`)}
-            >
-              {t('properties.form.editButton')}
-            </Button>
-          )}
-        </>
-      }
-    >
-      <Form
-        form={form}
-        layout="vertical"
-        onFinish={handleSubmit}
-        disabled={isViewMode}
-        initialValues={{
-          status: 'draft',
-          deal_type: 'sale',
-          pets_allowed: true,
-          features: {
-            property: [],
-            outdoor: [],
-            rental: [],
-            location: [],
-            views: []
-          },
-          translations: {
-            ru: { property_name: '', description: '' },
-            en: { property_name: '', description: '' },
-            th: { property_name: '', description: '' },
-            zh: { property_name: '', description: '' }, 
-            he: { property_name: '', description: '' } 
-          },
-          seasonalPricing: []
-        }}
-      >
-        <Tabs activeKey={activeTab} onChange={setActiveTab}>
-          <Tabs.TabPane tab={t('properties.tabs.basic')} key="basic">
-            <Row gutter={16}>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="property_number"
-                  label={t('properties.propertyNumber')}
-                  rules={[{ required: true, message: t('validation.required') }]}
-                >
-                  <Input placeholder="L6, V123, etc." />
-                </Form.Item>
-              </Col>
+  // Компонент прогресс-бара
+  const ProgressIndicator = () => (
+    <Paper shadow="sm" p="md" radius="md" withBorder mb="lg">
+      <Group justify="space-between" mb="xs">
+        <Text size="sm" fw={500}>{t('properties.form.completionProgress') || 'Прогресс заполнения'}</Text>
+        <Text size="sm" c="dimmed">{progress}%</Text>
+      </Group>
+      <Progress value={progress} size="lg" radius="md" />
+    </Paper>
+  );
 
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="deal_type"
-                  label={t('properties.dealType')}
-                  rules={[{ required: true, message: t('validation.required') }]}
-                >
-                  <Select onChange={handleDealTypeChange}>
-                    <Select.Option value="sale">{t('properties.dealTypes.sale')}</Select.Option>
-                    <Select.Option value="rent">{t('properties.dealTypes.rent')}</Select.Option>
-                    <Select.Option value="both">{t('properties.dealTypes.both')}</Select.Option>
-                  </Select>
-                </Form.Item>
-              </Col>
+  // Рендер особенностей с показом первых 10
+  const renderFeaturesGroup = (
+    features: string[],
+    selectedFeatures: string[],
+    onChange: (value: string[]) => void,
+    showAll: boolean,
+    setShowAll: (value: boolean) => void,
+    title: string,
+    color: string
+  ) => {
+    const displayFeatures = showAll ? features : features.slice(0, 10);
+    const hasMore = features.length > 10;
 
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="property_type"
-                  label={t('properties.propertyType')}
-                  rules={[{ required: true, message: t('validation.required') }]}
-                >
-                  <Select>
-                    <Select.Option value="villa">{t('properties.propertyTypes.villa')}</Select.Option>
-                    <Select.Option value="apartment">{t('properties.propertyTypes.apartment')}</Select.Option>
-                    <Select.Option value="condo">{t('properties.propertyTypes.condo')}</Select.Option>
-                    <Select.Option value="penthouse">{t('properties.propertyTypes.penthouse')}</Select.Option>
-                    <Select.Option value="house">{t('properties.propertyTypes.house')}</Select.Option>
-                    <Select.Option value="land">{t('properties.propertyTypes.land')}</Select.Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="region"
-                  label={t('properties.region')}
-                  rules={[{ required: true, message: t('validation.required') }]}
-                >
-                  <Select>
-                    <Select.Option value="bangtao">{t('properties.regions.bangtao')}</Select.Option>
-                    <Select.Option value="kamala">{t('properties.regions.kamala')}</Select.Option>
-                    <Select.Option value="surin">{t('properties.regions.surin')}</Select.Option>
-                    <Select.Option value="layan">{t('properties.regions.layan')}</Select.Option>
-                    <Select.Option value="rawai">{t('properties.regions.rawai')}</Select.Option>
-                    <Select.Option value="patong">{t('properties.regions.patong')}</Select.Option>
-                    <Select.Option value="kata">{t('properties.regions.kata')}</Select.Option>
-                    <Select.Option value="chalong">{t('properties.regions.chalong')}</Select.Option>
-                    <Select.Option value="naiharn">{t('properties.regions.naiharn')}</Select.Option>
-                    <Select.Option value="phukettown">{t('properties.regions.phukettown')}</Select.Option>
-                    <Select.Option value="maikhao">{t('properties.regions.maikhao')}</Select.Option>
-                    <Select.Option value="yamu">{t('properties.regions.yamu')}</Select.Option>
-                    <Select.Option value="paklok">{t('properties.regions.paklok')}</Select.Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-
-              {(dealType === 'sale' || dealType === 'both') && (
-                <Col xs={24} sm={12}>
-                  <Form.Item
-                    name="building_ownership"
-                    label={t('properties.buildingOwnership')}
-                  >
-                    <Select placeholder={t('common.select')}>
-                      <Select.Option value="freehold">{t('properties.ownershipTypes.freehold')}</Select.Option>
-                      <Select.Option value="leasehold">{t('properties.ownershipTypes.leasehold')}</Select.Option>
-                      <Select.Option value="company">{t('properties.ownershipTypes.company')}</Select.Option>
-                    </Select>
-                  </Form.Item>
-                </Col>
-              )}
-
-              {(dealType === 'sale' || dealType === 'both') && (
-                <Col xs={24} sm={12}>
-                  <Form.Item
-                    name="land_ownership"
-                    label={t('properties.landOwnership')}
-                  >
-                    <Select placeholder={t('common.select')}>
-                      <Select.Option value="freehold">{t('properties.ownershipTypes.freehold')}</Select.Option>
-                      <Select.Option value="leasehold">{t('properties.ownershipTypes.leasehold')}</Select.Option>
-                      <Select.Option value="company">{t('properties.ownershipTypes.company')}</Select.Option>
-                    </Select>
-                  </Form.Item>
-                </Col>
-              )}
-
-              {(dealType === 'sale' || dealType === 'both') && (
-                <Col xs={24} sm={12}>
-                  <Form.Item
-                    name="ownership_type"
-                    label={t('properties.ownership')}
-                  >
-                    <Select placeholder={t('common.select')}>
-                      <Select.Option value="freehold">{t('properties.ownershipTypes.freehold')}</Select.Option>
-                      <Select.Option value="leasehold">{t('properties.ownershipTypes.leasehold')}</Select.Option>
-                      <Select.Option value="company">{t('properties.ownershipTypes.company')}</Select.Option>
-                    </Select>
-                  </Form.Item>
-                </Col>
-              )}
-
-              <Col xs={24}>
-                <Form.Item
-                  name="address"
-                  label={t('properties.address')}
-                  rules={[{ required: true, message: t('validation.required') }]}
-                >
-                  <TextArea rows={2} placeholder={t('properties.form.addressPlaceholder')} />
-                </Form.Item>
-              </Col>
-            
-              <Col xs={24}>
-                <Form.Item
-                  name="google_maps_link"
-                  label={
-                    <Space>
-                      <span>{t('properties.googleMapsLink')}</span>
-                      {!isViewMode && googleMapsLink && !hasCoordinatesForCurrentLink && (
-                        <Badge 
-                          status="warning" 
-                          text={t('properties.form.googleMapsWarning')}
-                          style={{ fontSize: 12 }}
-                        />
-                      )}
-                      {!isViewMode && (
-                        <Button
-                          type={!hasCoordinatesForCurrentLink && googleMapsLink ? "primary" : "link"}
-                          size="small"
-                          icon={<EnvironmentOutlined />}
-                          onClick={handleAutoDetectCoordinates}
-                          loading={detectingCoords}
-                          danger={!hasCoordinatesForCurrentLink && !!googleMapsLink}
-                        >
-                          {t('properties.autoDetectCoordinates')}
-                        </Button>
-                      )}
-                    </Space>
-                  }
-                >
-                  <Input 
-                    placeholder={t('properties.form.googleMapsPlaceholder')}
-                    onChange={handleGoogleMapsLinkChange}
-                  />
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="latitude"
-                  label={t('properties.latitude')}
-                >
-                  <InputNumber style={{ width: '100%' }} step={0.000001} placeholder="7.123456" />
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="longitude"
-                  label={t('properties.longitude')}
-                >
-                  <InputNumber style={{ width: '100%' }} step={0.000001} placeholder="98.123456" />
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24}>
-                <Form.Item
-                  name="property_name"
-                  label={t('properties.form.propertyNameLabel')}
-                  tooltip={t('properties.form.propertyNameTooltip')}
-                  extra={t('properties.form.propertyNameExtra')}
-                >
-                  <Input
-                    placeholder={t('properties.form.propertyNamePlaceholder')}
-                    maxLength={100}
-                  />
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24}>
-                <Form.Item
-                  name="complex_name"
-                  label={
-                    <Space>
-                      <span>{t('properties.complexName')}</span>
-                      <Tooltip title={t('properties.complexInfo')}>
-                        <Button
-                          type="link"
-                          size="small"
-                          icon={<InfoCircleOutlined />}
-                          onClick={showComplexInfo}
-                        />
-                      </Tooltip>
-                    </Space>
-                  }
-                >
-                  <Input placeholder={t('properties.complexNamePlaceholder')} />
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="bedrooms"
-                  label={t('properties.bedrooms')}
-                >
-                  <InputNumber style={{ width: '100%' }} min={0} step={0.5} />
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="bathrooms"
-                  label={t('properties.bathrooms')}
-                >
-                  <InputNumber style={{ width: '100%' }} min={0} step={0.5} />
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="indoor_area"
-                  label={t('properties.indoorArea')}
-                >
-                  <InputNumber
-                    style={{ width: '100%' }}
-                    min={0}
-                    addonAfter="м²"
-                  />
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="outdoor_area"
-                  label={t('properties.outdoorArea')}
-                >
-                  <InputNumber
-                    style={{ width: '100%' }}
-                    min={0}
-                    addonAfter="м²"
-                  />
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="plot_size"
-                  label={t('properties.plotSize')}
-                >
-                  <InputNumber
-                    style={{ width: '100%' }}
-                    min={0}
-                    addonAfter="м²"
-                  />
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="floors"
-                  label={t('properties.floors')}
-                >
-                  <InputNumber style={{ width: '100%' }} min={1} />
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="floor"
-                  label={t('properties.floor')}
-                >
-                  <Input placeholder={t('properties.form.floorPlaceholder')} />
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="construction_year"
-                  label={t('properties.constructionYear')}
-                >
-                  <InputNumber style={{ width: '100%' }} min={1900} max={2100} />
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="construction_month"
-                  label={t('properties.constructionMonth')}
-                >
-                  <Select placeholder={t('properties.form.constructionMonthPlaceholder')}>
-                    <Select.Option value="01">{t('properties.form.months.january')}</Select.Option>
-                    <Select.Option value="02">{t('properties.form.months.february')}</Select.Option>
-                    <Select.Option value="03">{t('properties.form.months.march')}</Select.Option>
-                    <Select.Option value="04">{t('properties.form.months.april')}</Select.Option>
-                    <Select.Option value="05">{t('properties.form.months.may')}</Select.Option>
-                    <Select.Option value="06">{t('properties.form.months.june')}</Select.Option>
-                    <Select.Option value="07">{t('properties.form.months.july')}</Select.Option>
-                    <Select.Option value="08">{t('properties.form.months.august')}</Select.Option>
-                    <Select.Option value="09">{t('properties.form.months.september')}</Select.Option>
-                    <Select.Option value="10">{t('properties.form.months.october')}</Select.Option>
-                    <Select.Option value="11">{t('properties.form.months.november')}</Select.Option>
-                    <Select.Option value="12">{t('properties.form.months.december')}</Select.Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="furniture_status"
-                  label={t('properties.furnitureStatus')}
-                >
-                  <Select>
-                    <Select.Option value="fullyFurnished">{t('properties.form.furnitureStatuses.fullyFurnished')}</Select.Option>
-                    <Select.Option value="partiallyFurnished">{t('properties.form.furnitureStatuses.partiallyFurnished')}</Select.Option>
-                    <Select.Option value="unfurnished">{t('properties.form.furnitureStatuses.unfurnished')}</Select.Option>
-                    <Select.Option value="builtIn">{t('properties.form.furnitureStatuses.builtIn')}</Select.Option>
-                    <Select.Option value="empty">{t('properties.form.furnitureStatuses.empty')}</Select.Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="parking_spaces"
-                  label={t('properties.parkingSpaces')}
-                >
-                  <InputNumber style={{ width: '100%' }} min={0} />
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="pets_allowed"
-                  label={t('properties.petsAllowed')}
-                >
-                  <Select>
-                    <Select.Option value="yes">{t('properties.form.petsOptions.yes')}</Select.Option>
-                    <Select.Option value="no">{t('properties.form.petsOptions.no')}</Select.Option>
-                    <Select.Option value="negotiable">{t('properties.form.petsOptions.negotiable')}</Select.Option>
-                    <Select.Option value="custom">{t('properties.form.petsOptions.custom')}</Select.Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="status"
-                  label={t('properties.status')}
-                  rules={[{ required: true }]}
-                  tooltip={!canEditStatus ? t('properties.form.statusTooltip') : undefined}
-                >
-                  <Select disabled={!canEditStatus}>
-                    <Select.Option value="draft">{t('properties.statuses.draft')}</Select.Option>
-                    <Select.Option value="published">{t('properties.statuses.published')}</Select.Option>
-                    <Select.Option value="hidden">{t('properties.statuses.hidden')}</Select.Option>
-                    <Select.Option value="archived">{t('properties.statuses.archived')}</Select.Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-                
-              <Col xs={24}>
-                <Form.Item
-                  name="video_url"
-                  label={t('properties.form.videoUrlLabel')}
-                >
-                  <Input placeholder={t('properties.form.videoUrlPlaceholder')} />
-                </Form.Item>
-              </Col>
-            </Row>
-          </Tabs.TabPane>
-
-{showOwnerTab && (
-  <Tabs.TabPane tab={t('properties.tabs.owner')} key="owner">
-    <Space direction="vertical" style={{ width: '100%' }} size="large">
-      <Card title={t('properties.ownerInfo')} size="small">
-        <Row gutter={16}>
-          <Col xs={24} sm={12}>
-            <Form.Item name="owner_name" label={t('properties.ownerName')}>
-              <Input />
-            </Form.Item>
-          </Col>
-
-          <Col xs={24} sm={12}>
-            <Form.Item name="owner_phone" label={t('properties.ownerPhone')}>
-              <Input />
-            </Form.Item>
-          </Col>
-
-          <Col xs={24} sm={12}>
-            <Form.Item name="owner_email" label={t('properties.ownerEmail')}>
-              <Input type="email" />
-            </Form.Item>
-          </Col>
-
-          <Col xs={24} sm={12}>
-            <Form.Item name="owner_telegram" label={t('properties.ownerTelegram')}>
-              <Input placeholder="@username" />
-            </Form.Item>
-          </Col>
-
-          <Col xs={24} sm={12}>
-            <Form.Item name="owner_instagram" label={t('properties.ownerInstagram')}>
-              <Input placeholder="@username" />
-            </Form.Item>
-          </Col>
-
-          <Col xs={24}>
-            <Form.Item name="owner_notes" label={t('properties.ownerNotes')}>
-              <TextArea rows={4} placeholder={t('properties.form.ownerNotesPlaceholder')} />
-            </Form.Item>
-          </Col>
-
-          {/* Кнопка создания доступа для владельца - ДОБАВИТЬ */}
-          {isEdit && form.getFieldValue('owner_name') && !isViewMode && (
-            <Col xs={24}>
-              <Button
-                type="dashed"
-                icon={<UserOutlined />}
-                onClick={() => setOwnerAccessModalVisible(true)}
-                block
-                size="large"
-              >
-                {t('properties.ownerAccess.createButton')}
-              </Button>
-            </Col>
-          )}
-        </Row>
-      </Card>
-    </Space>
-  </Tabs.TabPane>
-)}
-
-          <Tabs.TabPane tab={t('properties.tabs.translations')} key="translations">
-            {isEdit && !isViewMode && (
-              <AIDescriptionGenerator
-                propertyId={Number(id)}
-                onGenerated={handleAIGenerated}
-                disabled={false}
-              />
-            )}
-
-            {!isEdit && (
-              <Alert
-                message={t('properties.ai.generatorAlert')}
-                description={t('properties.ai.generatorAlertDescription')}
-                type="info"
-                showIcon
-                style={{ marginBottom: 24 }}
-              />
-            )}
-
-            <TranslationsEditor viewMode={isViewMode} />
-          </Tabs.TabPane>
-
-          <Tabs.TabPane tab={t('properties.tabs.features')} key="features">
-            <Space direction="vertical" style={{ width: '100%' }} size="large">
-              <Card title={t('properties.renovation.title')} size="small">
-                <Form.Item
-                  name="renovation_type"
-                  label={t('properties.renovation.type')}
-                >
-                  <Radio.Group onChange={handleRenovationChange}>
-                    <Radio value={null}>{t('properties.renovation.noRenovation')}</Radio>
-                    <Radio value="partial">{t('properties.renovation.types.partial')}</Radio>
-                    <Radio value="full">{t('properties.renovation.types.full')}</Radio>
-                  </Radio.Group>
-                </Form.Item>
-
-                {showRenovationDate && (
-                  <Form.Item
-                    name="renovation_date"
-                    label={t('properties.renovation.date')}
-                  >
-                    <DatePicker
-                      picker="month"
-                      style={{ width: '100%' }}
-                      format="MMMM YYYY"
-                    />
-                  </Form.Item>
-                )}
-              </Card>
-
-              <Card title={t('properties.distance.title')} size="small">
-                <Row gutter={16}>
-                  <Col xs={24} sm={12}>
-                    <Form.Item
-                      name="distance_to_beach"
-                      label={t('properties.distance.label')}
-                      tooltip={t('properties.distance.tooltip')}
-                    >
-                      <InputNumber
-                        style={{ width: '100%' }}
-                        min={0}
-                        placeholder={t('properties.distance.placeholder')}
-                        addonAfter="м"
-                      />
-                    </Form.Item>
-                  </Col>
-                            
-                  <Col xs={24} sm={12}>
-                    {form.getFieldValue('distance_to_beach') && (
-                      <div style={{ marginTop: 30 }}>
-                        <Tag color="blue" style={{ fontSize: 14, padding: '4px 12px' }}>
-                          {form.getFieldValue('distance_to_beach') < 200 && t('properties.distance.categories.onBeach')}
-                          {form.getFieldValue('distance_to_beach') >= 200 && form.getFieldValue('distance_to_beach') <= 500 && t('properties.distance.categories.nearBeach')}
-                          {form.getFieldValue('distance_to_beach') > 500 && form.getFieldValue('distance_to_beach') <= 1000 && t('properties.distance.categories.closeToBeach')}
-                          {form.getFieldValue('distance_to_beach') > 1000 && form.getFieldValue('distance_to_beach') <= 2000 && t('properties.distance.categories.within2km')}
-                          {form.getFieldValue('distance_to_beach') > 2000 && form.getFieldValue('distance_to_beach') <= 5000 && t('properties.distance.categories.within5km')}
-                          {form.getFieldValue('distance_to_beach') > 5000 && t('properties.distance.categories.farFromBeach')}
-                        </Tag>
-                      </div>
-                    )}
-                  </Col>
-                </Row>
-                  
-                {!isViewMode && form.getFieldValue('latitude') && form.getFieldValue('longitude') && (
-                  <Alert
-                    message={t('properties.distance.autoCalculateAlert')}
-                    description={t('properties.distance.autoCalculateDescription')}
-                    type="info"
-                    showIcon
-                    style={{ marginTop: 12 }}
-                  />
-                )}
-              </Card>
-
-              {(dealType === 'rent' || dealType === 'both') && (
-                <Card title={t('properties.rental.includedTitle')} size="small">
-                  <Form.Item
-                    name="rental_includes"
-                    label={t('properties.rental.includedLabel')}
-                    tooltip={t('properties.rental.includedTooltip')}
-                  >
-                    <TextArea
-                      rows={3}
-                      placeholder={t('properties.rental.includedPlaceholder')}
-                    />
-                  </Form.Item>
-                </Card>
-              )}
-
-              <Card title={t('properties.features.propertyFeatures')} size="small">
-                <Form.Item name={['features', 'property']}>
-                  <Checkbox.Group style={{ width: '100%' }}>
-                    <Row gutter={[16, 16]}>
-                      {PROPERTY_FEATURES.property.map(feature => (
-                        <Col xs={24} sm={12} md={8} key={feature}>
-                          <Checkbox value={feature}>
-                            {t(`properties.features.${feature}`)}
-                          </Checkbox>
-                        </Col>
-                      ))}
-                    </Row>
-                  </Checkbox.Group>
-                </Form.Item>
-              </Card>
-
-              <Card title={t('properties.features.outdoorFeatures')} size="small">
-                <Form.Item name={['features', 'outdoor']}>
-                  <Checkbox.Group style={{ width: '100%' }}>
-                    <Row gutter={[16, 16]}>
-                      {PROPERTY_FEATURES.outdoor.map(feature => (
-                        <Col xs={24} sm={12} md={8} key={feature}>
-                          <Checkbox value={feature}>
-                            {t(`properties.features.${feature}`)}
-                          </Checkbox>
-                        </Col>
-                      ))}
-                    </Row>
-                  </Checkbox.Group>
-                </Form.Item>
-              </Card>
-
-              {(dealType === 'rent' || dealType === 'both') && (
-                <Card title={t('properties.features.rentalFeatures')} size="small">
-                  <Form.Item name={['features', 'rental']}>
-                    <Checkbox.Group style={{ width: '100%' }}>
-                      <Row gutter={[16, 16]}>
-                        {PROPERTY_FEATURES.rental.map(feature => (
-                          <Col xs={24} sm={12} md={8} key={feature}>
-                            <Checkbox value={feature}>
-                              {t(`properties.features.${feature}`)}
-                            </Checkbox>
-                          </Col>
-                        ))}
-                      </Row>
-                    </Checkbox.Group>
-                  </Form.Item>
-                </Card>
-              )}
-
-              <Card title={t('properties.features.locationFeatures')} size="small">
-                <Form.Item name={['features', 'location']}>
-                  <Checkbox.Group style={{ width: '100%' }}>
-                    <Row gutter={[16, 16]}>
-                      {PROPERTY_FEATURES.location.map(feature => (
-                        <Col xs={24} sm={12} md={8} key={feature}>
-                          <Checkbox value={feature}>
-                            {t(`properties.features.${feature}`)}
-                          </Checkbox>
-                        </Col>
-                      ))}
-                    </Row>
-                  </Checkbox.Group>
-                </Form.Item>
-              </Card>
-
-              <Card title={t('properties.features.views')} size="small">
-                <Form.Item name={['features', 'views']}>
-                  <Checkbox.Group style={{ width: '100%' }}>
-                    <Row gutter={[16, 16]}>
-                      {PROPERTY_FEATURES.views.map(feature => (
-                        <Col xs={24} sm={12} md={8} key={feature}>
-                          <Checkbox value={feature}>
-                            {t(`properties.features.${feature}`)}
-                          </Checkbox>
-                        </Col>
-                      ))}
-                    </Row>
-                  </Checkbox.Group>
-                </Form.Item>
-              </Card>
-            </Space>
-          </Tabs.TabPane>
-
-          <Tabs.TabPane tab={t('properties.tabs.pricing')} key="pricing">
-            <Space direction="vertical" style={{ width: '100%' }} size="large">
-              {(dealType === 'sale' || dealType === 'both') && (
-                <Card title={t('properties.salePrice.title')}>
-                  <Row gutter={16}>
-                    <Col span={12}>
-                      <Form.Item
-                        name="sale_price"
-                        label={t('properties.salePrice')}
-                      >
-                        <InputNumber
-                          min={0}
-                          style={{ width: '100%' }}
-                          addonAfter="฿"
-                        />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                </Card>
-              )}
-
-              {(dealType === 'rent' || dealType === 'both') && (
-                <>
-                  <Card title={t('properties.constantRentPrice.title')}>
-                    <Row gutter={16}>
-                      <Col span={12}>
-                        <Form.Item
-                          name="year_price"
-                          label={t('properties.constantRentPrice.yearPriceLabel')}
-                        >
-                          <InputNumber
-                            min={0}
-                            style={{ width: '100%' }}
-                            addonAfter="฿"
-                          />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-                  </Card>
-
-                  <Form.Item
-                    name="seasonalPricing"
-                    noStyle
-                  >
-                    <SeasonalPricing viewMode={isViewMode} />
-                  </Form.Item>
-
-                  <MonthlyPricing
-                    propertyId={Number(id) || 0}
-                    initialPricing={
-                      isEdit 
-                        ? (propertyData?.monthly_pricing || []) 
-                        : (aiTempData.monthlyPricing || [])
-                    }
-                    viewMode={isViewMode}
-                    onChange={(monthlyPricing) => {
-                      // ✅ НОВЫЙ ОБРАБОТЧИК: Обновляем aiTempData при изменении месячных цен
-                      console.log('PropertyForm: Received monthly pricing update:', monthlyPricing);
-                      setAiTempData(prev => ({
-                        ...prev,
-                        monthlyPricing: monthlyPricing
-                      }));
+    return (
+      <Card shadow="sm" padding="md" radius="md" withBorder>
+        <Stack gap="md">
+          <Group>
+            <ThemeIcon size="lg" radius="md" variant="light" color={color}>
+              <IconTags size={20} />
+            </ThemeIcon>
+            <Text fw={500}>{title}</Text>
+          </Group>
+          <Checkbox.Group
+            value={selectedFeatures}
+            onChange={onChange}
+          >
+            <Grid gutter="xs">
+              {displayFeatures.map(feature => (
+                <Grid.Col key={feature} span={{ base: 12, xs: 6, sm: 4 }}>
+                  <Checkbox
+                    value={feature}
+                    label={t(`properties.features.${feature}`)}
+                    disabled={isViewMode}
+                    styles={{
+                      root: { fontSize: '16px' } // Предотвращаем зум на iOS
                     }}
                   />
-                </>
-              )}
+                </Grid.Col>
+              ))}
+            </Grid>
+          </Checkbox.Group>
+          {hasMore && (
+            <Button
+              variant="subtle"
+              size="sm"
+              onClick={() => setShowAll(!showAll)}
+              rightSection={showAll ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
+              fullWidth
+            >
+              {showAll ? t('common.showLess') : t('common.showMore')}
+            </Button>
+          )}
+        </Stack>
+      </Card>
+    );
+  };
 
-              <CommissionForm dealType={dealType} viewMode={isViewMode} />
+  // Рендер контента для каждого шага
+  const renderStepContent = () => {
+    // Базовая информация
+    if (steps[activeStep].key === 'basic') {
+      return (
+        <Stack gap="md">
+          <Accordion defaultValue={['main', 'location', 'details']} multiple variant="separated">
+            {/* Основная информация */}
+            <Accordion.Item value="main">
+              <Accordion.Control icon={<IconBuildingEstate size={20} />}>
+                <Text fw={500}>{t('properties.form.mainInfo') || 'Основная информация'}</Text>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Grid gutter="md">
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <TextInput
+                      label={t('properties.propertyNumber')}
+                      placeholder="L6, V123, etc."
+                      required
+                      disabled={isViewMode}
+                      {...form.getInputProps('property_number')}
+                      styles={{
+                        input: { fontSize: '16px' } // Предотвращаем зум на iOS
+                      }}
+                    />
+                  </Grid.Col>
 
-              <DepositForm dealType={dealType} viewMode={isViewMode} />
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <Select
+                      label={t('properties.dealType')}
+                      placeholder={t('common.select')}
+                      required
+                      disabled={isViewMode}
+                      data={[
+                        { value: 'sale', label: t('properties.dealTypes.sale') },
+                        { value: 'rent', label: t('properties.dealTypes.rent') },
+                        { value: 'both', label: t('properties.dealTypes.both') }
+                      ]}
+                      value={form.values.deal_type}
+                      onChange={(value) => handleDealTypeChange(value!)}
+                      styles={{
+                        input: { fontSize: '16px' } // Предотвращаем зум на iOS
+                      }}
+                    />
+                  </Grid.Col>
 
-              <UtilitiesForm viewMode={isViewMode} />
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <Select
+                      label={t('properties.propertyType')}
+                      placeholder={t('common.select')}
+                      required
+                      disabled={isViewMode}
+                      data={[
+                        { value: 'villa', label: t('properties.propertyTypes.villa') },
+                        { value: 'apartment', label: t('properties.propertyTypes.apartment') },
+                        { value: 'condo', label: t('properties.propertyTypes.condo') },
+                        { value: 'penthouse', label: t('properties.propertyTypes.penthouse') },
+                        { value: 'house', label: t('properties.propertyTypes.house') },
+                        { value: 'land', label: t('properties.propertyTypes.land') }
+                      ]}
+                      {...form.getInputProps('property_type')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
 
-            </Space>
-          </Tabs.TabPane>
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <Select
+                      label={t('properties.region')}
+                      placeholder={t('common.select')}
+                      required
+                      searchable
+                      disabled={isViewMode}
+                      data={[
+                        { value: 'bangtao', label: t('properties.regions.bangtao') },
+                        { value: 'kamala', label: t('properties.regions.kamala') },
+                        { value: 'surin', label: t('properties.regions.surin') },
+                        { value: 'layan', label: t('properties.regions.layan') },
+                        { value: 'rawai', label: t('properties.regions.rawai') },
+                        { value: 'patong', label: t('properties.regions.patong') },
+                        { value: 'kata', label: t('properties.regions.kata') },
+                        { value: 'chalong', label: t('properties.regions.chalong') },
+                        { value: 'naiharn', label: t('properties.regions.naiharn') },
+                        { value: 'phukettown', label: t('properties.regions.phukettown') },
+                        { value: 'maikhao', label: t('properties.regions.maikhao') },
+                        { value: 'yamu', label: t('properties.regions.yamu') },
+                        { value: 'paklok', label: t('properties.regions.paklok') }
+                      ]}
+                      {...form.getInputProps('region')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
 
-          <Tabs.TabPane tab={t('properties.tabs.media')} key="media">
-            <Space direction="vertical" style={{ width: '100%' }} size="large">
-              <PhotosUploader
+                  {(dealType === 'sale' || dealType === 'both') && (
+                    <>
+                      <Grid.Col span={{ base: 12, sm: 6 }}>
+                        <Select
+                          label={t('properties.buildingOwnership')}
+                          placeholder={t('common.select')}
+                          disabled={isViewMode}
+                          data={[
+                            { value: 'freehold', label: t('properties.ownershipTypes.freehold') },
+                            { value: 'leasehold', label: t('properties.ownershipTypes.leasehold') },
+                            { value: 'company', label: t('properties.ownershipTypes.company') }
+                          ]}
+                          {...form.getInputProps('building_ownership')}
+                          styles={{
+                            input: { fontSize: '16px' }
+                          }}
+                        />
+                      </Grid.Col>
+
+                      <Grid.Col span={{ base: 12, sm: 6 }}>
+                        <Select
+                          label={t('properties.landOwnership')}
+                          placeholder={t('common.select')}
+                          disabled={isViewMode}
+                          data={[
+                            { value: 'freehold', label: t('properties.ownershipTypes.freehold') },
+                            { value: 'leasehold', label: t('properties.ownershipTypes.leasehold') },
+                            { value: 'company', label: t('properties.ownershipTypes.company') }
+                          ]}
+                          {...form.getInputProps('land_ownership')}
+                          styles={{
+                            input: { fontSize: '16px' }
+                          }}
+                        />
+                      </Grid.Col>
+
+                      <Grid.Col span={{ base: 12, sm: 6 }}>
+                        <Select
+                          label={t('properties.ownership')}
+                          placeholder={t('common.select')}
+                          disabled={isViewMode}
+                          data={[
+                            { value: 'freehold', label: t('properties.ownershipTypes.freehold') },
+                            { value: 'leasehold', label: t('properties.ownershipTypes.leasehold') },
+                            { value: 'company', label: t('properties.ownershipTypes.company') }
+                          ]}
+                          {...form.getInputProps('ownership_type')}
+                          styles={{
+                            input: { fontSize: '16px' }
+                          }}
+                        />
+                      </Grid.Col>
+                    </>
+                  )}
+
+                  <Grid.Col span={12}>
+                    <TextInput
+                      label={t('properties.form.propertyNameLabel')}
+                      placeholder={t('properties.form.propertyNamePlaceholder')}
+                      description={t('properties.form.propertyNameExtra')}
+                      maxLength={100}
+                      disabled={isViewMode}
+                      {...form.getInputProps('property_name')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={12}>
+                    <TextInput
+                      label={
+                        <Group gap="xs">
+                          <Text>{t('properties.complexName')}</Text>
+                          <Tooltip label={t('properties.complexInfo')}>
+                            <ActionIcon
+                              variant="subtle"
+                              size="sm"
+                              onClick={showComplexInfo}
+                            >
+                              <IconInfoCircle size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                        </Group>
+                      }
+                      placeholder={t('properties.complexNamePlaceholder')}
+                      disabled={isViewMode}
+                      {...form.getInputProps('complex_name')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+                </Grid>
+              </Accordion.Panel>
+            </Accordion.Item>
+
+            {/* Локация */}
+            <Accordion.Item value="location">
+              <Accordion.Control icon={<IconMapPin size={20} />}>
+                <Text fw={500}>{t('properties.form.locationInfo') || 'Местоположение'}</Text>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Stack gap="md">
+                  <Textarea
+                    label={t('properties.address')}
+                    placeholder={t('properties.form.addressPlaceholder')}
+                    required
+                    minRows={2}
+                    disabled={isViewMode}
+                    {...form.getInputProps('address')}
+                    styles={{
+                      input: { fontSize: '16px' }
+                    }}
+                  />
+
+                  <TextInput
+                    label={
+                      <Group gap="xs" justify="space-between" style={{ width: '100%' }}>
+                        <Group gap="xs">
+                          <Text>{t('properties.googleMapsLink')}</Text>
+                          {!isViewMode && googleMapsLink && !hasCoordinatesForCurrentLink && (
+                            <Badge color="orange" size="sm">
+                              {t('properties.form.googleMapsWarning')}
+                            </Badge>
+                          )}
+                        </Group>
+                        {!isViewMode && (
+                          <Button
+                            variant={!hasCoordinatesForCurrentLink && googleMapsLink ? "filled" : "light"}
+                            size="xs"
+                            leftSection={<IconMapPin size={14} />}
+                            onClick={handleAutoDetectCoordinates}
+                            loading={detectingCoords}
+                            color={!hasCoordinatesForCurrentLink && googleMapsLink ? "red" : "blue"}
+                          >
+                            {t('properties.autoDetectCoordinates')}
+                          </Button>
+                        )}
+                      </Group>
+                    }
+                    placeholder={t('properties.form.googleMapsPlaceholder')}
+                    value={form.values.google_maps_link}
+                    onChange={(e) => handleGoogleMapsLinkChange(e.currentTarget.value)}
+                    disabled={isViewMode}
+                    styles={{
+                      input: { fontSize: '16px' }
+                    }}
+                  />
+
+                  <Grid gutter="md">
+                    <Grid.Col span={{ base: 12, sm: 6 }}>
+                      <NumberInput
+                        label={t('properties.latitude')}
+                        placeholder="7.123456"
+                        decimalScale={6}
+                        disabled={isViewMode}
+                        {...form.getInputProps('latitude')}
+                        styles={{
+                          input: { fontSize: '16px' }
+                        }}
+                      />
+                    </Grid.Col>
+
+                    <Grid.Col span={{ base: 12, sm: 6 }}>
+                      <NumberInput
+                        label={t('properties.longitude')}
+                        placeholder="98.123456"
+                        decimalScale={6}
+                        disabled={isViewMode}
+                        {...form.getInputProps('longitude')}
+                        styles={{
+                          input: { fontSize: '16px' }
+                        }}
+                      />
+                    </Grid.Col>
+                  </Grid>
+                </Stack>
+              </Accordion.Panel>
+            </Accordion.Item>
+
+            {/* Детали объекта */}
+            <Accordion.Item value="details">
+              <Accordion.Control icon={<IconClipboardText size={20} />}>
+                <Text fw={500}>{t('properties.form.propertyDetails') || 'Детали объекта'}</Text>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Grid gutter="md">
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <NumberInput
+                      label={t('properties.bedrooms')}
+                      placeholder="0"
+                      min={0}
+                      step={0.5}
+                      disabled={isViewMode}
+                      {...form.getInputProps('bedrooms')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <NumberInput
+                      label={t('properties.bathrooms')}
+                      placeholder="0"
+                      min={0}
+                      step={0.5}
+                      disabled={isViewMode}
+                      {...form.getInputProps('bathrooms')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <NumberInput
+                      label={t('properties.indoorArea')}
+                      placeholder="0"
+                      min={0}
+                      suffix=" м²"
+                      disabled={isViewMode}
+                      {...form.getInputProps('indoor_area')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <NumberInput
+                      label={t('properties.outdoorArea')}
+                      placeholder="0"
+                      min={0}
+                      suffix=" м²"
+                      disabled={isViewMode}
+                      {...form.getInputProps('outdoor_area')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <NumberInput
+                      label={t('properties.plotSize')}
+                      placeholder="0"
+                      min={0}
+                      suffix=" м²"
+                      disabled={isViewMode}
+                      {...form.getInputProps('plot_size')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <NumberInput
+                      label={t('properties.floors')}
+                      placeholder="1"
+                      min={1}
+                      disabled={isViewMode}
+                      {...form.getInputProps('floors')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <TextInput
+                      label={t('properties.floor')}
+                      placeholder={t('properties.form.floorPlaceholder')}
+                      disabled={isViewMode}
+                      {...form.getInputProps('floor')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <NumberInput
+                      label={t('properties.constructionYear')}
+                      placeholder="2020"
+                      min={1900}
+                      max={2100}
+                      disabled={isViewMode}
+                      {...form.getInputProps('construction_year')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <Select
+                      label={t('properties.constructionMonth')}
+                      placeholder={t('properties.form.constructionMonthPlaceholder')}
+                      disabled={isViewMode}
+                      data={[
+                        { value: '01', label: t('properties.form.months.january') },
+                        { value: '02', label: t('properties.form.months.february') },
+                        { value: '03', label: t('properties.form.months.march') },
+                        { value: '04', label: t('properties.form.months.april') },
+                        { value: '05', label: t('properties.form.months.may') },
+                        { value: '06', label: t('properties.form.months.june') },
+                        { value: '07', label: t('properties.form.months.july') },
+                        { value: '08', label: t('properties.form.months.august') },
+                        { value: '09', label: t('properties.form.months.september') },
+                        { value: '10', label: t('properties.form.months.october') },
+                        { value: '11', label: t('properties.form.months.november') },
+                        { value: '12', label: t('properties.form.months.december') }
+                      ]}
+                      {...form.getInputProps('construction_month')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <Select
+                      label={t('properties.furnitureStatus')}
+                      placeholder={t('common.select')}
+                      disabled={isViewMode}
+                      data={[
+                        { value: 'fullyFurnished', label: t('properties.form.furnitureStatuses.fullyFurnished') },
+                        { value: 'partiallyFurnished', label: t('properties.form.furnitureStatuses.partiallyFurnished') },
+                        { value: 'unfurnished', label: t('properties.form.furnitureStatuses.unfurnished') },
+                        { value: 'builtIn', label: t('properties.form.furnitureStatuses.builtIn') },
+                        { value: 'empty', label: t('properties.form.furnitureStatuses.empty') }
+                      ]}
+                      {...form.getInputProps('furniture_status')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <NumberInput
+                      label={t('properties.parkingSpaces')}
+                      placeholder="0"
+                      min={0}
+                      disabled={isViewMode}
+                      {...form.getInputProps('parking_spaces')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <Select
+                      label={t('properties.petsAllowed')}
+                      placeholder={t('common.select')}
+                      disabled={isViewMode}
+                      data={[
+                        { value: 'yes', label: t('properties.form.petsOptions.yes') },
+                        { value: 'no', label: t('properties.form.petsOptions.no') },
+                        { value: 'negotiable', label: t('properties.form.petsOptions.negotiable') },
+                        { value: 'custom', label: t('properties.form.petsOptions.custom') }
+                      ]}
+                      {...form.getInputProps('pets_allowed')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <Select
+                      label={t('properties.status')}
+                      placeholder={t('common.select')}
+                      required
+                      disabled={!canEditStatus || isViewMode}
+                      data={[
+                        { value: 'draft', label: t('properties.statuses.draft') },
+                        { value: 'published', label: t('properties.statuses.published') },
+                        { value: 'hidden', label: t('properties.statuses.hidden') },
+                        { value: 'archived', label: t('properties.statuses.archived') }
+                      ]}
+                      {...form.getInputProps('status')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={12}>
+                    <TextInput
+                      label={t('properties.form.videoUrlLabel')}
+                      placeholder={t('properties.form.videoUrlPlaceholder')}
+                      disabled={isViewMode}
+                      {...form.getInputProps('video_url')}
+                      styles={{
+                        input: { fontSize: '16px' }
+                      }}
+                    />
+                  </Grid.Col>
+                </Grid>
+              </Accordion.Panel>
+            </Accordion.Item>
+          </Accordion>
+        </Stack>
+      );
+    }
+
+    // Media
+    if (steps[activeStep].key === 'media') {
+      return (
+        <Stack gap="md">
+          <PhotosUploader
+            propertyId={Number(id) || 0}
+            photos={propertyData?.photos || []}
+            bedrooms={form.values.bedrooms || 1}
+            onUpdate={isEdit ? loadProperty : () => {}}
+            viewMode={isViewMode}
+          />
+    
+          <VideoUploader
+            propertyId={Number(id) || 0}
+            videos={propertyData?.videos || []}
+            onUpdate={isEdit ? loadProperty : () => {}}
+            viewMode={isViewMode}
+          />
+    
+          <FloorPlanUploader
+            propertyId={Number(id) || 0}
+            floorPlanUrl={propertyData?.floor_plan_url}
+            onUpdate={isEdit ? loadProperty : () => {}}
+            viewMode={isViewMode}
+          />
+    
+          <VRPanoramaUploader
+            propertyId={Number(id) || 0}
+            onUpdate={isEdit ? loadProperty : () => {}}
+            viewMode={isViewMode}
+          />
+        </Stack>
+      );
+    }
+
+    // Features
+    if (steps[activeStep].key === 'features') {
+      return (
+        <Stack gap="md">
+          <Accordion defaultValue={['renovation', 'beach', 'rental']} multiple variant="separated">
+            {/* Renovation */}
+            <Accordion.Item value="renovation">
+              <Accordion.Control icon={<IconSettings size={20} />}>
+                <Text fw={500}>{t('properties.renovation.title')}</Text>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Stack gap="md">
+                  <Radio.Group
+                    label={t('properties.renovation.type')}
+                    value={form.values.renovation_type}
+                    onChange={(value) => {
+                      form.setFieldValue('renovation_type', value);
+                      handleRenovationChange(value);
+                    }}
+                  >
+                    <Stack gap="xs" mt="xs">
+                      <Radio value="" label={t('properties.renovation.noRenovation')} disabled={isViewMode} />
+                      <Radio value="partial" label={t('properties.renovation.types.partial')} disabled={isViewMode} />
+                      <Radio value="full" label={t('properties.renovation.types.full')} disabled={isViewMode} />
+                    </Stack>
+                  </Radio.Group>
+
+                  {showRenovationDate && (
+                    <Grid gutter="md">
+                      <Grid.Col span={{ base: 12, sm: 6 }}>
+                        <Select
+                          label={t('properties.renovation.month') || 'Месяц реновации'}
+                          placeholder={t('properties.form.constructionMonthPlaceholder')}
+                          disabled={isViewMode}
+                          data={[
+                            { value: '01', label: t('properties.form.months.january') },
+                            { value: '02', label: t('properties.form.months.february') },
+                            { value: '03', label: t('properties.form.months.march') },
+                            { value: '04', label: t('properties.form.months.april') },
+                            { value: '05', label: t('properties.form.months.may') },
+                            { value: '06', label: t('properties.form.months.june') },
+                            { value: '07', label: t('properties.form.months.july') },
+                            { value: '08', label: t('properties.form.months.august') },
+                            { value: '09', label: t('properties.form.months.september') },
+                            { value: '10', label: t('properties.form.months.october') },
+                            { value: '11', label: t('properties.form.months.november') },
+                            { value: '12', label: t('properties.form.months.december') }
+                          ]}
+                          value={form.values.renovation_date ? dayjs(form.values.renovation_date).format('MM') : ''}
+                          onChange={(value) => {
+                            if (value) {
+                              const currentYear = form.values.renovation_date 
+                                ? dayjs(form.values.renovation_date).year() 
+                                : new Date().getFullYear();
+                              form.setFieldValue('renovation_date', new Date(currentYear, parseInt(value) - 1, 1));
+                            }
+                          }}
+                          styles={{
+                            input: { fontSize: '16px' }
+                          }}
+                        />
+                      </Grid.Col>
+                        
+                      <Grid.Col span={{ base: 12, sm: 6 }}>
+                        <NumberInput
+                          label={t('properties.renovation.year') || 'Год реновации'}
+                          placeholder="2020"
+                          min={1900}
+                          max={2100}
+                          disabled={isViewMode}
+                          value={form.values.renovation_date ? dayjs(form.values.renovation_date).year() : undefined}
+                          onChange={(value) => {
+                            if (value) {
+                              const currentMonth = form.values.renovation_date 
+                                ? dayjs(form.values.renovation_date).month() 
+                                : 0;
+                              form.setFieldValue('renovation_date', new Date(Number(value), currentMonth, 1));
+                            } else {
+                              // Если пользователь очистил поле года - очищаем всю дату
+                              form.setFieldValue('renovation_date', null);
+                            }
+                          }}
+                          styles={{
+                            input: { fontSize: '16px' }
+                          }}
+                        />
+                      </Grid.Col>
+                    </Grid>
+                  )}
+                </Stack>
+              </Accordion.Panel>
+            </Accordion.Item>
+
+            {/* Beach Distance */}
+            <Accordion.Item value="beach">
+              <Accordion.Control icon={<IconMapPin size={20} />}>
+                <Text fw={500}>{t('properties.distance.title')}</Text>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Stack gap="md">
+                  <NumberInput
+                    label={t('properties.distance.label')}
+                    placeholder={t('properties.distance.placeholder')}
+                    description={t('properties.distance.tooltip')}
+                    min={0}
+                    suffix=" м"
+                    disabled={isViewMode}
+                    {...form.getInputProps('distance_to_beach')}
+                    styles={{
+                      input: { fontSize: '16px' }
+                    }}
+                  />
+
+                  {form.values.distance_to_beach && (
+                    <Badge size="lg" variant="light" color="blue">
+                      {form.values.distance_to_beach < 200 && t('properties.distance.categories.onBeach')}
+                      {form.values.distance_to_beach >= 200 && form.values.distance_to_beach <= 500 && t('properties.distance.categories.nearBeach')}
+                      {form.values.distance_to_beach > 500 && form.values.distance_to_beach <= 1000 && t('properties.distance.categories.closeToBeach')}
+                      {form.values.distance_to_beach > 1000 && form.values.distance_to_beach <= 2000 && t('properties.distance.categories.within2km')}
+                      {form.values.distance_to_beach > 2000 && form.values.distance_to_beach <= 5000 && t('properties.distance.categories.within5km')}
+                      {form.values.distance_to_beach > 5000 && t('properties.distance.categories.farFromBeach')}
+                    </Badge>
+                  )}
+
+                  {!isViewMode && form.values.latitude && form.values.longitude && (
+                    <Alert icon={<IconInfoCircle size={18} />} color="blue">
+                      {t('properties.distance.autoCalculateDescription')}
+                    </Alert>
+                  )}
+                </Stack>
+              </Accordion.Panel>
+            </Accordion.Item>
+
+            {/* Rental Includes */}
+            {(dealType === 'rent' || dealType === 'both') && (
+              <Accordion.Item value="rental">
+                <Accordion.Control icon={<IconClipboardText size={20} />}>
+                  <Text fw={500}>{t('properties.rental.includedTitle')}</Text>
+                </Accordion.Control>
+                <Accordion.Panel>
+                  <Textarea
+                    label={t('properties.rental.includedLabel')}
+                    placeholder={t('properties.rental.includedPlaceholder')}
+                    description={t('properties.rental.includedTooltip')}
+                    minRows={3}
+                    disabled={isViewMode}
+                    {...form.getInputProps('rental_includes')}
+                    styles={{
+                      input: { fontSize: '16px' }
+                    }}
+                  />
+                </Accordion.Panel>
+              </Accordion.Item>
+            )}
+          </Accordion>
+
+          {/* Property Features */}
+          {renderFeaturesGroup(
+            PROPERTY_FEATURES.property,
+            form.values.features.property,
+            (value) => form.setFieldValue('features.property', value),
+            showAllPropertyFeatures,
+            setShowAllPropertyFeatures,
+            t('properties.features.propertyFeatures'),
+            'blue'
+          )}
+
+          {/* Outdoor Features */}
+          {renderFeaturesGroup(
+            PROPERTY_FEATURES.outdoor,
+            form.values.features.outdoor,
+            (value) => form.setFieldValue('features.outdoor', value),
+            showAllOutdoorFeatures,
+            setShowAllOutdoorFeatures,
+            t('properties.features.outdoorFeatures'),
+            'green'
+          )}
+
+          {/* Rental Features */}
+          {(dealType === 'rent' || dealType === 'both') && renderFeaturesGroup(
+            PROPERTY_FEATURES.rental,
+            form.values.features.rental,
+            (value) => form.setFieldValue('features.rental', value),
+            showAllRentalFeatures,
+            setShowAllRentalFeatures,
+            t('properties.features.rentalFeatures'),
+            'cyan'
+          )}
+
+          {/* Location Features */}
+          {renderFeaturesGroup(
+            PROPERTY_FEATURES.location,
+            form.values.features.location,
+            (value) => form.setFieldValue('features.location', value),
+            showAllLocationFeatures,
+            setShowAllLocationFeatures,
+            t('properties.features.locationFeatures'),
+            'orange'
+          )}
+
+          {/* Views */}
+          {renderFeaturesGroup(
+            PROPERTY_FEATURES.views,
+            form.values.features.views,
+            (value) => form.setFieldValue('features.views', value),
+            showAllViews,
+            setShowAllViews,
+            t('properties.features.views'),
+            'violet'
+          )}
+        </Stack>
+      );
+    }
+
+    // Pricing
+    if (steps[activeStep].key === 'pricing') {
+      return (
+        <Stack gap="md">
+          {(dealType === 'sale' || dealType === 'both') && (
+            <Card shadow="sm" padding="lg" radius="md" withBorder>
+              <Stack gap="md">
+                <Group>
+                  <ThemeIcon size="lg" radius="md" variant="light" color="green">
+                    <IconCurrencyDollar size={20} />
+                  </ThemeIcon>
+                  <Text fw={500}>{t('properties.salePrice.title')}</Text>
+                </Group>
+                <NumberInput
+                  label={t('properties.salePrice')}
+                  placeholder="0"
+                  min={0}
+                  suffix=" ฿"
+                  thousandSeparator=" "
+                  disabled={isViewMode}
+                  {...form.getInputProps('sale_price')}
+                  styles={{
+                    input: { fontSize: '16px' }
+                  }}
+                />
+              </Stack>
+            </Card>
+          )}
+
+          {(dealType === 'rent' || dealType === 'both') && (
+            <>
+              <Card shadow="sm" padding="lg" radius="md" withBorder>
+                <Stack gap="md">
+                  <Group>
+                    <ThemeIcon size="lg" radius="md" variant="light" color="blue">
+                      <IconCurrencyDollar size={20} />
+                    </ThemeIcon>
+                    <Text fw={500}>{t('properties.constantRentPrice.title')}</Text>
+                  </Group>
+                  <NumberInput
+                    label={t('properties.constantRentPrice.yearPriceLabel')}
+                    placeholder="0"
+                    min={0}
+                    suffix=" ฿"
+                    thousandSeparator=" "
+                    disabled={isViewMode}
+                    {...form.getInputProps('year_price')}
+                    styles={{
+                      input: { fontSize: '16px' }
+                    }}
+                  />
+                </Stack>
+              </Card>
+
+              <SeasonalPricing viewMode={isViewMode} />
+
+              <MonthlyPricing
                 propertyId={Number(id) || 0}
-                photos={propertyData?.photos || []}
-                bedrooms={form.getFieldValue('bedrooms') || 1}
-                onUpdate={isEdit ? loadProperty : () => {}}
+                initialPricing={
+                  isEdit 
+                    ? (propertyData?.monthly_pricing || []) 
+                    : (aiTempData.monthlyPricing || [])
+                }
                 viewMode={isViewMode}
+                onChange={(monthlyPricing) => {
+                  console.log('PropertyForm: Received monthly pricing update:', monthlyPricing);
+                  setAiTempData(prev => ({
+                    ...prev,
+                    monthlyPricing: monthlyPricing
+                  }));
+                }}
               />
+            </>
+          )}
 
-              {isEdit && (
-                <>
-                  <VideoUploader
-                    propertyId={Number(id)}
-                    videos={propertyData?.videos || []}
-                    onUpdate={loadProperty}
-                    viewMode={isViewMode}
-                  />
+          <CommissionForm
+            dealType="both"
+            viewMode={false}
+            saleCommissionType={saleCommissionType}
+            saleCommissionValue={saleCommissionValue}
+            onSaleCommissionTypeChange={setSaleCommissionType}
+            onSaleCommissionValueChange={setSaleCommissionValue}
+            rentCommissionType={rentCommissionType}
+            rentCommissionValue={rentCommissionValue}
+            onRentCommissionTypeChange={setRentCommissionType}
+            onRentCommissionValueChange={setRentCommissionValue}
+          />
+          <DepositForm
+            dealType="rent"
+            viewMode={false}
+            depositType={depositType}
+            depositAmount={depositAmount}
+            onDepositTypeChange={setDepositType}
+            onDepositAmountChange={setDepositAmount}
+          />
+          <UtilitiesForm viewMode={isViewMode} />
+        </Stack>
+      );
+    }
 
-                  <FloorPlanUploader
-                    propertyId={Number(id)}
-                    floorPlanUrl={propertyData?.floor_plan_url}
-                    onUpdate={loadProperty}
-                    viewMode={isViewMode}
-                  />
+    // Calendar
+    if (steps[activeStep].key === 'calendar') {
+      return (
+        <CalendarManager 
+          propertyId={Number(id) || 0} 
+          viewMode={isViewMode}
+          initialBlockedDates={
+            isEdit 
+              ? undefined
+              : (aiTempData.blockedDates || [])
+          }
+        />
+      );
+    }
 
-                  <VRPanoramaUploader
-                    propertyId={Number(id)}
-                    onUpdate={loadProperty}
-                    viewMode={isViewMode}
-                  />
-                </>
+    // Owner
+    if (steps[activeStep].key === 'owner') {
+      if (!showOwnerTab) return null;
+      return (
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="md">
+            <Group>
+              <ThemeIcon size="lg" radius="md" variant="light">
+                <IconUser size={20} />
+              </ThemeIcon>
+              <div>
+                <Text fw={500}>{t('properties.ownerInfo')}</Text>
+                <Text size="sm" c="dimmed">{t('properties.form.ownerInfoDescription') || 'Контактные данные владельца'}</Text>
+              </div>
+            </Group>
+
+            <Divider />
+
+            <Grid gutter="md">
+              <Grid.Col span={{ base: 12, sm: 6 }}>
+                <TextInput
+                  label={t('properties.ownerName')}
+                  placeholder={t('properties.form.ownerNamePlaceholder') || 'Имя владельца'}
+                  disabled={isViewMode}
+                  {...form.getInputProps('owner_name')}
+                  styles={{
+                    input: { fontSize: '16px' }
+                  }}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={{ base: 12, sm: 6 }}>
+                <TextInput
+                  label={t('properties.ownerPhone')}
+                  placeholder="+66 XXX XXX XXX"
+                  disabled={isViewMode}
+                  {...form.getInputProps('owner_phone')}
+                  styles={{
+                    input: { fontSize: '16px' }
+                  }}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={{ base: 12, sm: 6 }}>
+                <TextInput
+                  label={t('properties.ownerEmail')}
+                  placeholder="owner@example.com"
+                  type="email"
+                  disabled={isViewMode}
+                  {...form.getInputProps('owner_email')}
+                  styles={{
+                    input: { fontSize: '16px' }
+                  }}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={{ base: 12, sm: 6 }}>
+                <TextInput
+                  label={t('properties.ownerTelegram')}
+                  placeholder="@username"
+                  disabled={isViewMode}
+                  {...form.getInputProps('owner_telegram')}
+                  styles={{
+                    input: { fontSize: '16px' }
+                  }}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={{ base: 12, sm: 6 }}>
+                <TextInput
+                  label={t('properties.ownerInstagram')}
+                  placeholder="@username"
+                  disabled={isViewMode}
+                  {...form.getInputProps('owner_instagram')}
+                  styles={{
+                    input: { fontSize: '16px' }
+                  }}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={12}>
+                <Textarea
+                  label={t('properties.ownerNotes')}
+                  placeholder={t('properties.form.ownerNotesPlaceholder')}
+                  minRows={4}
+                  disabled={isViewMode}
+                  {...form.getInputProps('owner_notes')}
+                  styles={{
+                    input: { fontSize: '16px' }
+                  }}
+                />
+              </Grid.Col>
+
+              {isEdit && form.values.owner_name && !isViewMode && (
+                <Grid.Col span={12}>
+                  <Button
+                    variant="light"
+                    leftSection={<IconUser size={18} />}
+                    onClick={() => setOwnerAccessModalVisible(true)}
+                    fullWidth
+                    size="md"
+                  >
+                    {t('properties.ownerAccess.createButton')}
+                  </Button>
+                </Grid.Col>
               )}
-            </Space>
-          </Tabs.TabPane>
+            </Grid>
+          </Stack>
+        </Card>
+      );
+    }
 
-          <Tabs.TabPane tab={t('properties.calendar.title')} key="calendar">
-            <CalendarManager 
-              propertyId={Number(id) || 0} 
-              viewMode={isViewMode}
-              initialBlockedDates={
-                isEdit 
-                  ? undefined
-                  : (aiTempData.blockedDates || [])
-              }
-            />
-          </Tabs.TabPane>
-        
-        </Tabs>
+// Translations
+if (steps[activeStep].key === 'translations') {
+  return (
+    <Stack gap="md">
+      {isEdit && !isViewMode && (
+        <AIDescriptionGenerator
+          propertyId={Number(id)}
+          onGenerated={handleAIGenerated}
+          disabled={false}
+        />
+      )}
 
-        {!isViewMode && (
-          <div style={{ 
-            position: 'sticky', 
-            bottom: 0, 
-            marginTop: 24, 
-            padding: '16px 24px',
-            background: 'transparent',
-            backdropFilter: 'blur(8px)',
-            borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-            zIndex: 100
-          }}>
-            <Row justify="end" align="middle">
-              <Space size="middle">
-                <Button 
-                  size="large"
+      {!isEdit && (
+        <Alert
+          icon={<IconInfoCircle size={18} />}
+          title={t('properties.ai.generatorAlert')}
+          color="blue"
+        >
+          {t('properties.ai.generatorAlertDescription')}
+        </Alert>
+      )}
+
+      <TranslationsEditor viewMode={isViewMode} form={form} />
+    </Stack>
+  );
+}
+
+    return null;
+  };
+
+  if (loading && !propertyData) {
+    return (
+      <Center h={400}>
+        <Stack align="center" gap="md">
+          <Loader size="xl" />
+          <Text c="dimmed">{t('common.loading') || 'Загрузка...'}</Text>
+        </Stack>
+      </Center>
+    );
+  }
+
+  return (
+    <Box ref={targetRef}>
+      <Card shadow="sm" padding={0} radius="md" withBorder>
+        {/* Header */}
+        <Paper p="lg" withBorder style={{ borderBottom: `1px solid ${theme.colors.dark[4]}` }}>
+          <Stack gap="md">
+            <Group justify="space-between" wrap="wrap">
+              <Group>
+                <ActionIcon
+                  variant="subtle"
+                  size="lg"
                   onClick={() => navigate('/properties')}
                 >
-                  {t('common.cancel')}
-                </Button>
+                  <IconArrowLeft size={20} />
+                </ActionIcon>
+                <div>
+                  <Group gap="xs">
+                    {isViewMode && <IconEye size={20} />}
+                    <Title order={3}>
+                      {isViewMode 
+                        ? t('properties.form.viewMode') 
+                        : (isEdit ? t('properties.form.editMode') : t('properties.form.createMode'))
+                      }
+                    </Title>
+                  </Group>
+                  {isEdit && propertyData && (
+                    <Text size="sm" c="dimmed">
+                      {propertyData.property_name || propertyData.property_number}
+                    </Text>
+                  )}
+                </div>
+              </Group>
+
+              <Group>
+                {!isEdit && !isViewMode && (
+                  <Button
+                    variant="gradient"
+                    gradient={{ from: 'violet', to: 'grape', deg: 135 }}
+                    leftSection={<IconRobot size={18} />}
+                    onClick={() => setAiModalVisible(true)}
+                    size={isMobile ? 'sm' : 'md'}
+                  >
+                    {!isMobile && t('properties.form.createWithAI')}
+                  </Button>
+                )}
+
+                {isViewMode && canEdit && (
+                  <Button
+                    leftSection={<IconPencil size={18} />}
+                    onClick={() => navigate(`/properties/edit/${id}`)}
+                    size={isMobile ? 'sm' : 'md'}
+                  >
+                    {!isMobile && t('properties.form.editButton')}
+                  </Button>
+                )}
+              </Group>
+            </Group>
+
+            {!isViewMode && <ProgressIndicator />}
+          </Stack>
+        </Paper>
+
+        {/* Content */}
+        <Box p={isMobile ? 'md' : 'lg'}>
+          {isMobile ? (
+            // Stepper для мобильных
+            <Stack gap="lg">
+              <Stepper 
+                active={activeStep} 
+                onStepClick={setActiveStep} // ИСПРАВЛЕНО: убрали условие
+                orientation="vertical"
+                iconSize={32}
+                allowNextStepsSelect={true} // ДОБАВЛЕНО: разрешаем выбирать любые шаги
+              >
+                {steps.map((step) => {
+                  const StepIcon = step.icon;
+                  return (
+                    <Stepper.Step
+                      key={step.value}
+                      label={step.label}
+                      description={step.description}
+                      icon={<StepIcon size={16} />}
+                      allowStepSelect={true} // ИСПРАВЛЕНО: всегда true
+                    >
+                      {renderStepContent()}
+                    </Stepper.Step>
+                  );
+                })}
+              </Stepper>
+              
+              {/* Navigation Buttons */}
+              {!isViewMode && (
+                <Group justify="space-between">
+                  <Button
+                    variant="light"
+                    leftSection={<IconChevronLeft size={18} />}
+                    onClick={prevStep}
+                    disabled={activeStep === 0}
+                  >
+                    {t('common.previous')}
+                  </Button>
+                  {activeStep < steps.length - 1 ? (
+                    <Button
+                      rightSection={<IconChevronRight size={18} />}
+                      onClick={nextStep}
+                    >
+                      {t('common.next')}
+                    </Button>
+                  ) : (
+                    <Button
+                      leftSection={<IconDeviceFloppy size={18} />}
+                      onClick={handleSaveClick}
+                      loading={loading || fillingFromAI}
+                    >
+                      {isEdit ? t('common.save') : t('common.create')}
+                    </Button>
+                  )}
+                </Group>
+              )}
+            </Stack>
+              ) : (
+                // Tabs для десктопа
+                <Tabs value={activeStep.toString()} onChange={(value) => setActiveStep(Number(value))}>
+                  <Tabs.List grow={isTablet}>
+                    {steps.map((step) => {
+                      const StepIcon = step.icon;
+                      return (
+                        <Tabs.Tab
+                          key={step.value}
+                          value={step.value.toString()}
+                          leftSection={<StepIcon size={16} />}
+                        >
+                          {step.label}
+                        </Tabs.Tab>
+                      );
+                    })}
+                  </Tabs.List>
+                  
+                  {steps.map((step) => (
+                    <Tabs.Panel key={step.value} value={step.value.toString()} pt="lg">
+                      {renderStepContent()}
+                    </Tabs.Panel>
+                  ))}
+                </Tabs>
+              )}
+        </Box>
+
+        {/* Floating Save Button для десктопа */}
+        {!isViewMode && !isMobile && (
+          <Affix position={{ bottom: 20, right: 20 }}>
+            <Transition transition="slide-up" mounted>
+              {(transitionStyles) => (
                 <Button
-                  type="primary"
-                  size="large"
-                  icon={<SaveOutlined />}
-                  loading={loading || fillingFromAI}
+                  style={transitionStyles}
+                  leftSection={<IconDeviceFloppy size={18} />}
+                  size="lg"
                   onClick={handleSaveClick}
+                  loading={loading || fillingFromAI}
+                  radius="xl"
                 >
                   {isEdit ? t('common.save') : t('common.create')}
                 </Button>
-              </Space>
-            </Row>
-          </div>
+              )}
+            </Transition>
+          </Affix>
         )}
-      </Form>
+      </Card>
 
+      {/* Modals */}
       <AIPropertyCreationModal
         visible={aiModalVisible}
         onCancel={() => setAiModalVisible(false)}
         onSuccess={handleAISuccess}
       />
+
       <OwnerAccessModal
         visible={ownerAccessModalVisible}
         onClose={() => setOwnerAccessModalVisible(false)}
-        ownerName={form.getFieldValue('owner_name') || ''}
+        ownerName={form.values.owner_name || ''}
       />
-    </Card>
+
+      <Modal
+        opened={complexInfoOpened}
+        onClose={closeComplexInfo}
+        title={t('properties.complexInfo')}
+        size="lg"
+        centered
+      >
+        <Text>{t('properties.complexInfoText')}</Text>
+      </Modal>
+    </Box>
   );
 };
 

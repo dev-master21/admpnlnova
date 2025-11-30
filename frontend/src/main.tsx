@@ -8,6 +8,10 @@ import 'dayjs/locale/en';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
+// Импортируем стили Mantine
+import '@mantine/core/styles.css';
+import '@mantine/notifications/styles.css';
+
 dayjs.extend(relativeTime);
 
 const language = localStorage.getItem('language') || 'ru';
