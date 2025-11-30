@@ -70,8 +70,9 @@ import { extractCoordinatesFromGoogleMapsLink } from '@/utils/googleMapsUtils';
 import PhotosUploader from './components/PhotosUploader';
 import FloorPlanUploader from './components/FloorPlanUploader';
 import VRPanoramaUploader from './components/VRPanoramaUploader';
-import CommissionForm from './components/CommissionForm';
 import SeasonalPricing from './components/SeasonalPricing';
+import SalePriceForm from './components/SalePriceForm';
+import YearPriceForm from './components/YearPriceForm';
 import MonthlyPricing from './components/MonthlyPricing';
 import { PROPERTY_FEATURES } from './constants/features';
 import dayjs from 'dayjs';
@@ -96,10 +97,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
   const theme = useMantineTheme();
   const [depositType, setDepositType] = useState<'one_month' | 'two_months' | 'custom'>('one_month');
   const [depositAmount, setDepositAmount] = useState<number>(0);
-  const [saleCommissionType, setSaleCommissionType] = useState<'percentage' | 'fixed' | null>(null);
-  const [saleCommissionValue, setSaleCommissionValue] = useState<number>(0);
-  const [rentCommissionType, setRentCommissionType] = useState<'percentage' | 'monthly_rent' | 'fixed' | null>(null);
-  const [rentCommissionValue, setRentCommissionValue] = useState<number>(0);
 
   const { canEditProperty, canViewPropertyOwner, canChangePropertyStatus } = useAuthStore();
   const [loading, setLoading] = useState(false);
@@ -233,35 +230,30 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         key: 'basic',
         label: t('properties.tabs.basic'), 
         icon: IconHome,
-        description: t('properties.steps.basicDescription') || 'Основная информация'
       },
       {
         value: 1,
         key: 'media',
         label: t('properties.tabs.media'),
         icon: IconPhoto,
-        description: t('properties.steps.mediaDescription') || 'Медиа'
       },
       {
         value: 2,
         key: 'features',
         label: t('properties.tabs.features'),
         icon: IconTags,
-        description: t('properties.steps.featuresDescription') || 'Характеристики'
       },
       {
         value: 3,
         key: 'pricing',
         label: t('properties.tabs.pricing'),
         icon: IconCurrencyDollar,
-        description: t('properties.steps.pricingDescription') || 'Цены'
       },
       {
         value: 4,
         key: 'calendar',
         label: t('properties.tabs.calendar'),
-        icon: IconCalendar,
-        description: t('properties.steps.calendarDescription') || 'Календарь'
+        icon: IconCalendar
       }
     ];
 
@@ -271,7 +263,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         key: 'owner',
         label: t('properties.tabs.owner'),
         icon: IconUser,
-        description: t('properties.steps.ownerDescription') || 'Владелец'
       });
     }
 
@@ -280,7 +271,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
       key: 'translations',
       label: t('properties.tabs.translations'),
       icon: IconLanguage,
-      description: t('properties.steps.translationsDescription') || 'Переводы'
     });
 
     return baseSteps;
@@ -520,10 +510,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         owner_telegram: property.owner_telegram || '',
         owner_instagram: property.owner_instagram || '',
         owner_notes: property.owner_notes || '',
-        sale_commission_type: property.sale_commission_type || '',
-        sale_commission_value: property.sale_commission_value,
-        rent_commission_type: property.rent_commission_type || '',
-        rent_commission_value: property.rent_commission_value,
         renovation_type: property.renovation_type || '',
         renovation_date: property.renovation_date ? new Date(property.renovation_date) : null,
         rental_includes: property.rental_includes || '',
@@ -1856,93 +1842,63 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
       );
     }
 
-    // Pricing
-    if (steps[activeStep].key === 'pricing') {
-      return (
-        <Stack gap="md">
-          {(dealType === 'sale' || dealType === 'both') && (
-            <Card shadow="sm" padding="lg" radius="md" withBorder>
-              <Stack gap="md">
-                <Group>
-                  <ThemeIcon size="lg" radius="md" variant="light" color="green">
-                    <IconCurrencyDollar size={20} />
-                  </ThemeIcon>
-                  <Text fw={500}>{t('properties.salePrice.title')}</Text>
-                </Group>
-                <NumberInput
-                  label={t('properties.salePrice')}
-                  placeholder="0"
-                  min={0}
-                  suffix=" ฿"
-                  thousandSeparator=" "
-                  disabled={isViewMode}
-                  {...form.getInputProps('sale_price')}
-                  styles={{
-                    input: { fontSize: '16px' }
-                  }}
-                />
-              </Stack>
-            </Card>
-          )}
+// Pricing
+if (steps[activeStep].key === 'pricing') {
+  return (
+    <Stack gap="md">
+      {(dealType === 'sale' || dealType === 'both') && (
+        <SalePriceForm
+          propertyId={Number(id) || 0}
+          initialData={propertyData ? {
+            price: propertyData.sale_price,
+            pricing_mode: propertyData.sale_pricing_mode || 'net',
+            commission_type: propertyData.sale_commission_type_new || null,
+            commission_value: propertyData.sale_commission_value_new || null,
+            source_price: propertyData.sale_source_price || null
+          } : undefined}
+          viewMode={isViewMode}
+          onChange={() => {
+            if (isEdit) loadProperty();
+          }}
+        />
+      )}
 
-          {(dealType === 'rent' || dealType === 'both') && (
-            <>
-              <Card shadow="sm" padding="lg" radius="md" withBorder>
-                <Stack gap="md">
-                  <Group>
-                    <ThemeIcon size="lg" radius="md" variant="light" color="blue">
-                      <IconCurrencyDollar size={20} />
-                    </ThemeIcon>
-                    <Text fw={500}>{t('properties.constantRentPrice.title')}</Text>
-                  </Group>
-                  <NumberInput
-                    label={t('properties.constantRentPrice.yearPriceLabel')}
-                    placeholder="0"
-                    min={0}
-                    suffix=" ฿"
-                    thousandSeparator=" "
-                    disabled={isViewMode}
-                    {...form.getInputProps('year_price')}
-                    styles={{
-                      input: { fontSize: '16px' }
-                    }}
-                  />
-                </Stack>
-              </Card>
-
-              <SeasonalPricing viewMode={isViewMode} />
-
-              <MonthlyPricing
-                propertyId={Number(id) || 0}
-                initialPricing={
-                  isEdit 
-                    ? (propertyData?.monthly_pricing || []) 
-                    : (aiTempData.monthlyPricing || [])
-                }
-                viewMode={isViewMode}
-                onChange={(monthlyPricing) => {
-                  console.log('PropertyForm: Received monthly pricing update:', monthlyPricing);
-                  setAiTempData(prev => ({
-                    ...prev,
-                    monthlyPricing: monthlyPricing
-                  }));
-                }}
-              />
-            </>
-          )}
-
-          <CommissionForm
-            dealType="both"
-            viewMode={false}
-            saleCommissionType={saleCommissionType}
-            saleCommissionValue={saleCommissionValue}
-            onSaleCommissionTypeChange={setSaleCommissionType}
-            onSaleCommissionValueChange={setSaleCommissionValue}
-            rentCommissionType={rentCommissionType}
-            rentCommissionValue={rentCommissionValue}
-            onRentCommissionTypeChange={setRentCommissionType}
-            onRentCommissionValueChange={setRentCommissionValue}
+      {(dealType === 'rent' || dealType === 'both') && (
+        <>
+          <YearPriceForm
+            propertyId={Number(id) || 0}
+            initialData={propertyData ? {
+              price: propertyData.year_price,
+              pricing_mode: propertyData.year_pricing_mode || 'net',
+              commission_type: propertyData.year_commission_type || null,
+              commission_value: propertyData.year_commission_value || null,
+              source_price: propertyData.year_source_price || null
+            } : undefined}
+            viewMode={isViewMode}
+            onChange={() => {
+              if (isEdit) loadProperty();
+            }}
           />
+
+          <MonthlyPricing
+            propertyId={Number(id) || 0}
+            initialPricing={
+              isEdit 
+                ? (propertyData?.monthly_pricing || []) 
+                : (aiTempData.monthlyPricing || [])
+            }
+            viewMode={isViewMode}
+            onChange={(monthlyPricing) => {
+              console.log('PropertyForm: Received monthly pricing update:', monthlyPricing);
+              setAiTempData(prev => ({
+                ...prev,
+                monthlyPricing: monthlyPricing
+              }));
+            }}
+          />
+
+          <SeasonalPricing viewMode={isViewMode} form={form} />
+
           <DepositForm
             dealType="rent"
             viewMode={false}
@@ -1951,10 +1907,13 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
             onDepositTypeChange={setDepositType}
             onDepositAmountChange={setDepositAmount}
           />
+          
           <UtilitiesForm viewMode={isViewMode} />
-        </Stack>
-      );
-    }
+        </>
+      )}
+    </Stack>
+  );
+}
 
     // Calendar
     if (steps[activeStep].key === 'calendar') {
@@ -2204,7 +2163,6 @@ if (steps[activeStep].key === 'translations') {
                     <Stepper.Step
                       key={step.value}
                       label={step.label}
-                      description={step.description}
                       icon={<StepIcon size={16} />}
                       allowStepSelect={true} // ИСПРАВЛЕНО: всегда true
                     >

@@ -24,7 +24,6 @@ import { useTranslation } from 'react-i18next';
 import { propertiesApi } from '@/api/properties.api';
 import SeasonalPricing from '@/modules/Properties/components/SeasonalPricing';
 import MonthlyPricing from '@/modules/Properties/components/MonthlyPricing';
-import CommissionForm from '@/modules/Properties/components/CommissionForm';
 import DepositForm from '@/modules/Properties/components/DepositForm';
 import UtilitiesForm from '@/modules/Properties/components/UtilitiesForm';
 import './OwnerDashboard.css';
@@ -219,9 +218,6 @@ const OwnerPricingPage = () => {
                     />
                   </>
                 )}
-
-                <CommissionForm dealType={dealType} viewMode={false} />
-
                 <DepositForm dealType={dealType} viewMode={false} />
 
                 <UtilitiesForm viewMode={false} />

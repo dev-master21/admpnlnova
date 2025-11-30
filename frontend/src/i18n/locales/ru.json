@@ -2,12 +2,15 @@
   "common": {
     "active": "Активен",
     "save": "Сохранить",
+    "confirm": "Подтвердить",
     "cancel": "Отмена",
     "delete": "Удалить",
     "edit": "Редактировать",
     "view": "Просмотр",
     "add": "Добавить",
     "back": "Назад",
+    "showMore": "Показать больше",
+    "showLess": "Скрыть",
     "yes": "Да",
     "no": "Нет",
     "total": "Всего: {{total}}",
@@ -130,6 +133,7 @@
     "minLength": "Минимум {{min}} символов",
     "maxLength": "Максимум {{max}} символов",
     "min": "Минимальное значение {{min}}",
+    
     "max": "Максимальное значение {{max}}",
     "pattern": "Неверный формат",
     "url": "Неверный формат URL",
@@ -149,7 +153,30 @@
     "timeout": "Превышено время ожидания",
     "invalidData": "Неверные данные"
   },
-
+  "pricing": {
+    "calculator": {
+      "mode": "Режим ценообразования",
+      "net": "NET",
+      "netHint": "Цена владельца",
+      "gross": "GROSS",
+      "grossHint": "Цена с комиссией",
+      "sourcePriceLabel": "Исходная цена (NET)",
+      "clientPriceLabel": "Цена для клиента (GROSS)",
+      "commissionType": "Тип комиссии",
+      "percentage": "Процент (%)",
+      "fixed": "Фиксированная сумма (฿)",
+      "commissionValue": "Размер комиссии",
+      "percentagePlaceholder": "Например: 10",
+      "fixedPlaceholder": "Например: 5000",
+      "calculation": "Расчёт",
+      "sourcePrice": "Исходная цена (NET)",
+      "commission": "Комиссия",
+      "clientPrice": "Цена для клиента (GROSS)",
+      "ownerReceives": "Владелец получит",
+      "ourMargin": "Наша маржа"
+    }
+  },
+  
   "auth": {
     "login": "Вход",
     "loginSubtitle": "Войдите в панель администратора",
@@ -912,60 +939,77 @@
   
   "kmMark": "{{value}} км"
 },
-"monthlyPricing": {
-  "title": "Помесячные цены",
-  "filledMonths": "Заполнено месяцев: {{count}}",
-  
-  "months": {
-    "january": "Январь",
-    "february": "Февраль",
-    "march": "Март",
-    "april": "Апрель",
-    "may": "Май",
-    "june": "Июнь",
-    "july": "Июль",
-    "august": "Август",
-    "september": "Сентябрь",
-    "october": "Октябрь",
-    "november": "Ноябрь",
-    "december": "Декабрь"
+  "monthlyPricing": {
+    "title": "Месячные цены",
+    "autoSaveEnabled": "Все изменения сохраняются автоматически",
+    "editGrossHint": "Редактируйте GROSS цену - комиссия пересчитается автоматически",
+    "saveManuallyInfo": "Сохраняйте каждый месяц отдельно после внесения изменений",
+    "monthSaved": "Месяц {{month}} успешно сохранен",
+    "clearMonthConfirm": "Очистить месяц {{month}}?",
+    "clearMonthDescription": "Все данные для этого месяца будут удалены. Вы уверены?",
+    "monthCleared": "Месяц {{month}} очищен",
+    "errorClearing": "Ошибка при очистке месяца",
+    "errorClearingAll": "Ошибка при очистке всех месяцев",
+    "selectCommissionType": "Необходимо выбрать тип комиссии перед сохранением",
+    "filledMonths": "Заполнено месяцев: {{count}}/12",
+    "quickFill": "Быстрое заполнение",
+    "selectPricingMode": "Выберите режим ценообразования",
+    "grossMustBeHigher": "GROSS цена должна быть больше исходной цены (NET)",
+    "clearAll": "Очистить все",
+    "listView": "Список",
+    "gridView": "Сетка",
+    "pricePerMonth": "Цена за месяц",
+    "clientPrice": "Цена для клиента (GROSS)",
+    "minimumDays": "Минимум дней",
+    "notSet": "Не указана",
+    "notSpecified": "Не указано",
+    "daysMin": "дн. мин.",
+    "clearMonth": "Очистить месяц",
+    "infoDescription": "Укажите цены для помесячной аренды. Это позволит клиентам бронировать объект на 1 месяц и более.",
+    "importantInfoTitle": "Важная информация",
+    "importantInfoDescription": "Для новых объектов цены сохранятся только после нажатия кнопки 'Создать' внизу страницы. Для существующих объектов нажмите 'Сохранить' в этом блоке.",
+    "quickFillDescription": "Быстро заполните все 12 месяцев одинаковыми значениями. Вы сможете отредактировать каждый месяц отдельно после применения.",
+    "clearAllConfirm": "Очистить все цены?",
+    "clearAllDescription": "Это действие удалит цены для всех 12 месяцев. Вы уверены?",
+    "apply": "Применить",
+    "warning": "Предупреждение",
+    "saveAfterCreate": "Сначала создайте объект, затем вы сможете сохранить месячные цены",
+    "enterValidPrice": "Введите корректную цену",
+    "success": "Успешно",
+    "pricesUpdated": "Месячные цены обновлены",
+    "pricesApplied": "Цены применены ко всем месяцам",
+    "allPricesCleared": "Все цены очищены",
+    "error": "Ошибка",
+    "errorUpdating": "Ошибка обновления цен",
+    "margin": "Маржа",
+    "commissionType": "Тип комиссии",
+    "noCommission": "Без комиссии",
+    "percentageCommission": "Процентная комиссия",
+    "fixedCommission": "Фиксированная комиссия",
+    "commissionPercent": "Процент комиссии",
+    "commissionAmount": "Сумма комиссии",
+    "calculation": "Расчет",
+    "sourcePriceNet": "Исходная цена (NET)",
+    "commissionAdd": "Комиссия",
+    "finalPriceClient": "Цена для клиента (GROSS)",
+    "clientPriceGross": "Цена для клиента (GROSS)",
+    "ourMargin": "Наша маржа",
+    "ownerPrice": "Цена владельца",
+    "months": {
+      "january": "Январь",
+      "february": "Февраль",
+      "march": "Март",
+      "april": "Апрель",
+      "may": "Май",
+      "june": "Июнь",
+      "july": "Июль",
+      "august": "Август",
+      "september": "Сентябрь",
+      "october": "Октябрь",
+      "november": "Ноябрь",
+      "december": "Декабрь"
+    }
   },
-  
-  "pricePerMonth": "Цена за месяц",
-  "minimumDays": "Минимум дней",
-  "notSpecified": "Не указано",
-  "notSet": "Не задано",
-  "daysMin": "дн. мин.",
-  
-  "infoTitle": "Информация",
-  "infoDescription": "Установите цены помесячной аренды. Если цена не указана, используется годовая цена (если установлена). Вы можете указать минимальное количество дней для аренды в каждом месяце.",
-  
-  "importantInfoTitle": "Важно!",
-  "importantInfoDescription": "Помесячные цены имеют приоритет над сезонными ценами. Если установлена помесячная цена, она будет использоваться вместо сезонной.",
-  
-  "quickFill": "Быстрое заполнение",
-  "quickFillDescription": "Заполните все месяцы одинаковой ценой и минимальным количеством дней",
-  "apply": "Применить",
-  
-  "clearMonth": "Очистить месяц",
-  "clearAll": "Очистить всё",
-  "clearAllConfirm": "Очистить все цены?",
-  "clearAllDescription": "Вы уверены, что хотите очистить все помесячные цены? Это действие нельзя отменить.",
-  
-  "listView": "Список",
-  "gridView": "Сетка",
-  
-  "success": "Успешно",
-  "warning": "Внимание",
-  "error": "Ошибка",
-  
-  "saveAfterCreate": "Сохраните объект недвижимости перед установкой помесячных цен",
-  "pricesUpdated": "Помесячные цены обновлены",
-  "errorUpdating": "Ошибка обновления помесячных цен",
-  "allPricesCleared": "Все помесячные цены очищены",
-  "enterValidPrice": "Введите корректную цену",
-  "pricesApplied": "Цены применены ко всем месяцам"
-},
     "photosUploader": {
     "selectAll": "Выбрать всё ({{count}})",
     "deselectAll": "Снять выделение",
@@ -1168,11 +1212,32 @@
   "periodSelected": "Выбран период: {{checkIn}} - {{checkOut}}"
 },
 "seasonalPricing": {
+  "commissionTypeRequired": "Пожалуйста, выберите тип комиссии",
   "periodsCount": "Периодов: {{count}}",
   "periodsCount_one": "Период: {{count}}",
   "periodsCount_few": "Периода: {{count}}",
   "periodsCount_many": "Периодов: {{count}}",
-  
+      "priceForClient": "Цена для клиента",
+    "priceMode": "Режим цены",
+    "prices": "Цены",
+    "mode": "режим",
+    "selectPricingMode": "Выберите режим ценообразования для этого периода",
+    "netDescription": "Цена владельца. Вы добавляете свою комиссию сверху.",
+    "grossDescription": "Цена уже включает вашу комиссию. Указываете сколько процентов или фиксированная сумма.",
+      "calculation": "Расчет",
+    "sourcePriceNet": "Исходная цена (NET)",
+    "commissionAdd": "Комиссия",
+    "finalPriceClient": "Цена для клиента (GROSS)",
+    "clientPriceGross": "Цена для клиента (GROSS)",
+    "clientPrice": "Цена для клиента (GROSS)",
+    "ourMargin": "Наша маржа",
+    "ownerPrice": "Цена владельца",
+    "commissionType": "Тип комиссии",
+    "noCommission": "Без комиссии",
+    "percentageCommission": "Процентная комиссия",
+    "fixedCommission": "Фиксированная комиссия",
+    "commissionPercent": "Процент комиссии",
+    "commissionAmount": "Сумма комиссии",
   "seasonTypes": {
     "prime": "Премиум",
     "holiday": "Праздничный"
@@ -2951,7 +3016,11 @@
     "searchButton": "Поиск",
     "noProperties": "Нет объектов",
     "loadingProperties": "Загрузка объектов...",
-    
+    "yearPrice": {
+      "title": "Цена годовой аренды",
+      "description": "Цена за месяц при годовом контракте (12+ месяцев)",
+      "info": "Это цена за месяц, если клиент арендует на год или больше"
+    },
     "photo": "Фото",
     "propertyNumber": "Номер объекта",
     "propertyName": "Название объекта",
@@ -3056,7 +3125,12 @@
       
       "floorPlaceholder": "1, 2, 3 или 1-2",
       "constructionMonthPlaceholder": "Месяц",
-      
+      "completionProgress": "Прогресс заполнения",
+      "mainInfo": "Основная информация",
+      "locationInfo": "Местоположение",
+      "propertyDetails": "Детали объекта",
+      "ownerInfoDescription": "Контактные данные владельца",
+      "ownerNamePlaceholder": "Имя владельца",
       "months": {
         "january": "Январь",
         "february": "Февраль",
@@ -3110,6 +3184,11 @@
       "savedMonthlyPrices": "Сохранено {{count}} месячных цен",
       "savedBlockedDates": "Сохранено {{count}} заблокированных дат",
       "googleDrivePhotosLoading": "Фотографии из Google Drive загружаются...",
+      "salePriceSaved": "Цена продажи успешно сохранена",
+      "yearPriceSaved": "Годовая цена успешно сохранена",
+      "selectCommissionType": "Необходимо выбрать тип комиссии",
+      "grossMustBeHigher": "GROSS цена должна быть больше исходной цены (NET)",
+      "saveAfterCreate": "Сначала создайте объект, чтобы сохранить цены",
       "aiFillError": "Ошибка заполнения формы",
       "aiDescriptionsGenerated": "Описания успешно сгенерированы! Не забудьте сохранить изменения.",
       "aiFeaturesFound": "Найдено и добавлено {{count}} особенностей из фотографий"
@@ -3159,7 +3238,9 @@
     },
 
     "salePrice": {
-      "title": "Цена продажи"
+      "title": "Цена продажи",
+      "description": "Установите цену продажи объекта",
+      "info": "Укажите режим ценообразования, исходную цену и комиссию"
     },
 
     "constantRentPrice": {
@@ -3236,12 +3317,13 @@
     },
 
     "tabs": {
-      "basic": "Основная информация",
+      "basic": "Основное",
+      "media": "Медиа",
+      "features": "Характеристики",
+      "pricing": "Цены",
+      "calendar": "Календарь",
       "owner": "Владелец",
-      "translations": "Описание",
-      "features": "Особенности",
-      "pricing": "Ценообразование",
-      "media": "Медиа"
+      "translations": "Переводы"
     },
 
     "translations": {
@@ -3250,7 +3332,15 @@
       "descriptionPlaceholder": "Введите полное описание объекта...",
       "languageRequired": "Необходимо заполнить хотя бы один язык"
     },
-
+    "steps": {
+      "basicDescription": "Основная информация",
+      "mediaDescription": "Медиа",
+      "featuresDescription": "Характеристики",
+      "pricingDescription": "Цены",
+      "calendarDescription": "Календарь",
+      "ownerDescription": "Владелец",
+      "translationsDescription": "Переводы"
+    },
     "renovation": {
       "title": "Реновация",
       "type": "Тип реновации",
@@ -3914,7 +4004,7 @@
     "pricingOptions": {
       "seasonal": "Сезонное ценообразование",
       "constant": "Постоянная цена",
-      "constantPrice": "Цена за год аренды"
+      "constantPrice": "Месяц при годовой аренде"
     },
 
     "pricing": {
@@ -3934,7 +4024,22 @@
       "rentalPrices": "Цены на аренду",
       "seasonalDisclaimer": "Важная информация о сезонных ценах",
       "seasonalDisclaimerDescription": "Цена указывается за одну ночь (сутки) в указанном периоде, если не выбрана опция 'За весь период'",
-      
+      "selectMode": "Выберите режим ценообразования",
+      "clientPrice": "Цена для клиента",
+      "sourcePrice": "Исходная цена",
+      "commissionType": "Тип комиссии",
+      "percentageCommission": "Процентная комиссия",
+      "fixedCommission": "Фиксированная комиссия",
+      "commissionPercent": "Процент комиссии",
+      "commissionAmount": "Сумма комиссии",
+      "calculation": "Расчет",
+      "sourcePriceNet": "Исходная цена (NET)",
+      "commissionAdd": "Комиссия",
+      "finalPriceClient": "Цена для клиента (GROSS)",
+      "editGrossHint": "Вы можете редактировать GROSS цену, и маржа пересчитается автоматически",
+      "clientPriceGross": "Цена для клиента (GROSS)",
+      "ourMargin": "Наша маржа",
+      "ownerPrice": "Владелец получит",
       "pricingType": "Тип ценообразования",
       "perNight": "За ночь",
       "perNightOption": "Цена за одну ночь",

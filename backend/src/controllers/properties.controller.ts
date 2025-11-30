@@ -308,12 +308,11 @@ async getById(req: AuthRequest, res: Response): Promise<void> {
       return;
     }
 
-    // ✅ НОВОЕ: Проверяем права на просмотр данных о владельце
+    // Проверяем права на просмотр данных о владельце
     const canViewOwner = req.admin?.is_super_admin || 
                         (req.admin?.permissions && req.admin.permissions.includes('properties.update')) ||
                         property.created_by === req.admin?.id;
 
-    // Если нет прав - скрываем данные о владельце
     if (!canViewOwner) {
       property.owner_name = null;
       property.owner_phone = null;
@@ -323,33 +322,31 @@ async getById(req: AuthRequest, res: Response): Promise<void> {
       property.owner_notes = null;
     }
 
-// Загружаем переводы для всех языков
-const translationsResult = await db.query(
-  'SELECT language_code, property_name, description FROM property_translations WHERE property_id = ?',
-  [id]
-);
+    // Загружаем переводы для всех языков
+    const translationsResult = await db.query(
+      'SELECT language_code, property_name, description FROM property_translations WHERE property_id = ?',
+      [id]
+    );
 
-// Преобразуем в удобный формат
-const translationsMap: any = {};
-for (const t of translationsResult) {
-  translationsMap[t.language_code] = {
-    property_name: t.property_name,
-    description: t.description
-  };
-}
+    const translationsMap: any = {};
+    for (const t of translationsResult) {
+      translationsMap[t.language_code] = {
+        property_name: t.property_name,
+        description: t.description
+      };
+    }
 
-// Убедимся что все языки присутствуют
-const languages = ['ru', 'en', 'th', 'zh', 'he'];
-for (const lang of languages) {
-  if (!translationsMap[lang]) {
-    translationsMap[lang] = {
-      property_name: '',
-      description: ''
-    };
-  }
-}
+    const languages = ['ru', 'en', 'th', 'zh', 'he'];
+    for (const lang of languages) {
+      if (!translationsMap[lang]) {
+        translationsMap[lang] = {
+          property_name: '',
+          description: ''
+        };
+      }
+    }
 
-const translations = translationsMap;
+    const translations = translationsMap;
 
     // Загружаем фотографии
     const photos = await db.query(
@@ -363,15 +360,28 @@ const translations = translationsMap;
       [id]
     );
 
-    // Загружаем ценообразование (сезонное)
+    // ✅ ИЗМЕНЕНО: Загружаем сезонные цены с новыми полями
     const pricing = await db.query(
-      'SELECT * FROM property_pricing WHERE property_id = ? ORDER BY start_date_recurring ASC',
+      `SELECT 
+        id, season_type, start_date_recurring, end_date_recurring,
+        price_per_night, source_price_per_night, minimum_nights, pricing_type,
+        pricing_mode, commission_type, commission_value,
+        source_price, margin_amount, margin_percentage
+       FROM property_pricing 
+       WHERE property_id = ? 
+       ORDER BY start_date_recurring ASC`,
       [id]
     );
 
-    // Загружаем месячные цены
+    // ✅ ИЗМЕНЕНО: Загружаем месячные цены с новыми полями
     const monthly_pricing = await db.query(
-      'SELECT * FROM property_pricing_monthly WHERE property_id = ? ORDER BY month_number ASC',
+      `SELECT 
+        id, month_number, price_per_month, minimum_days,
+        pricing_mode, commission_type, commission_value,
+        source_price, margin_amount, margin_percentage
+       FROM property_pricing_monthly 
+       WHERE property_id = ? 
+       ORDER BY month_number ASC`,
       [id]
     );
 
@@ -471,12 +481,12 @@ async create(req: AuthRequest, res: Response): Promise<void> {
       // Месячные цены
       monthlyPricing,
       
-      // ✅ НОВОЕ: Данные от AI
+      // Данные от AI
       blockedDates,
       photosFromGoogleDrive
     } = req.body;
 
-    // ✅ Автоматический расчет расстояния до пляжа
+    // Автоматический расчет расстояния до пляжа
     let calculatedDistanceToBeach = distance_to_beach;
 
     if (latitude && longitude && !calculatedDistanceToBeach) {
@@ -525,10 +535,10 @@ async create(req: AuthRequest, res: Response): Promise<void> {
     const propertyId = (propertyResult as any)[0].insertId;
     logger.info(`Property created: ${propertyId} by user ${req.admin?.username}`);
 
-    // ✅ Определяем массив языков
+    // Определяем массив языков
     const languages = ['ru', 'en', 'th', 'zh', 'he'];
 
-    // ✅ Если указано property_name - добавляем его во все переводы
+    // Если указано property_name - добавляем его во все переводы
     if (property_name) {
       for (const lang of languages) {
         await connection.query(
@@ -588,14 +598,16 @@ async create(req: AuthRequest, res: Response): Promise<void> {
       }
     }
 
-    // Добавляем сезонные цены
+    // ✅ ИЗМЕНЕНО: Добавляем сезонные цены с новыми полями
     if (seasonalPricing && Array.isArray(seasonalPricing) && seasonalPricing.length > 0) {
       for (const price of seasonalPricing) {
         await connection.query(
           `INSERT INTO property_pricing (
             property_id, season_type, start_date_recurring, end_date_recurring, 
-            price_per_night, source_price_per_night, minimum_nights, pricing_type
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            price_per_night, source_price_per_night, minimum_nights, pricing_type,
+            pricing_mode, commission_type, commission_value, 
+            source_price, margin_amount, margin_percentage
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             propertyId,
             price.season_type || null,
@@ -604,31 +616,45 @@ async create(req: AuthRequest, res: Response): Promise<void> {
             price.price_per_night,
             price.source_price_per_night || null,
             price.minimum_nights || null,
-            price.pricing_type || 'per_night'
+            price.pricing_type || 'per_night',
+            price.pricing_mode || 'net',
+            price.commission_type || null,
+            price.commission_value || null,
+            price.source_price || null,
+            price.margin_amount || null,
+            price.margin_percentage || null
           ]
         );
       }
     }
 
-    // Добавляем месячные цены
+    // ✅ ИЗМЕНЕНО: Добавляем месячные цены с новыми полями
     if (monthlyPricing && Array.isArray(monthlyPricing) && monthlyPricing.length > 0) {
       for (const price of monthlyPricing) {
         await connection.query(
           `INSERT INTO property_pricing_monthly 
-           (property_id, month_number, price_per_month, minimum_days)
-           VALUES (?, ?, ?, ?)`,
+           (property_id, month_number, price_per_month, minimum_days,
+            pricing_mode, commission_type, commission_value,
+            source_price, margin_amount, margin_percentage)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             propertyId,
             price.month_number,
             price.price_per_month,
-            price.minimum_days || null
+            price.minimum_days || null,
+            price.pricing_mode || 'net',
+            price.commission_type || null,
+            price.commission_value || null,
+            price.source_price || null,
+            price.margin_amount || null,
+            price.margin_percentage || null
           ]
         );
       }
       logger.info(`Saved ${monthlyPricing.length} monthly pricing entries`);
     }
 
-    // ✅ НОВОЕ: Сохраняем заблокированные даты от AI
+    // Сохраняем заблокированные даты от AI
     if (blockedDates && Array.isArray(blockedDates) && blockedDates.length > 0) {
       for (const blocked of blockedDates) {
         await connection.query(
@@ -643,11 +669,10 @@ async create(req: AuthRequest, res: Response): Promise<void> {
         );
       }
       logger.info(`Saved ${blockedDates.length} blocked dates from AI`);
-      
       logger.info(`ICS file will be generated automatically by cron job for property ${propertyId}`);
     }
 
-    // ✅ НОВОЕ: Загружаем фотографии из Google Drive
+    // Загружаем фотографии из Google Drive
     if (photosFromGoogleDrive) {
       logger.info(`Starting Google Drive download: ${photosFromGoogleDrive}`);
       
@@ -668,15 +693,11 @@ async create(req: AuthRequest, res: Response): Promise<void> {
                 const fileName = `photo_${Date.now()}_${sortOrder}.jpg`;
                 const finalPath = path.join(propertyPhotosPath, fileName);
                 
-                // Копируем файл
                 await fs.copy(photoData.path, finalPath);
-                
-                // Удаляем временный файл
                 await fs.remove(photoData.path).catch(() => {});
               
                 const relativePath = `/uploads/properties/photos/${propertyId}/${fileName}`;
               
-                // Добавляем в БД
                 await connection.query(
                   `INSERT INTO property_photos (
                     property_id, photo_url, category, sort_order, is_primary
@@ -702,7 +723,6 @@ async create(req: AuthRequest, res: Response): Promise<void> {
         }
       } catch (photoError: any) {
         logger.error('❌ Failed to download photos from Google Drive:', photoError);
-        // Не прерываем создание объекта, просто логируем ошибку
       }
     }
 
@@ -832,7 +852,7 @@ async update(req: AuthRequest, res: Response): Promise<void> {
       ]
     );
     
-    // ✅ ИСПРАВЛЕНО: Обновляем переводы правильно
+    // Обновляем переводы правильно
     const languages = ['ru', 'en', 'th', 'zh', 'he'];
 
     if (translations && typeof translations === 'object') {
@@ -893,7 +913,7 @@ async update(req: AuthRequest, res: Response): Promise<void> {
       }
     }
 
-    // Обновляем сезонные цены
+    // ✅ ИЗМЕНЕНО: Обновляем сезонные цены с новыми полями
     if (seasonalPricing !== undefined) {
       await connection.query('DELETE FROM property_pricing WHERE property_id = ?', [id]);
 
@@ -902,8 +922,10 @@ async update(req: AuthRequest, res: Response): Promise<void> {
           await connection.query(
             `INSERT INTO property_pricing (
               property_id, season_type, start_date_recurring, end_date_recurring, 
-              price_per_night, source_price_per_night, minimum_nights, pricing_type
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+              price_per_night, source_price_per_night, minimum_nights, pricing_type,
+              pricing_mode, commission_type, commission_value,
+              source_price, margin_amount, margin_percentage
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               id,
               price.season_type || 'custom',
@@ -912,14 +934,20 @@ async update(req: AuthRequest, res: Response): Promise<void> {
               price.price_per_night,
               price.source_price_per_night || null,
               price.minimum_nights || null,
-              price.pricing_type || 'per_night'
+              price.pricing_type || 'per_night',
+              price.pricing_mode || 'net',
+              price.commission_type || null,
+              price.commission_value || null,
+              price.source_price || null,
+              price.margin_amount || null,
+              price.margin_percentage || null
             ]
           );
         }
       }
     }
 
-    // Обновляем месячные цены
+    // ✅ ИЗМЕНЕНО: Обновляем месячные цены с новыми полями
     if (monthlyPricing !== undefined) {
       await connection.query('DELETE FROM property_pricing_monthly WHERE property_id = ?', [id]);
 
@@ -927,13 +955,21 @@ async update(req: AuthRequest, res: Response): Promise<void> {
         for (const price of monthlyPricing) {
           await connection.query(
             `INSERT INTO property_pricing_monthly 
-             (property_id, month_number, price_per_month, minimum_days)
-             VALUES (?, ?, ?, ?)`,
+             (property_id, month_number, price_per_month, minimum_days,
+              pricing_mode, commission_type, commission_value,
+              source_price, margin_amount, margin_percentage)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               id,
               price.month_number,
               price.price_per_month,
-              price.minimum_days || null
+              price.minimum_days || null,
+              price.pricing_mode || 'net',
+              price.commission_type || null,
+              price.commission_value || null,
+              price.source_price || null,
+              price.margin_amount || null,
+              price.margin_percentage || null
             ]
           );
         }
@@ -2001,7 +2037,7 @@ async updateVideo(req: AuthRequest, res: Response): Promise<void> {
     });
   }
 }
-  /**
+/**
  * Получить детальную информацию по ценам
  * GET /api/properties/:id/pricing-details
  */
@@ -2024,7 +2060,7 @@ async getPricingDetails(req: AuthRequest, res: Response): Promise<void> {
       return;
     }
 
-    // Сезонные цены аренды
+    // ✅ ИЗМЕНЕНО: Сезонные цены с новыми полями
     const seasonalPricing = await db.query(
       `SELECT 
         id,
@@ -2034,20 +2070,32 @@ async getPricingDetails(req: AuthRequest, res: Response): Promise<void> {
         price_per_night,
         source_price_per_night,
         minimum_nights,
-        pricing_type
+        pricing_type,
+        pricing_mode,
+        commission_type,
+        commission_value,
+        source_price,
+        margin_amount,
+        margin_percentage
       FROM property_pricing 
       WHERE property_id = ? 
       ORDER BY start_date_recurring ASC`,
       [id]
     );
 
-    // Месячные цены
+    // ✅ ИЗМЕНЕНО: Месячные цены с новыми полями
     const monthlyPricing = await db.query(
       `SELECT 
         id,
         month_number,
         price_per_month,
-        minimum_days
+        minimum_days,
+        pricing_mode,
+        commission_type,
+        commission_value,
+        source_price,
+        margin_amount,
+        margin_percentage
       FROM property_pricing_monthly 
       WHERE property_id = ? 
       ORDER BY month_number ASC`,
@@ -2096,30 +2144,48 @@ async updateMonthlyPricing(req: AuthRequest, res: Response): Promise<void> {
       return;
     }
 
-    // Удаляем старые месячные цены
+    // ✅ ИЗМЕНЕНО: Удаляем все старые месячные цены
     await connection.query(
       'DELETE FROM property_pricing_monthly WHERE property_id = ?',
       [id]
     );
 
-    // Добавляем новые месячные цены
+    // ✅ ИЗМЕНЕНО: Добавляем только те месяцы, у которых price_per_month не null
     if (Array.isArray(monthlyPricing) && monthlyPricing.length > 0) {
       for (const price of monthlyPricing) {
+        // ✅ Пропускаем месяцы с null/undefined ценой (они будут удалены)
+        if (price.price_per_month === null || 
+            price.price_per_month === undefined || 
+            price.price_per_month === '') {
+          logger.info(`Skipping month ${price.month_number} - price is null (will be deleted)`);
+          continue;
+        }
+
         await connection.query(
           `INSERT INTO property_pricing_monthly 
-           (property_id, month_number, price_per_month, minimum_days)
-           VALUES (?, ?, ?, ?)`,
+           (property_id, month_number, price_per_month, minimum_days,
+            pricing_mode, commission_type, commission_value,
+            source_price, margin_amount, margin_percentage)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             id,
             price.month_number,
             price.price_per_month,
-            price.minimum_days || null
+            price.minimum_days || null,
+            price.pricing_mode || 'net',
+            price.commission_type || null,
+            price.commission_value || null,
+            price.source_price || null,
+            price.margin_amount || null,
+            price.margin_percentage || null
           ]
         );
       }
     }
 
     await connection.commit();
+
+    logger.info(`Monthly pricing updated for property ${id} by user ${req.admin?.username}`);
 
     res.json({
       success: true,

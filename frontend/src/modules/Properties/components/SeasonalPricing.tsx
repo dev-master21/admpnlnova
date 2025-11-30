@@ -1,5 +1,5 @@
 // frontend/src/modules/Properties/components/SeasonalPricing.tsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Card,
   Stack,
@@ -13,15 +13,15 @@ import {
   ActionIcon,
   Tooltip,
   Modal,
-  Radio,
   Grid,
   Paper,
   Divider,
   Timeline,
   SegmentedControl,
   Center,
-  Stepper,
-  List
+  Select,
+  Box,
+  Transition
 } from '@mantine/core';
 import {
   IconPlus,
@@ -39,7 +39,7 @@ import {
   IconX,
   IconBeach,
   IconEye,
-  IconBulb
+  IconArrowRight
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { useMediaQuery } from '@mantine/hooks';
@@ -58,12 +58,16 @@ interface PricingPeriod {
   source_price_per_night?: number | null;
   minimum_nights: number | null;
   pricing_type?: 'per_night' | 'per_period';
+  pricing_mode?: 'net' | 'gross';
+  commission_type?: 'percentage' | 'fixed' | null;
+  commission_value?: number | null;
+  margin_amount?: number | null;
+  margin_percentage?: number | null;
 }
 
 interface SeasonalPricingProps {
-  value?: PricingPeriod[];
-  onChange?: (value: PricingPeriod[]) => void;
   viewMode?: boolean;
+  form?: any;
 }
 
 interface EditFormState {
@@ -71,9 +75,11 @@ interface EditFormState {
   startDate: Date | null;
   endDate: Date | null;
   price_per_night: number | string;
-  source_price_per_night: number | string;
   minimum_nights: number | string;
   pricing_type: 'per_night' | 'per_period';
+  pricing_mode: 'net' | 'gross' | null;
+  commission_type: 'percentage' | 'fixed' | 'none' | null;
+  commission_value: number | string;
 }
 
 const initialFormState: EditFormState = {
@@ -81,15 +87,18 @@ const initialFormState: EditFormState = {
   startDate: null,
   endDate: null,
   price_per_night: '',
-  source_price_per_night: '',
   minimum_nights: 1,
-  pricing_type: 'per_night'
+  pricing_type: 'per_night',
+  pricing_mode: null,
+  commission_type: null,
+  commission_value: ''
 };
 
-const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPricingProps) => {
+const SeasonalPricing = ({ viewMode = false, form: parentForm }: SeasonalPricingProps) => {
   const { t } = useTranslation();
   const isMobile = useMediaQuery('(max-width: 768px)');
   
+  const [periods, setPeriods] = useState<PricingPeriod[]>([]);
   const [modalOpened, setModalOpened] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [detailsModalOpened, setDetailsModalOpened] = useState(false);
@@ -97,6 +106,12 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
   const [formState, setFormState] = useState<EditFormState>(initialFormState);
   const [viewMode_internal, setViewMode_internal] = useState<'list' | 'timeline'>('list');
   const [activeStep, setActiveStep] = useState(0);
+
+  useEffect(() => {
+    if (parentForm && parentForm.values.seasonalPricing) {
+      setPeriods(parentForm.values.seasonalPricing);
+    }
+  }, [parentForm]);
 
   const seasonTypes = [
     { 
@@ -129,14 +144,14 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
     },
     { 
       value: 'prime', 
-      label: t('seasonalPricing.seasonTypes.prime'),
+      label: t('properties.pricing.seasonTypes.prime'),
       color: 'violet',
       icon: IconSnowflake,
       description: t('seasonalPricing.seasonDescriptions.prime')
     },
     { 
       value: 'holiday', 
-      label: t('seasonalPricing.seasonTypes.holiday'),
+      label: t('properties.pricing.seasonTypes.holiday'),
       color: 'pink',
       icon: IconGift,
       description: t('seasonalPricing.seasonDescriptions.holiday')
@@ -154,12 +169,80 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
     return seasonTypes.find(s => s.value === type) || seasonTypes[seasonTypes.length - 1];
   };
 
+  const calculateMarginData = (
+    mode: 'net' | 'gross',
+    price: number,
+    commissionType: 'percentage' | 'fixed' | null,
+    commissionValue: number | null
+  ) => {
+    if (!commissionType || !commissionValue || commissionValue <= 0) {
+      return {
+        finalPrice: Math.round(price),
+        sourcePrice: Math.round(price),
+        marginAmount: 0,
+        marginPercentage: 0
+      };
+    }
+
+    if (mode === 'net') {
+      const sourcePrice = price;
+      let marginAmount = 0;
+
+      if (commissionType === 'percentage') {
+        marginAmount = sourcePrice * (commissionValue / 100);
+      } else {
+        marginAmount = commissionValue;
+      }
+
+      const finalPrice = sourcePrice + marginAmount;
+      const marginPercentage = (marginAmount / sourcePrice) * 100;
+
+      return {
+        finalPrice: Math.round(finalPrice),
+        sourcePrice: Math.round(sourcePrice),
+        marginAmount: Math.round(marginAmount),
+        marginPercentage: Math.round(marginPercentage * 100) / 100
+      };
+    } else {
+      const finalPrice = price;
+      let marginAmount = 0;
+
+      if (commissionType === 'percentage') {
+        marginAmount = finalPrice * (commissionValue / 100);
+      } else {
+        marginAmount = commissionValue;
+      }
+
+      const sourcePrice = finalPrice - marginAmount;
+      const marginPercentage = (marginAmount / finalPrice) * 100;
+
+      return {
+        finalPrice: Math.round(finalPrice),
+        sourcePrice: Math.round(sourcePrice),
+        marginAmount: Math.round(marginAmount),
+        marginPercentage: Math.round(marginPercentage * 100) / 100
+      };
+    }
+  };
+
+  // Автоматический переход на следующий шаг с задержкой
+  const handleStepChange = (newStep: number) => {
+    setTimeout(() => {
+      setActiveStep(newStep);
+    }, 400);
+  };
+
+  const handleSeasonSelect = (seasonValue: string | null) => {
+    setFormState(prev => ({ ...prev, season_type: seasonValue }));
+    handleStepChange(1);
+  };
+
   const handleAdd = () => {
     setEditingId(null);
     setActiveStep(0);
     
-    if (value.length > 0) {
-      const lastPeriod = value[value.length - 1];
+    if (periods.length > 0) {
+      const lastPeriod = periods[periods.length - 1];
       const lastEndDate = dayjs(lastPeriod.end_date_recurring, 'DD-MM').toDate();
       const nextStartDate = dayjs(lastEndDate).add(1, 'day').toDate();
       
@@ -175,22 +258,24 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
     setModalOpened(true);
   };
 
-  const handleEdit = (period: PricingPeriod) => {
-    setEditingId(period.id || null);
-    setActiveStep(0);
-    
-    setFormState({
-      season_type: period.season_type,
-      startDate: dayjs(period.start_date_recurring, 'DD-MM').toDate(),
-      endDate: dayjs(period.end_date_recurring, 'DD-MM').toDate(),
-      price_per_night: period.price_per_night,
-      source_price_per_night: period.source_price_per_night || '',
-      minimum_nights: period.minimum_nights || 1,
-      pricing_type: period.pricing_type || 'per_night'
-    });
-    
-    setModalOpened(true);
-  };
+const handleEdit = (period: PricingPeriod) => {
+  setEditingId(period.id || null);
+  setActiveStep(3); // ✅ ИСПРАВЛЕНО: сразу открываем шаг 3 (страница с ценами)
+  
+  setFormState({
+    season_type: period.season_type,
+    startDate: dayjs(period.start_date_recurring, 'DD-MM').toDate(),
+    endDate: dayjs(period.end_date_recurring, 'DD-MM').toDate(),
+    price_per_night: period.source_price_per_night || period.price_per_night,
+    minimum_nights: period.minimum_nights || 1,
+    pricing_type: period.pricing_type || 'per_night',
+    pricing_mode: period.pricing_mode || 'net',
+    commission_type: period.commission_type || null,
+    commission_value: period.commission_value || ''
+  });
+  
+  setModalOpened(true);
+};
 
   const handleSubmit = () => {
     if (!formState.startDate || !formState.endDate) {
@@ -213,21 +298,46 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
       return;
     }
 
+    if (!formState.commission_type) {
+      notifications.show({
+        title: t('validation.error'),
+        message: t('seasonalPricing.commissionTypeRequired'),
+        color: 'red',
+        icon: <IconX size={16} />
+      });
+      return;
+    }
+
+    const commissionTypeForCalc = formState.commission_type === 'none' ? null : formState.commission_type as 'percentage' | 'fixed';
+    const commissionValueForCalc = formState.commission_type === 'none' ? null : (formState.commission_value ? Number(formState.commission_value) : null);
+
+    const calculated = calculateMarginData(
+      formState.pricing_mode as 'net' | 'gross',
+      Number(formState.price_per_night),
+      commissionTypeForCalc,
+      commissionValueForCalc
+    );
+
     const newPeriod: PricingPeriod = {
       id: editingId || Date.now(),
       season_type: formState.season_type || null,
       start_date_recurring: dayjs(formState.startDate).format('DD-MM'),
       end_date_recurring: dayjs(formState.endDate).format('DD-MM'),
-      price_per_night: Number(formState.price_per_night),
-      source_price_per_night: formState.source_price_per_night ? Number(formState.source_price_per_night) : null,
+      price_per_night: calculated.finalPrice, // Финальная цена для клиента (GROSS)
+      source_price_per_night: calculated.sourcePrice, // ✅ ДОБАВЛЕНО: Исходная цена
       minimum_nights: formState.minimum_nights ? Number(formState.minimum_nights) : null,
-      pricing_type: formState.pricing_type || 'per_night'
+      pricing_type: formState.pricing_type || 'per_night',
+      pricing_mode: formState.pricing_mode as 'net' | 'gross',
+      commission_type: commissionTypeForCalc,
+      commission_value: commissionValueForCalc,
+      margin_amount: calculated.marginAmount,
+      margin_percentage: calculated.marginPercentage
     };
 
     let updated: PricingPeriod[];
     
     if (editingId) {
-      updated = value.map(p => p.id === editingId ? newPeriod : p);
+      updated = periods.map(p => p.id === editingId ? newPeriod : p);
       notifications.show({
         title: t('success'),
         message: t('properties.pricing.periodUpdated'),
@@ -235,7 +345,7 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
         icon: <IconCheck size={16} />
       });
     } else {
-      updated = [...value, newPeriod];
+      updated = [...periods, newPeriod];
       notifications.show({
         title: t('success'),
         message: t('properties.pricing.periodAdded'),
@@ -244,8 +354,10 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
       });
     }
 
-    if (onChange) {
-      onChange(updated);
+    setPeriods(updated);
+    
+    if (parentForm) {
+      parentForm.setFieldValue('seasonalPricing', updated);
     }
     
     setModalOpened(false);
@@ -269,10 +381,13 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
       labels: { confirm: t('common.delete'), cancel: t('common.cancel') },
       confirmProps: { color: 'red' },
       onConfirm: () => {
-        const updated = value.filter(p => p.id !== id);
-        if (onChange) {
-          onChange(updated);
+        const updated = periods.filter(p => p.id !== id);
+        setPeriods(updated);
+        
+        if (parentForm) {
+          parentForm.setFieldValue('seasonalPricing', updated);
         }
+        
         notifications.show({
           title: t('success'),
           message: t('properties.pricing.periodDeleted'),
@@ -289,19 +404,7 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
     setDetailsModalOpened(true);
   };
 
-  const canProceedToStep = (step: number): boolean => {
-    switch (step) {
-      case 1: // Даты
-        return formState.season_type !== null;
-      case 2: // Цена
-        return formState.startDate !== null && formState.endDate !== null;
-      case 3: // Превью
-        return formState.price_per_night !== '' && Number(formState.price_per_night) > 0;
-      default:
-        return true;
-    }
-  };
-
+  // Упрощенная карточка периода - только основная информация
   const renderPeriodCard = (period: PricingPeriod) => {
     const seasonConfig = getSeasonConfig(period.season_type);
     const SeasonIcon = seasonConfig.icon;
@@ -309,21 +412,13 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
     return (
       <Card
         key={period.id}
-        shadow="md"
+        shadow="sm"
         padding="md"
         radius="md"
         withBorder
         style={{
           borderColor: `var(--mantine-color-${seasonConfig.color}-5)`,
-          transition: 'all 0.3s'
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'translateY(-2px)';
-          e.currentTarget.style.boxShadow = `0 8px 16px var(--mantine-color-${seasonConfig.color}-3)`;
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'translateY(0)';
-          e.currentTarget.style.boxShadow = '';
+          transition: 'all 0.2s'
         }}
       >
         <Stack gap="md">
@@ -332,8 +427,8 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
               <ThemeIcon
                 size="lg"
                 radius="md"
-                variant="light"
-                color={seasonConfig.color}
+                variant="gradient"
+                gradient={{ from: seasonConfig.color, to: `${seasonConfig.color}.9` }}
               >
                 <SeasonIcon size={20} />
               </ThemeIcon>
@@ -355,46 +450,61 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
 
             {!viewMode && (
               <Group gap={4}>
-                {isMobile && (
-                  <Tooltip label={t('seasonalPricing.details')}>
-                    <ActionIcon
-                      variant="light"
-                      color="blue"
-                      onClick={() => showDetails(period)}
-                    >
-                      <IconInfoCircle size={16} />
-                    </ActionIcon>
-                  </Tooltip>
-                )}
-                <Tooltip label={t('common.edit')}>
+                <Tooltip label={t('seasonalPricing.details')}>
                   <ActionIcon
                     variant="light"
                     color="blue"
+                    size={isMobile ? 'md' : 'lg'}
+                    onClick={() => showDetails(period)}
+                  >
+                    <IconEye size={isMobile ? 16 : 18} />
+                  </ActionIcon>
+                </Tooltip>
+                <Tooltip label={t('common.edit')}>
+                  <ActionIcon
+                    variant="light"
+                    color="violet"
+                    size={isMobile ? 'md' : 'lg'}
                     onClick={() => handleEdit(period)}
                   >
-                    <IconEdit size={16} />
+                    <IconEdit size={isMobile ? 16 : 18} />
                   </ActionIcon>
                 </Tooltip>
                 <Tooltip label={t('common.delete')}>
                   <ActionIcon
                     variant="light"
                     color="red"
+                    size={isMobile ? 'md' : 'lg'}
                     onClick={() => handleDelete(period.id!)}
                   >
-                    <IconTrash size={16} />
+                    <IconTrash size={isMobile ? 16 : 18} />
                   </ActionIcon>
                 </Tooltip>
               </Group>
             )}
           </Group>
 
-          <Paper p="sm" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-6)' }}>
-            <Grid gutter="xs">
-              <Grid.Col span={6}>
+          <Grid gutter="md">
+            <Grid.Col span={6}>
+              <Paper p="sm" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-7)' }}>
                 <Stack gap={4}>
-                  <Text size="xs" c="dimmed">{t('seasonalPricing.price')}</Text>
-                  <Text size="lg" fw={700} c={seasonConfig.color}>
+                  <Text size="xs" c="dimmed">{t('seasonalPricing.priceForClient')}</Text>
+                  <Text size="xl" fw={700} c={seasonConfig.color}>
                     {period.price_per_night.toLocaleString()} ฿
+                  </Text>
+                  <Badge size="xs" color={period.pricing_mode === 'net' ? 'blue' : 'green'}>
+                    {period.pricing_mode === 'net' ? 'NET' : 'GROSS'}
+                  </Badge>
+                </Stack>
+              </Paper>
+            </Grid.Col>
+
+            <Grid.Col span={6}>
+              <Paper p="sm" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-7)' }}>
+                <Stack gap={4}>
+                  <Text size="xs" c="dimmed">{t('seasonalPricing.minimumNights')}</Text>
+                  <Text size="xl" fw={700}>
+                    {period.minimum_nights || '—'}
                   </Text>
                   <Text size="xs" c="dimmed">
                     {period.pricing_type === 'per_period' 
@@ -403,22 +513,9 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
                     }
                   </Text>
                 </Stack>
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <Stack gap={4}>
-                  <Text size="xs" c="dimmed">{t('seasonalPricing.minimumNights')}</Text>
-                  <Text size="lg" fw={700}>
-                    {period.minimum_nights || '—'}
-                  </Text>
-                  {period.source_price_per_night && (
-                    <Text size="xs" c="dimmed">
-                      {t('seasonalPricing.sourcePrice')}: {period.source_price_per_night.toLocaleString()} ฿
-                    </Text>
-                  )}
-                </Stack>
-              </Grid.Col>
-            </Grid>
-          </Paper>
+              </Paper>
+            </Grid.Col>
+          </Grid>
         </Stack>
       </Card>
     );
@@ -427,11 +524,11 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
   const renderTimelineView = () => {
     return (
       <Timeline
-        active={value.length}
+        active={periods.length}
         bulletSize={32}
         lineWidth={2}
       >
-        {value.map((period) => {
+        {periods.map((period) => {
           const seasonConfig = getSeasonConfig(period.season_type);
           const SeasonIcon = seasonConfig.icon;
 
@@ -472,6 +569,15 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
                       variant="light"
                       size="xs"
                       color="blue"
+                      leftSection={<IconEye size={14} />}
+                      onClick={() => showDetails(period)}
+                    >
+                      {t('seasonalPricing.details')}
+                    </Button>
+                    <Button
+                      variant="light"
+                      size="xs"
+                      color="violet"
                       leftSection={<IconEdit size={14} />}
                       onClick={() => handleEdit(period)}
                     >
@@ -497,452 +603,432 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
   };
 
   const renderStepContent = () => {
+    const currentCalculated = (formState.price_per_night && formState.pricing_mode) ? calculateMarginData(
+      formState.pricing_mode,
+      Number(formState.price_per_night),
+      formState.commission_type === 'none' ? null : formState.commission_type,
+      formState.commission_value ? Number(formState.commission_value) : null
+    ) : null;
+
     switch (activeStep) {
-      case 0: // Тип сезона
+      // Шаг 0: Выбор типа сезона
+      case 0:
         return (
-          <Stack gap="md">
-            <Alert icon={<IconBulb size={16} />} color="blue" variant="light">
-              <Text size="sm" fw={500} mb={4}>
-                {t('seasonalPricing.stepGuides.seasonType.title')}
-              </Text>
-              <Text size="xs">
-                {t('seasonalPricing.stepGuides.seasonType.description')}
-              </Text>
-            </Alert>
+          <Transition mounted={activeStep === 0} transition="fade" duration={300}>
+            {(styles) => (
+              <Stack gap="md" style={styles}>
+                <Stack gap="xs">
+                  {seasonTypes.map((season) => {
+                    const SeasonIcon = season.icon;
+                    const isSelected = formState.season_type === season.value;
 
-            <Stack gap="xs">
-              {seasonTypes.map((season) => {
-                const SeasonIcon = season.icon;
-                const isSelected = formState.season_type === season.value;
+                    return (
+                      <Paper
+                        key={season.value || 'custom'}
+                        p="md"
+                        radius="md"
+                        withBorder
+                        onClick={() => handleSeasonSelect(season.value)}
+                        style={{
+                          cursor: 'pointer',
+                          borderWidth: isSelected ? '2px' : '1px',
+                          borderColor: isSelected 
+                            ? `var(--mantine-color-${season.color}-6)` 
+                            : 'var(--mantine-color-dark-4)',
+                          background: isSelected 
+                            ? `linear-gradient(135deg, var(--mantine-color-${season.color}-9) 0%, var(--mantine-color-dark-7) 100%)`
+                            : 'var(--mantine-color-dark-7)',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <Group gap="md" wrap="nowrap">
+                          <ThemeIcon
+                            size="xl"
+                            radius="md"
+                            variant={isSelected ? 'gradient' : 'light'}
+                            gradient={isSelected ? { from: season.color, to: `${season.color}.9` } : undefined}
+                            color={season.color}
+                          >
+                            <SeasonIcon size={24} />
+                          </ThemeIcon>
+                          <div style={{ flex: 1 }}>
+                            <Text fw={600} size="sm" c={isSelected ? season.color : undefined}>
+                              {season.label}
+                            </Text>
+                            <Text size="xs" c="dimmed" lineClamp={2}>
+                              {season.description}
+                            </Text>
+                          </div>
+                          {isSelected && (
+                            <ThemeIcon size="md" radius="xl" variant="gradient" gradient={{ from: season.color, to: `${season.color}.9` }}>
+                              <IconCheck size={16} />
+                            </ThemeIcon>
+                          )}
+                        </Group>
+                      </Paper>
+                    );
+                  })}
+                </Stack>
+              </Stack>
+            )}
+          </Transition>
+        );
 
-                return (
+      // Шаг 1: Выбор периода
+      case 1:
+        return (
+          <Transition mounted={activeStep === 1} transition="fade" duration={300}>
+            {(styles) => (
+              <Stack gap="md" style={styles}>
+                <Grid gutter="md">
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <Stack gap="xs">
+                      <Text size="sm" fw={500}>
+                        {t('seasonalPricing.startDate')} <Text component="span" c="red">*</Text>
+                      </Text>
+                      <div className="custom-datepicker-wrapper">
+                        <DatePicker
+                          selected={formState.startDate}
+                          onChange={(date) => setFormState(prev => ({ ...prev, startDate: date }))}
+                          dateFormat="dd-MM"
+                          placeholderText={t('seasonalPricing.selectDate')}
+                          className="custom-datepicker-input"
+                          showPopperArrow={false}
+                          enableTabLoop={false}
+                          onChangeRaw={(e) => e?.preventDefault()}
+                          autoComplete="off"
+                        />
+                      </div>
+                    </Stack>
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <Stack gap="xs">
+                      <Text size="sm" fw={500}>
+                        {t('seasonalPricing.endDate')} <Text component="span" c="red">*</Text>
+                      </Text>
+                      <div className="custom-datepicker-wrapper">
+                        <DatePicker
+                          selected={formState.endDate}
+                          onChange={(date) => setFormState(prev => ({ ...prev, endDate: date }))}
+                          dateFormat="dd-MM"
+                          placeholderText={t('seasonalPricing.selectDate')}
+                          className="custom-datepicker-input"
+                          minDate={formState.startDate || undefined}
+                          showPopperArrow={false}
+                          enableTabLoop={false}
+                          onChangeRaw={(e) => e?.preventDefault()}
+                          autoComplete="off"
+                        />
+                      </div>
+                    </Stack>
+                  </Grid.Col>
+                </Grid>
+
+                {formState.startDate && formState.endDate && (
+                  <Alert color="teal" variant="light">
+                    <Text size="sm">
+                      {t('seasonalPricing.periodDuration')}: {dayjs(formState.startDate).format('DD-MM')} — {dayjs(formState.endDate).format('DD-MM')}
+                    </Text>
+                  </Alert>
+                )}
+              </Stack>
+            )}
+          </Transition>
+        );
+
+      // Шаг 2: Выбор типа цены NET/GROSS
+      case 2:
+        return (
+          <Transition mounted={activeStep === 2} transition="fade" duration={300}>
+            {(styles) => (
+              <Stack gap="md" style={styles}>
+                <Alert color="blue" variant="light">
+                  <Text size="sm">{t('seasonalPricing.selectPricingMode')}</Text>
+                </Alert>
+
+                <Stack gap="xs">
                   <Paper
-                    key={season.value || 'custom'}
-                    p="md"
+                    p="lg"
                     radius="md"
                     withBorder
-                    onClick={() => setFormState(prev => ({ ...prev, season_type: season.value }))}
+                    onClick={() => {
+                      setFormState(prev => ({ ...prev, pricing_mode: 'net' }));
+                      handleStepChange(3);
+                    }}
                     style={{
                       cursor: 'pointer',
-                      borderWidth: isSelected ? '2px' : '1px',
-                      borderColor: isSelected 
-                        ? `var(--mantine-color-${season.color}-6)` 
-                        : 'var(--mantine-color-dark-4)',
-                      background: isSelected 
-                        ? `linear-gradient(135deg, var(--mantine-color-${season.color}-9) 0%, var(--mantine-color-dark-7) 100%)`
+                      borderColor: formState.pricing_mode === 'net' ? 'var(--mantine-color-blue-6)' : 'var(--mantine-color-dark-4)',
+                      background: formState.pricing_mode === 'net' 
+                        ? 'linear-gradient(135deg, var(--mantine-color-blue-9) 0%, var(--mantine-color-dark-7) 100%)'
                         : 'var(--mantine-color-dark-7)',
-                      transition: 'all 0.2s',
-                      position: 'relative',
-                      overflow: 'hidden'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isSelected) {
-                        e.currentTarget.style.borderColor = `var(--mantine-color-${season.color}-7)`;
-                        e.currentTarget.style.background = `linear-gradient(135deg, var(--mantine-color-${season.color}-9) 0%, var(--mantine-color-dark-6) 100%)`;
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isSelected) {
-                        e.currentTarget.style.borderColor = 'var(--mantine-color-dark-4)';
-                        e.currentTarget.style.background = 'var(--mantine-color-dark-7)';
-                      }
+                      transition: 'all 0.2s'
                     }}
                   >
-                    {isSelected && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          height: '3px',
-                          background: `linear-gradient(90deg, var(--mantine-color-${season.color}-6), var(--mantine-color-${season.color}-4))`
-                        }}
-                      />
-                    )}
-                    
-                    <Group gap="md" wrap="nowrap">
-                      <ThemeIcon
-                        size="xl"
-                        radius="md"
-                        variant={isSelected ? 'gradient' : 'light'}
-                        gradient={isSelected ? { from: season.color, to: `${season.color}.9` } : undefined}
-                        color={season.color}
-                      >
-                        <SeasonIcon size={24} />
-                      </ThemeIcon>
-                      <div style={{ flex: 1 }}>
-                        <Text fw={600} size="sm" c={isSelected ? season.color : undefined}>
-                          {season.label}
-                        </Text>
-                        <Text size="xs" c="dimmed" lineClamp={2}>
-                          {season.description}
-                        </Text>
+                    <Group justify="space-between" wrap="nowrap">
+                      <div>
+                        <Text fw={700} size="lg" c="blue">NET</Text>
+                        <Text size="sm" c="dimmed" mt={4}>{t('seasonalPricing.netDescription')}</Text>
                       </div>
-                      {isSelected && (
-                        <ThemeIcon size="md" radius="xl" variant="gradient" gradient={{ from: season.color, to: `${season.color}.9` }}>
-                          <IconCheck size={16} />
+                      {formState.pricing_mode === 'net' && (
+                        <ThemeIcon size="lg" radius="xl" variant="gradient" gradient={{ from: 'blue', to: 'cyan' }}>
+                          <IconCheck size={20} />
                         </ThemeIcon>
                       )}
                     </Group>
                   </Paper>
-                );
-              })}
-            </Stack>
-          </Stack>
-        );
 
-      case 1: // Даты
-        const selectedSeason = getSeasonConfig(formState.season_type);
-        return (
-          <Stack gap="md">
-            <Alert icon={<IconBulb size={16} />} color="blue" variant="light">
-              <Text size="sm" fw={500} mb={4}>
-                {t('seasonalPricing.stepGuides.dates.title')}
-              </Text>
-              <Text size="xs">
-                {t('seasonalPricing.stepGuides.dates.description')}
-              </Text>
-            </Alert>
-
-            {formState.season_type && (
-              <Paper 
-                p="md" 
-                radius="md" 
-                withBorder 
-                style={{ 
-                  background: `linear-gradient(135deg, var(--mantine-color-${selectedSeason.color}-9) 0%, var(--mantine-color-dark-7) 100%)`,
-                  borderColor: `var(--mantine-color-${selectedSeason.color}-6)`
-                }}
-              >
-                <Group gap="sm">
-                  <ThemeIcon size="lg" radius="md" variant="gradient" gradient={{ from: selectedSeason.color, to: `${selectedSeason.color}.9` }}>
-                    {(() => {
-                      const Icon = selectedSeason.icon;
-                      return <Icon size={20} />;
-                    })()}
-                  </ThemeIcon>
-                  <Text size="sm" fw={600} c={selectedSeason.color}>
-                    {selectedSeason.label}
-                  </Text>
-                </Group>
-              </Paper>
-            )}
-
-            <Grid gutter="md">
-              <Grid.Col span={{ base: 12, sm: 6 }}>
-                <Stack gap="xs">
-                  <Text size="sm" fw={500}>
-                    {t('seasonalPricing.startDate')} <Text component="span" c="red">*</Text>
-                  </Text>
-                  <div className="custom-datepicker-wrapper">
-                    <DatePicker
-                      selected={formState.startDate}
-                      onChange={(date) => setFormState(prev => ({ ...prev, startDate: date }))}
-                      dateFormat="dd-MM"
-                      placeholderText={t('seasonalPricing.selectDate')}
-                      className="custom-datepicker-input"
-                    />
-                  </div>
-                  <Text size="xs" c="dimmed">
-                    {t('seasonalPricing.stepGuides.dates.startHint')}
-                  </Text>
+                  <Paper
+                    p="lg"
+                    radius="md"
+                    withBorder
+                    onClick={() => {
+                      setFormState(prev => ({ ...prev, pricing_mode: 'gross' }));
+                      handleStepChange(3);
+                    }}
+                    style={{
+                      cursor: 'pointer',
+                      borderColor: formState.pricing_mode === 'gross' ? 'var(--mantine-color-green-6)' : 'var(--mantine-color-dark-4)',
+                      background: formState.pricing_mode === 'gross'
+                        ? 'linear-gradient(135deg, var(--mantine-color-green-9) 0%, var(--mantine-color-dark-7) 100%)'
+                        : 'var(--mantine-color-dark-7)',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <Group justify="space-between" wrap="nowrap">
+                      <div>
+                        <Text fw={700} size="lg" c="green">GROSS</Text>
+                        <Text size="sm" c="dimmed" mt={4}>{t('seasonalPricing.grossDescription')}</Text>
+                      </div>
+                      {formState.pricing_mode === 'gross' && (
+                        <ThemeIcon size="lg" radius="xl" variant="gradient" gradient={{ from: 'green', to: 'teal' }}>
+                          <IconCheck size={20} />
+                        </ThemeIcon>
+                      )}
+                    </Group>
+                  </Paper>
                 </Stack>
-              </Grid.Col>
-
-              <Grid.Col span={{ base: 12, sm: 6 }}>
-                <Stack gap="xs">
-                  <Text size="sm" fw={500}>
-                    {t('seasonalPricing.endDate')} <Text component="span" c="red">*</Text>
-                  </Text>
-                  <div className="custom-datepicker-wrapper">
-                    <DatePicker
-                      selected={formState.endDate}
-                      onChange={(date) => setFormState(prev => ({ ...prev, endDate: date }))}
-                      dateFormat="dd-MM"
-                      placeholderText={t('seasonalPricing.selectDate')}
-                      className="custom-datepicker-input"
-                      minDate={formState.startDate || undefined}
-                    />
-                  </div>
-                  <Text size="xs" c="dimmed">
-                    {t('seasonalPricing.stepGuides.dates.endHint')}
-                  </Text>
-                </Stack>
-              </Grid.Col>
-            </Grid>
-
-            {formState.startDate && formState.endDate && (
-              <Alert icon={<IconInfoCircle size={16} />} color="teal" variant="light">
-                <Text size="sm">
-                  {t('seasonalPricing.periodDuration')}: {dayjs(formState.startDate).format('DD-MM')} — {dayjs(formState.endDate).format('DD-MM')}
-                </Text>
-              </Alert>
-            )}
-          </Stack>
-        );
-
-      case 2: // Цены
-        return (
-          <Stack gap="md">
-            <Alert icon={<IconBulb size={16} />} color="blue" variant="light">
-              <Text size="sm" fw={500} mb={4}>
-                {t('seasonalPricing.stepGuides.pricing.title')}
-              </Text>
-              <Text size="xs">
-                {t('seasonalPricing.stepGuides.pricing.description')}
-              </Text>
-            </Alert>
-
-            <Radio.Group
-              label={t('properties.pricing.pricingType')}
-              value={formState.pricing_type}
-              onChange={(value) => setFormState(prev => ({ ...prev, pricing_type: value as 'per_night' | 'per_period' }))}
-            >
-              <Stack gap="xs" mt="xs">
-                <Paper 
-                  p="md" 
-                  radius="md" 
-                  withBorder
-                  style={{
-                    borderColor: formState.pricing_type === 'per_night' 
-                      ? 'var(--mantine-color-blue-6)' 
-                      : 'var(--mantine-color-dark-4)',
-                    background: formState.pricing_type === 'per_night'
-                      ? 'linear-gradient(135deg, var(--mantine-color-blue-9) 0%, var(--mantine-color-dark-7) 100%)'
-                      : 'var(--mantine-color-dark-7)'
-                  }}
-                >
-                  <Radio
-                    value="per_night"
-                    label={
-                      <Stack gap={4}>
-                        <Text size="sm" fw={500}>{t('properties.pricing.perNightOption')}</Text>
-                        <Text size="xs" c="dimmed">{t('properties.pricing.perNightHint')}</Text>
-                        <List size="xs" spacing={4} mt={4}>
-                          <List.Item>
-                            <Text size="xs" c="dimmed">{t('seasonalPricing.stepGuides.pricing.perNightExample')}</Text>
-                          </List.Item>
-                        </List>
-                      </Stack>
-                    }
-                  />
-                </Paper>
-                <Paper 
-                  p="md" 
-                  radius="md" 
-                  withBorder
-                  style={{
-                    borderColor: formState.pricing_type === 'per_period' 
-                      ? 'var(--mantine-color-violet-6)' 
-                      : 'var(--mantine-color-dark-4)',
-                    background: formState.pricing_type === 'per_period'
-                      ? 'linear-gradient(135deg, var(--mantine-color-violet-9) 0%, var(--mantine-color-dark-7) 100%)'
-                      : 'var(--mantine-color-dark-7)'
-                  }}
-                >
-                  <Radio
-                    value="per_period"
-                    label={
-                      <Stack gap={4}>
-                        <Text size="sm" fw={500}>{t('properties.pricing.perPeriodOption')}</Text>
-                        <Text size="xs" c="dimmed">{t('properties.pricing.perPeriodHint')}</Text>
-                        <List size="xs" spacing={4} mt={4}>
-                          <List.Item>
-                            <Text size="xs" c="dimmed">{t('seasonalPricing.stepGuides.pricing.perPeriodExample')}</Text>
-                          </List.Item>
-                        </List>
-                      </Stack>
-                    }
-                  />
-                </Paper>
               </Stack>
-            </Radio.Group>
+            )}
+          </Transition>
+        );
 
+// Шаг 3: Заполнение цен
+case 3:
+  return (
+    <Transition mounted={activeStep === 3} transition="fade" duration={300}>
+      {(styles) => (
+        <Stack gap="md" style={styles}>
+          <Badge size="lg" color={formState.pricing_mode === 'net' ? 'blue' : 'green'}>
+            {formState.pricing_mode === 'net' ? 'NET' : 'GROSS'} {t('seasonalPricing.mode')}
+          </Badge>
+
+          {/* ✅ ПЕРЕМЕЩЕНО В НАЧАЛО: Тип комиссии */}
+          <Select
+            label={
+              <Text size="sm" fw={500}>
+                {t('seasonalPricing.commissionType')} <Text component="span" c="red">*</Text>
+              </Text>
+            }
+            placeholder={t('common.select')}
+            value={formState.commission_type || ''}
+            onChange={(value) => setFormState(prev => ({ ...prev, commission_type: value as 'percentage' | 'fixed' | 'none' | null }))}
+            data={[
+              { value: 'none', label: t('seasonalPricing.noCommission') },
+              { value: 'percentage', label: t('seasonalPricing.percentageCommission') },
+              { value: 'fixed', label: t('seasonalPricing.fixedCommission') }
+            ]}
+            styles={{ input: { fontSize: '16px' } }}
+          />
+
+          {/* Значение комиссии (если выбран тип) */}
+          {formState.commission_type && formState.commission_type !== 'none' && (
             <NumberInput
               label={
-                <Group gap="xs">
-                  <Text size="sm" fw={500}>
-                    {t('properties.pricing.pricePerNight')} <Text component="span" c="red">*</Text>
-                  </Text>
-                </Group>
-              }
-              description={t('seasonalPricing.stepGuides.pricing.priceDescription')}
-              placeholder="0"
-              value={formState.price_per_night}
-              onChange={(value) => setFormState(prev => ({ ...prev, price_per_night: value }))}
-              min={0}
-              step={1000}
-              thousandSeparator=" "
-              leftSection={<IconCurrencyBaht size={16} />}
-              rightSection={
-                <Text size="xs" c="dimmed" style={{ marginRight: 8 }}>
-                  THB
+                <Text size="sm" fw={500}>
+                  {formState.commission_type === 'percentage' ? t('seasonalPricing.commissionPercent') : t('seasonalPricing.commissionAmount')} <Text component="span" c="red">*</Text>
                 </Text>
               }
-              styles={{ input: { fontSize: '16px' } }}
-            />
-
-            <NumberInput
-              label={t('properties.pricing.sourcePricePerNight')}
-              description={t('seasonalPricing.sourcePriceDescription')}
-              placeholder="0"
-              value={formState.source_price_per_night}
-              onChange={(value) => setFormState(prev => ({ ...prev, source_price_per_night: value }))}
+              value={formState.commission_value}
+              onChange={(value) => setFormState(prev => ({ ...prev, commission_value: value }))}
               min={0}
-              step={1000}
-              thousandSeparator=" "
-              leftSection={<IconCurrencyBaht size={16} />}
-              rightSection={
-                <Text size="xs" c="dimmed" style={{ marginRight: 8 }}>
-                  THB
-                </Text>
-              }
+              suffix={formState.commission_type === 'percentage' ? '%' : ' ฿'}
+              placeholder="0"
               styles={{ input: { fontSize: '16px' } }}
             />
+          )}
 
-            <NumberInput
-              label={t('properties.pricing.minimumNights')}
-              description={t('seasonalPricing.stepGuides.pricing.minNightsDescription')}
-              placeholder="1"
-              value={formState.minimum_nights}
-              onChange={(value) => setFormState(prev => ({ ...prev, minimum_nights: value }))}
-              min={1}
-              leftSection={<IconCalendar size={16} />}
-              styles={{ input: { fontSize: '16px' } }}
-            />
-          </Stack>
-        );
+          <Divider />
 
-      case 3: // Превью
-        const previewSeason = getSeasonConfig(formState.season_type);
-        const PreviewIcon = previewSeason.icon;
-        
-        return (
-          <Stack gap="md">
-            <Alert icon={<IconEye size={16} />} color="violet" variant="light">
-              <Text size="sm" fw={500} mb={4}>
-                {t('seasonalPricing.stepGuides.preview.title')}
+          <NumberInput
+            label={
+              <Text size="sm" fw={500}>
+                {formState.pricing_mode === 'gross' 
+                  ? t('seasonalPricing.clientPrice')
+                  : t('properties.pricing.pricePerNight')
+                } <Text component="span" c="red">*</Text>
               </Text>
-              <Text size="xs">
-                {t('seasonalPricing.stepGuides.preview.description')}
-              </Text>
-            </Alert>
+            }
+            placeholder="0"
+            value={formState.price_per_night}
+            onChange={(value) => setFormState(prev => ({ ...prev, price_per_night: value }))}
+            min={0}
+            step={1000}
+            thousandSeparator=" "
+            leftSection={<IconCurrencyBaht size={16} />}
+            styles={{ input: { fontSize: '16px' } }}
+          />
 
-            <Card
-              shadow="md"
-              padding="lg"
-              radius="md"
-              withBorder
-              style={{
-                borderWidth: '2px',
-                borderColor: `var(--mantine-color-${previewSeason.color}-6)`,
-                background: `linear-gradient(135deg, var(--mantine-color-${previewSeason.color}-9) 0%, var(--mantine-color-dark-7) 100%)`,
-                position: 'relative',
-                overflow: 'hidden'
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: '4px',
-                  background: `linear-gradient(90deg, var(--mantine-color-${previewSeason.color}-6), var(--mantine-color-${previewSeason.color}-4))`
-                }}
-              />
-              
-              <Stack gap="md" mt={4}>
-                <Group gap="md">
-                  <ThemeIcon
-                    size="xl"
-                    radius="md"
-                    variant="gradient"
-                    gradient={{ from: previewSeason.color, to: `${previewSeason.color}.9` }}
-                  >
-                    <PreviewIcon size={28} />
-                  </ThemeIcon>
-                  <div>
-                    <Text fw={700} size="lg" c={previewSeason.color}>
-                      {previewSeason.label}
+          <Select
+            label={t('seasonalPricing.pricingType')}
+            value={formState.pricing_type}
+            onChange={(value) => setFormState(prev => ({ ...prev, pricing_type: value as 'per_night' | 'per_period' }))}
+            data={[
+              { value: 'per_night', label: t('properties.pricing.perNight') },
+              { value: 'per_period', label: t('properties.pricing.forWholePeriod') }
+            ]}
+            styles={{ input: { fontSize: '16px' } }}
+          />
+
+          <NumberInput
+            label={t('properties.pricing.minimumNights')}
+            placeholder="1"
+            value={formState.minimum_nights}
+            onChange={(value) => setFormState(prev => ({ ...prev, minimum_nights: value }))}
+            min={1}
+            leftSection={<IconCalendar size={16} />}
+            styles={{ input: { fontSize: '16px' } }}
+          />
+
+          {/* ✅ ИСПРАВЛЕНО: Показываем расчет всегда, когда есть цена и выбран тип комиссии */}
+          {currentCalculated && formState.commission_type && (
+            <Paper p="md" withBorder style={{ background: 'var(--mantine-color-dark-6)' }}>
+              <Stack gap="sm">
+                <Text size="sm" fw={600} c="dimmed">{t('seasonalPricing.calculation')}</Text>
+                
+                {/* Если комиссии нет - показываем просто итоговую цену */}
+                {formState.commission_type === 'none' || currentCalculated.marginAmount === 0 ? (
+                  <Group justify="space-between">
+                    <Text size="sm" fw={600}>{t('seasonalPricing.finalPriceClient')}</Text>
+                    <Text size="xl" fw={700} c="green">
+                      {currentCalculated.finalPrice.toLocaleString()} ฿
                     </Text>
-                    <Group gap={4}>
-                      <Text size="sm" c="dimmed">
-                        {formState.startDate ? dayjs(formState.startDate).format('DD-MM') : '—'}
-                      </Text>
-                      <Text size="sm" c="dimmed">—</Text>
-                      <Text size="sm" c="dimmed">
-                        {formState.endDate ? dayjs(formState.endDate).format('DD-MM') : '—'}
-                      </Text>
-                    </Group>
-                  </div>
-                </Group>
-
-                <Divider />
-
-                <Grid gutter="md">
-                  <Grid.Col span={6}>
-                    <Paper p="md" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-6)' }}>
-                      <Stack gap={4}>
-                        <Text size="xs" c="dimmed">{t('seasonalPricing.price')}</Text>
-                        <Text size="xl" fw={700} c={previewSeason.color}>
-                          {formState.price_per_night ? Number(formState.price_per_night).toLocaleString() : '0'} ฿
+                  </Group>
+                ) : (
+                  // Если есть комиссия - показываем полный расчёт
+                  formState.pricing_mode === 'net' ? (
+                    <Stack gap="xs">
+                      <Group justify="space-between">
+                        <Text size="xs" c="dimmed">{t('seasonalPricing.sourcePriceNet')}</Text>
+                        <Text size="md" fw={600}>{currentCalculated.sourcePrice.toLocaleString()} ฿</Text>
+                      </Group>
+                      
+                      <Group justify="space-between">
+                        <Group gap="xs">
+                          <IconArrowRight size={16} style={{ opacity: 0.5 }} />
+                          <Text size="xs" c="green">{t('seasonalPricing.commissionAdd')}</Text>
+                        </Group>
+                        <Text size="md" fw={600} c="green">
+                          +{currentCalculated.marginAmount.toLocaleString()} ฿ ({currentCalculated.marginPercentage.toFixed(2)}%)
                         </Text>
-                        <Text size="xs" c="dimmed">
-                          {formState.pricing_type === 'per_period' 
-                            ? t('properties.pricing.forWholePeriod')
-                            : t('properties.pricing.perNight')
-                          }
-                        </Text>
-                      </Stack>
-                    </Paper>
-                  </Grid.Col>
+                      </Group>
 
-                  {formState.source_price_per_night && Number(formState.source_price_per_night) > 0 && (
-                    <Grid.Col span={6}>
-                      <Paper p="md" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-6)' }}>
-                        <Stack gap={4}>
-                          <Text size="xs" c="dimmed">{t('seasonalPricing.sourcePrice')}</Text>
-                          <Text size="lg" fw={600}>
-                            {Number(formState.source_price_per_night).toLocaleString()} ฿
-                          </Text>
-                        </Stack>
-                      </Paper>
-                    </Grid.Col>
-                  )}
+                      <Divider style={{ borderStyle: 'dashed' }} />
 
-                  <Grid.Col span={6}>
-                    <Paper p="md" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-6)' }}>
-                      <Stack gap={4}>
-                        <Text size="xs" c="dimmed">{t('seasonalPricing.minimumNights')}</Text>
-                        <Text size="lg" fw={600}>
-                          {formState.minimum_nights || 1}
+                      <Group justify="space-between">
+                        <Text size="xs" fw={700}>{t('seasonalPricing.finalPriceClient')}</Text>
+                        <Text size="lg" fw={700} c="green">
+                          {currentCalculated.finalPrice.toLocaleString()} ฿
                         </Text>
-                      </Stack>
-                    </Paper>
-                  </Grid.Col>
-                </Grid>
+                      </Group>
+                    </Stack>
+                  ) : (
+                    <Stack gap="xs">
+                      <Group justify="space-between">
+                        <Text size="xs" fw={700}>{t('seasonalPricing.clientPriceGross')}</Text>
+                        <Text size="lg" fw={700}>{currentCalculated.finalPrice.toLocaleString()} ฿</Text>
+                      </Group>
+
+                      <Divider style={{ borderStyle: 'dashed' }} />
+
+                      <Group justify="space-between">
+                        <Group gap="xs">
+                          <IconArrowRight size={16} style={{ opacity: 0.5 }} />
+                          <Text size="xs" c="green">{t('seasonalPricing.ourMargin')}</Text>
+                        </Group>
+                        <Text size="md" fw={600} c="green">
+                          {currentCalculated.marginAmount.toLocaleString()} ฿ ({currentCalculated.marginPercentage.toFixed(2)}%)
+                        </Text>
+                      </Group>
+                      
+                      <Group justify="space-between">
+                        <Text size="xs" c="dimmed">{t('seasonalPricing.ownerPrice')}</Text>
+                        <Text size="md" fw={600}>{currentCalculated.sourcePrice.toLocaleString()} ฿</Text>
+                      </Group>
+                    </Stack>
+                  )
+                )}
               </Stack>
-            </Card>
-
-            <Alert icon={<IconCheck size={16} />} color="green" variant="light">
-              <Text size="sm">
-                {t('seasonalPricing.stepGuides.preview.readyMessage')}
-              </Text>
-            </Alert>
-          </Stack>
-        );
+            </Paper>
+          )}
+        </Stack>
+      )}
+    </Transition>
+  );
 
       default:
         return null;
     }
   };
 
+  // Упрощенный индикатор шагов для мобильных
+  const renderMobileSteps = () => {
+    return (
+      <Group justify="center" gap="xs">
+        {[0, 1, 2, 3].map((step, index) => (
+          <>
+            <Box
+              key={step}
+              onClick={() => setActiveStep(step)}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: activeStep === step 
+                  ? 'linear-gradient(135deg, var(--mantine-color-violet-6), var(--mantine-color-grape-6))'
+                  : activeStep > step 
+                    ? 'var(--mantine-color-green-6)'
+                    : 'var(--mantine-color-dark-5)',
+                color: 'white',
+                fontWeight: 600,
+                fontSize: '14px',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              {activeStep > step ? <IconCheck size={16} /> : step + 1}
+            </Box>
+            {index < 3 && (
+              <IconArrowRight 
+                size={14} 
+                style={{ 
+                  opacity: 0.5,
+                  color: activeStep > step ? 'var(--mantine-color-green-6)' : 'var(--mantine-color-dark-4)'
+                }} 
+              />
+            )}
+          </>
+        ))}
+      </Group>
+    );
+  };
+
   return (
     <Card shadow="sm" padding="lg" radius="md" withBorder>
       <Stack gap="lg">
-        {/* Header */}
         <Group justify="space-between" wrap="nowrap">
           <Group gap="md">
             <ThemeIcon size="xl" radius="md" variant="gradient" gradient={{ from: 'orange', to: 'red' }}>
@@ -951,7 +1037,7 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
             <div>
               <Text fw={700} size="xl">{t('properties.pricing.title')}</Text>
               <Text size="xs" c="dimmed">
-                {t('seasonalPricing.periodsCount', { count: value.length })}
+                {t('seasonalPricing.periodsCount', { count: periods.length })}
               </Text>
             </div>
           </Group>
@@ -964,7 +1050,7 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
               onClick={handleAdd}
               size={isMobile ? 'sm' : 'md'}
             >
-              {!isMobile && (value.length === 0 
+              {!isMobile && (periods.length === 0 
                 ? t('properties.pricing.addPeriod')
                 : t('seasonalPricing.addAnotherSeason')
               )}
@@ -972,20 +1058,11 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
           )}
         </Group>
 
-        {/* Info Alert */}
         <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
-          <Stack gap={4}>
-            <Text size="sm" fw={500}>
-              {t('properties.pricing.seasonalDisclaimer')}
-            </Text>
-            <Text size="xs" c="dimmed">
-              {t('properties.pricing.seasonalDisclaimerDescription')}
-            </Text>
-          </Stack>
+          <Text size="sm">{t('properties.pricing.seasonalDisclaimer')}</Text>
         </Alert>
 
-        {/* View Mode Switcher */}
-        {value.length > 0 && !isMobile && (
+        {periods.length > 0 && !isMobile && (
           <Group justify="center">
             <SegmentedControl
               value={viewMode_internal}
@@ -998,13 +1075,12 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
           </Group>
         )}
 
-        {/* Periods List */}
-        {value.length > 0 ? (
+        {periods.length > 0 ? (
           viewMode_internal === 'timeline' && !isMobile ? (
             renderTimelineView()
           ) : (
             <Stack gap="md">
-              {value.map(renderPeriodCard)}
+              {periods.map(renderPeriodCard)}
             </Stack>
           )
         ) : (
@@ -1026,7 +1102,7 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
         )}
       </Stack>
 
-      {/* Add/Edit Modal with Stepper */}
+      {/* Модальное окно добавления/редактирования */}
       <Modal
         opened={modalOpened}
         onClose={() => {
@@ -1044,41 +1120,59 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
             </Text>
           </Group>
         }
-        size={isMobile ? 'full' : 'xl'}
+        size={isMobile ? 'full' : 'lg'}
         centered
       >
         <Stack gap="xl">
-          <Stepper active={activeStep} onStepClick={setActiveStep} allowNextStepsSelect={false}>
-            <Stepper.Step 
-              label={t('seasonalPricing.steps.seasonType')} 
-              description={t('seasonalPricing.steps.seasonTypeDesc')}
-            >
-              {renderStepContent()}
-            </Stepper.Step>
-            
-            <Stepper.Step 
-              label={t('seasonalPricing.steps.dates')} 
-              description={t('seasonalPricing.steps.datesDesc')}
-            >
-              {renderStepContent()}
-            </Stepper.Step>
-            
-            <Stepper.Step 
-              label={t('seasonalPricing.steps.pricing')} 
-              description={t('seasonalPricing.steps.pricingDesc')}
-            >
-              {renderStepContent()}
-            </Stepper.Step>
-            
-            <Stepper.Step 
-              label={t('seasonalPricing.steps.preview')} 
-              description={t('seasonalPricing.steps.previewDesc')}
-            >
-              {renderStepContent()}
-            </Stepper.Step>
-          </Stepper>
+          {/* Индикатор шагов */}
+          {isMobile ? renderMobileSteps() : (
+            <Group justify="center" gap="md">
+              {[
+                { label: t('seasonalPricing.seasonType'), step: 0 },
+                { label: t('seasonalPricing.period'), step: 1 },
+                { label: t('seasonalPricing.priceMode'), step: 2 },
+                { label: t('seasonalPricing.prices'), step: 3 }
+              ].map(({ label, step }, index) => (
+                <>
+                  <Group key={step} gap="xs">
+                    <Box
+                      onClick={() => setActiveStep(step)}
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: activeStep === step 
+                          ? 'linear-gradient(135deg, var(--mantine-color-violet-6), var(--mantine-color-grape-6))'
+                          : activeStep > step 
+                            ? 'var(--mantine-color-green-6)'
+                            : 'var(--mantine-color-dark-5)',
+                        color: 'white',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      {activeStep > step ? <IconCheck size={18} /> : step + 1}
+                    </Box>
+                    <Text size="sm" fw={activeStep === step ? 600 : 400}>
+                      {label}
+                    </Text>
+                  </Group>
+                  {index < 3 && <IconArrowRight size={16} style={{ opacity: 0.3 }} />}
+                </>
+              ))}
+            </Group>
+          )}
 
-          {/* Navigation Buttons */}
+          {/* Контент шага */}
+          <Box style={{ minHeight: isMobile ? '400px' : '350px' }}>
+            {renderStepContent()}
+          </Box>
+
+          {/* Кнопки навигации */}
           <Group justify="space-between">
             <Button
               variant="light"
@@ -1103,21 +1197,26 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
                 </Button>
               )}
               
-              {activeStep < 3 ? (
+              {activeStep < 3 && activeStep !== 0 && activeStep !== 2 && (
                 <Button
                   variant="gradient"
                   gradient={{ from: 'violet', to: 'grape' }}
                   onClick={() => setActiveStep(prev => prev + 1)}
-                  disabled={!canProceedToStep(activeStep + 1)}
+                  disabled={
+                    (activeStep === 1 && (!formState.startDate || !formState.endDate))
+                  }
                 >
                   {t('seasonalPricing.next')}
                 </Button>
-              ) : (
+              )}
+              
+              {activeStep === 3 && (
                 <Button
                   variant="gradient"
                   gradient={{ from: 'teal', to: 'green' }}
                   leftSection={<IconCheck size={18} />}
                   onClick={handleSubmit}
+                  disabled={!formState.commission_type}
                 >
                   {editingId ? t('common.save') : t('common.add')}
                 </Button>
@@ -1127,7 +1226,7 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
         </Stack>
       </Modal>
 
-      {/* Details Modal */}
+      {/* Модальное окно подробностей */}
       <Modal
         opened={detailsModalOpened}
         onClose={() => setDetailsModalOpened(false)}
@@ -1140,17 +1239,26 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
           </Group>
         }
         centered
+        size="md"
       >
         {selectedPeriod && (() => {
           const seasonConfig = getSeasonConfig(selectedPeriod.season_type);
           const SeasonIcon = seasonConfig.icon;
+
+          // ✅ ИСПРАВЛЕНО: Используем сохраненные данные вместо пересчёта
+          const displayData = {
+            finalPrice: selectedPeriod.price_per_night, // Финальная цена для клиента
+            sourcePrice: selectedPeriod.source_price_per_night || selectedPeriod.price_per_night, // Исходная цена
+            marginAmount: selectedPeriod.margin_amount || 0, // Сохраненная маржа
+            marginPercentage: selectedPeriod.margin_percentage || 0 // Сохраненный процент
+          };
 
           return (
             <Stack gap="md">
               <Paper p="md" radius="md" withBorder>
                 <Stack gap="md">
                   <Group gap="sm">
-                    <ThemeIcon size="lg" radius="md" variant="light" color={seasonConfig.color}>
+                    <ThemeIcon size="lg" radius="md" variant="gradient" gradient={{ from: seasonConfig.color, to: `${seasonConfig.color}.9` }}>
                       <SeasonIcon size={20} />
                     </ThemeIcon>
                     <div>
@@ -1163,38 +1271,94 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
 
                   <Divider />
 
-                  <Grid gutter="md">
-                    <Grid.Col span={6}>
-                      <Stack gap={4}>
-                        <Text size="xs" c="dimmed">{t('seasonalPricing.price')}</Text>
+                  {/* Полный расчет с маржой */}
+                  {displayData && displayData.marginAmount > 0 ? (
+                    <Paper p="md" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-7)' }}>
+                      <Stack gap="sm">
+                        <Text size="sm" fw={600} c="dimmed">{t('seasonalPricing.calculation')}</Text>
+                        
+                        {selectedPeriod.pricing_mode === 'net' ? (
+                          <Stack gap="xs">
+                            <Group justify="space-between">
+                              <Text size="xs" c="dimmed">{t('seasonalPricing.sourcePriceNet')}</Text>
+                              <Text size="lg" fw={600}>{displayData.sourcePrice.toLocaleString()} ฿</Text>
+                            </Group>
+                            
+                            <Group justify="space-between">
+                              <Group gap="xs">
+                                <IconArrowRight size={16} style={{ opacity: 0.5 }} />
+                                <Text size="xs" c="green">{t('seasonalPricing.commissionAdd')}</Text>
+                              </Group>
+                              <Text size="lg" fw={600} c="green">
+                                +{displayData.marginAmount.toLocaleString()} ฿ ({displayData.marginPercentage.toFixed(2)}%)
+                              </Text>
+                            </Group>
+
+                            <Divider style={{ borderStyle: 'dashed' }} />
+
+                            <Group justify="space-between">
+                              <Text size="sm" fw={700}>{t('seasonalPricing.finalPriceClient')}</Text>
+                              <Text size="xl" fw={700} c={seasonConfig.color}>
+                                {displayData.finalPrice.toLocaleString()} ฿
+                              </Text>
+                            </Group>
+                          </Stack>
+                        ) : (
+                          <Stack gap="xs">
+                            <Group justify="space-between">
+                              <Text size="sm" fw={700}>{t('seasonalPricing.clientPriceGross')}</Text>
+                              <Text size="xl" fw={700}>{displayData.finalPrice.toLocaleString()} ฿</Text>
+                            </Group>
+
+                            <Divider style={{ borderStyle: 'dashed' }} />
+
+                            <Group justify="space-between">
+                              <Group gap="xs">
+                                <IconArrowRight size={16} style={{ opacity: 0.5 }} />
+                                <Text size="xs" c="green">{t('seasonalPricing.ourMargin')}</Text>
+                              </Group>
+                              <Text size="lg" fw={600} c="green">
+                                {displayData.marginAmount.toLocaleString()} ฿ ({displayData.marginPercentage.toFixed(2)}%)
+                              </Text>
+                            </Group>
+                            
+                            <Group justify="space-between">
+                              <Text size="xs" c="dimmed">{t('seasonalPricing.ownerPrice')}</Text>
+                              <Text size="lg" fw={600}>{displayData.sourcePrice.toLocaleString()} ฿</Text>
+                            </Group>
+                          </Stack>
+                        )}
+                      </Stack>
+                    </Paper>
+                  ) : (
+                    <Paper p="md" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-7)' }}>
+                      <Group justify="space-between">
+                        <Text size="xs" c="dimmed">{t('seasonalPricing.priceForClient')}</Text>
                         <Text size="xl" fw={700} c={seasonConfig.color}>
                           {selectedPeriod.price_per_night.toLocaleString()} ฿
                         </Text>
-                        <Text size="xs" c="dimmed">
-                          {selectedPeriod.pricing_type === 'per_period' 
-                            ? t('properties.pricing.forWholePeriod')
-                            : t('properties.pricing.perNight')
-                          }
-                        </Text>
-                      </Stack>
-                    </Grid.Col>
-                    
-                    {selectedPeriod.source_price_per_night && (
-                      <Grid.Col span={6}>
-                        <Stack gap={4}>
-                          <Text size="xs" c="dimmed">{t('seasonalPricing.sourcePrice')}</Text>
-                          <Text size="lg" fw={600}>
-                            {selectedPeriod.source_price_per_night.toLocaleString()} ฿
-                          </Text>
-                        </Stack>
-                      </Grid.Col>
-                    )}
+                      </Group>
+                    </Paper>
+                  )}
 
+                  <Grid gutter="md">
                     <Grid.Col span={6}>
                       <Stack gap={4}>
                         <Text size="xs" c="dimmed">{t('seasonalPricing.minimumNights')}</Text>
                         <Text size="lg" fw={600}>
                           {selectedPeriod.minimum_nights || '—'}
+                        </Text>
+                      </Stack>
+                    </Grid.Col>
+
+                    <Grid.Col span={6}>
+                      <Stack gap={4}>
+                        <Text size="xs" c="dimmed">{t('seasonalPricing.pricingType')}</Text>
+                        <Text size="lg" fw={600}>
+                          {selectedPeriod.pricing_type === 'per_period' 
+                            ? t('properties.pricing.forWholePeriod')
+                            : t('properties.pricing.perNight')
+                          }
                         </Text>
                       </Stack>
                     </Grid.Col>
@@ -1222,12 +1386,14 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
           
           .custom-datepicker-input {
             width: 100%;
-            padding: 8px 12px;
-            font-size: 16px;
+            padding: 10px 12px;
+            font-size: 16px !important;
             border: 1px solid var(--mantine-color-dark-4);
             border-radius: 4px;
             background: var(--mantine-color-dark-7);
             color: var(--mantine-color-gray-0);
+            cursor: pointer;
+            caret-color: transparent;
           }
           
           .custom-datepicker-input:focus {
@@ -1239,8 +1405,61 @@ const SeasonalPricing = ({ value = [], onChange, viewMode = false }: SeasonalPri
             color: var(--mantine-color-dimmed);
           }
 
+          /* Предотвращаем зум на мобильных устройствах */
+          input, select, textarea {
+            font-size: 16px !important;
+          }
+
           .react-datepicker-popper {
             z-index: 9999 !important;
+          }
+
+          .react-datepicker {
+            font-family: inherit;
+            background: var(--mantine-color-dark-6);
+            border-color: var(--mantine-color-dark-4);
+          }
+
+          .react-datepicker__header {
+            background: var(--mantine-color-dark-7);
+            border-bottom-color: var(--mantine-color-dark-4);
+          }
+
+          .react-datepicker__current-month,
+          .react-datepicker__day-name {
+            color: var(--mantine-color-gray-0);
+          }
+
+          .react-datepicker__day {
+            color: var(--mantine-color-gray-0);
+          }
+
+          .react-datepicker__day:hover {
+            background: var(--mantine-color-blue-7);
+          }
+
+          .react-datepicker__day--selected {
+            background: var(--mantine-color-blue-6);
+          }
+
+          @media (max-width: 768px) {
+            .react-datepicker {
+              font-size: 16px !important;
+            }
+            
+            /* Убираем зум при фокусе на input */
+            input[type="text"],
+            input[type="number"],
+            select,
+            textarea {
+              font-size: 16px !important;
+              -webkit-text-size-adjust: 100%;
+            }
+            
+            /* Скрываем курсор в DatePicker input */
+            .custom-datepicker-input {
+              caret-color: transparent !important;
+            }
           }
         `}
       </style>
