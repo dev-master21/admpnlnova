@@ -23,6 +23,7 @@
     "loading": "Загрузка...",
     "previous": "Назад",
     "next": "Вперед",
+    "continue":"Продолжить",
     "select": "Выберите",
     "upload": "Загрузить",
     "download": "Скачать",
@@ -147,6 +148,7 @@
     "generic": "Произошла ошибка",
     "network": "Ошибка сети",
     "serverError": "Ошибка сервера",
+    "validation": "Произошла ошибка",
     "notFound": "Не найдено",
     "unauthorized": "Нет доступа",
     "forbidden": "Действие запрещено",
@@ -3081,6 +3083,12 @@
     "source": "Источник",
     "addedBy": "Добавил",
     "prices": "Цены",
+    "afterSave": {
+      "title": "Выберите дальнейшие действия",
+      "viewOnSite": "Просмотреть на сайте",
+      "goToList": "К списку всех объектов",
+      "continueEditing": "Продолжить редактирование"
+    },
     "ownerAccess": {
       "title": "Создание доступа для владельца",
       "createButton": "Создать доступ для владельца",
@@ -3105,9 +3113,11 @@
       "viewMode": "Просмотр объекта недвижимости",
       "editMode": "Редактирование объекта",
       "createMode": "Создание объекта",
+      "fillRequired": "Заполните обязательные поля",
       "createWithAI": "Создать с ИИ",
       "editButton": "Редактировать",
       "saveButton": "Сохранить",
+      "fillRequiredFirst": "Сначала заполните обязательные поля на главной вкладке и нажмите 'Сохранить'",
       "createButton": "Создать",
       "cancelButton": "Отмена",
       "currentStep": "Текущий шаг",
@@ -3125,7 +3135,7 @@
       "videoUrlPlaceholder": "https://www.youtube.com/watch?v=...",
       
       "addressPlaceholder": "Точный адрес объекта",
-      "googleMapsPlaceholder": "https://maps.google.com/...",
+      "googleMapsPlaceholder": "https://maps.app.goo.gl/...",
       "googleMapsWarning": "Требуется определение координат",
       
       "floorPlaceholder": "1, 2, 3 или 1-2",
@@ -3150,7 +3160,6 @@
         "november": "Ноябрь",
         "december": "Декабрь"
       },
-      
       "furnitureStatuses": {
         "fullyFurnished": "Полностью меблирована",
         "partiallyFurnished": "Частично меблирована",
@@ -3333,7 +3342,7 @@
       "features": "Опции",
       "pricing": "Цены",
       "calendar": "Календарь",
-      "owner": "Owner",
+      "owner": "Хозяин",
       "translations": "Описание"
     },
 

@@ -65,9 +65,11 @@ import {
   IconClipboard,
   IconMapPinFilled,
   IconAlertTriangle,
-  IconUpload // ✅ НОВОЕ
+  IconUpload,
+  IconExternalLink,
+  IconList
 } from '@tabler/icons-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { propertiesApi, MonthlyPrice } from '@/api/properties.api';
 import { extractCoordinatesFromGoogleMapsLink, isGoogleMapsLink } from '@/utils/googleMapsUtils';
@@ -90,7 +92,6 @@ import TranslationsEditor from './components/TranslationsEditor';
 import AIPropertyCreationModal from './components/AIPropertyCreationModal';
 import OwnerAccessModal from './components/OwnerAccessModal';
 
-// ✅ НОВОЕ: Интерфейсы для временных данных
 interface TempPhoto {
   file: File;
   category: string;
@@ -139,6 +140,7 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams();
+  const location = useLocation();
   const theme = useMantineTheme();
   const [depositType, setDepositType] = useState<'one_month' | 'two_months' | 'custom'>('one_month');
   const [depositAmount, setDepositAmount] = useState<number>(0);
@@ -149,6 +151,7 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
   const [loading, setLoading] = useState(false);
   const [detectingCoords, setDetectingCoords] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
+  const [isCreatingProperty, setIsCreatingProperty] = useState(false);
   const [dealType, setDealType] = useState<'sale' | 'rent' | 'both'>('sale');
   const [showRenovationDate, setShowRenovationDate] = useState(false);
   const [propertyData, setPropertyData] = useState<any>(null);
@@ -162,15 +165,12 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
     photosFromGoogleDrive?: string | null;
   }>({});
 
-  // ✅ НОВОЕ: Состояния для временных медиа-данных
   const [tempPhotos, setTempPhotos] = useState<TempPhoto[]>([]);
   const [tempVideos, setTempVideos] = useState<TempVideo[]>([]);
   const [tempFloorPlan, setTempFloorPlan] = useState<File | null>(null);
   const [tempVRPanoramas, setTempVRPanoramas] = useState<TempVRPanorama[]>([]);
   const [tempBlockedDates, setTempBlockedDates] = useState<TempBlockedDate[]>([]);
 
-
-  // ✅ НОВОЕ: Состояния для прогресса загрузки медиа
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({
     current: 0,
@@ -201,6 +201,7 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
   });
 
   const [complexInfoOpened, { open: openComplexInfo, close: closeComplexInfo }] = useDisclosure(false);
+  const [afterSaveModalOpened, { open: openAfterSaveModal, close: closeAfterSaveModal }] = useDisclosure(false);
 
   const form = useForm({
     initialValues: {
@@ -298,6 +299,8 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
     },
   });
 
+  const canNavigateToOtherTabs = isEdit || isCreatingProperty;
+
   const steps = useMemo(() => {
     const baseSteps = [
       { 
@@ -305,30 +308,35 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         key: 'basic',
         label: t('properties.tabs.basic'), 
         icon: IconHome,
+        disabled: false,
       },
       {
         value: 1,
         key: 'media',
         label: t('properties.tabs.media'),
         icon: IconPhoto,
+        disabled: !canNavigateToOtherTabs,
       },
       {
         value: 2,
         key: 'features',
         label: t('properties.tabs.features'),
         icon: IconTags,
+        disabled: !canNavigateToOtherTabs,
       },
       {
         value: 3,
         key: 'pricing',
         label: t('properties.tabs.pricing'),
         icon: IconCurrencyDollar,
+        disabled: !canNavigateToOtherTabs,
       },
       {
         value: 4,
         key: 'calendar',
         label: t('properties.tabs.calendar'),
-        icon: IconCalendar
+        icon: IconCalendar,
+        disabled: !canNavigateToOtherTabs,
       }
     ];
 
@@ -338,6 +346,7 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         key: 'owner',
         label: t('properties.tabs.owner'),
         icon: IconUser,
+        disabled: !canNavigateToOtherTabs,
       });
     }
 
@@ -346,10 +355,11 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
       key: 'translations',
       label: t('properties.tabs.translations'),
       icon: IconLanguage,
+      disabled: !canNavigateToOtherTabs,
     });
 
     return baseSteps;
-  }, [showOwnerTab, t]);
+  }, [showOwnerTab, t, canNavigateToOtherTabs]);
 
   const calculateProgress = () => {
     const values = form.values;
@@ -407,11 +417,9 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
 
   const progress = calculateProgress();
 
-  // ✅ НОВОЕ: Функция загрузки всех медиа после создания объекта
   const uploadAllMedia = async (propertyId: number) => {
     setIsUploadingMedia(true);
     
-    // Подсчёт общего количества элементов для загрузки
     const totalItems = 
       tempPhotos.length + 
       tempVideos.length + 
@@ -435,7 +443,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
     let currentItem = 0;
 
     try {
-// Загрузка фотографий
       if (tempPhotos.length > 0) {
         setUploadProgress(prev => ({
           ...prev,
@@ -468,7 +475,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         });
       }
 
-// Загрузка видео
       if (tempVideos.length > 0) {
         setUploadProgress(prev => ({
           ...prev,
@@ -486,7 +492,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
             percentage: Math.round((currentItem / totalItems) * 100)
           }));
 
-          // API uploadVideo сам создаёт FormData внутри, передаём только файл
           await propertiesApi.uploadVideo(propertyId, video.file);
         }
         notifications.show({
@@ -497,7 +502,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         });
       }
 
-      // Загрузка планировки
       if (tempFloorPlan) {
         currentItem++;
         setUploadProgress(prev => ({
@@ -521,7 +525,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         });
       }
 
-      // Загрузка VR панорам
       if (tempVRPanoramas.length > 0) {
         setUploadProgress(prev => ({
           ...prev,
@@ -558,7 +561,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         });
       }
 
-// Загрузка заблокированных дат
       if (tempBlockedDates.length > 0) {
         setUploadProgress(prev => ({
           ...prev,
@@ -591,7 +593,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         });
       }
 
-      // Очистка временных данных
       setTempPhotos([]);
       setTempVideos([]);
       setTempFloorPlan(null);
@@ -625,11 +626,20 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
     }
   };
 
-  useEffect(() => {
-    if (isEdit) {
-      loadProperty();
+useEffect(() => {
+  if (isEdit) {
+    loadProperty();
+  }
+  
+  const searchParams = new URLSearchParams(location.search);
+  const tab = searchParams.get('tab');
+  if (tab) {
+    const tabNumber = Number(tab);
+    if (!isNaN(tabNumber) && tabNumber >= 0 && tabNumber < steps.length) {
+      setActiveStep(tabNumber);
     }
-  }, [id]);
+  }
+}, [id, location.search]);
 
   useEffect(() => {
     if (form.values.google_maps_link && (!form.values.latitude || !form.values.longitude)) {
@@ -1035,153 +1045,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
     openComplexInfo();
   };
 
-  // ✅ ОБНОВЛЕНО: handleSubmit с загрузкой медиа после создания
-  const handleSubmit = async (values: typeof form.values) => {
-    if (!values.property_name) {
-      notifications.show({
-        title: t('errors.generic'),
-        message: t('properties.messages.propertyNameRequired'),
-        color: 'red',
-        icon: <IconX size={18} />
-      });
-      setActiveStep(0);
-      return;
-    }
-
-    if (values.status !== 'draft') {
-      const hasAnyDescription = values.translations?.ru?.description || 
-                                values.translations?.en?.description || 
-                                values.translations?.th?.description ||
-                                values.translations?.zh?.description ||
-                                values.translations?.he?.description;
-
-      if (!hasAnyDescription) {
-        notifications.show({
-          title: t('errors.generic'),
-          message: t('properties.messages.descriptionRequired'),
-          color: 'red',
-          icon: <IconX size={18} />
-        });
-        setActiveStep(steps.length - 1);
-        return;
-      }
-    }
-
-    setLoading(true);
-    try {
-      const formData = {
-        ...values,
-        renovation_date: values.renovation_date 
-          ? dayjs(values.renovation_date).format('YYYY-MM-01')
-          : null,
-        propertyFeatures: values.features?.property || [],
-        outdoorFeatures: values.features?.outdoor || [],
-        rentalFeatures: values.features?.rental || [],
-        locationFeatures: values.features?.location || [],
-        views: values.features?.views || [],
-        translations: values.translations,
-        seasonalPricing: values.seasonalPricing || [],
-        
-        year_price: values.year_price || null,
-        year_pricing_mode: values.year_pricing_mode || 'net',
-        year_commission_type: values.year_commission_type || null,
-        year_commission_value: values.year_commission_value || null,
-        year_source_price: values.year_source_price || null,
-        year_margin_amount: values.year_margin_amount || null,
-        year_margin_percentage: values.year_margin_percentage || null,
-        
-        sale_price: values.sale_price || null,
-        sale_pricing_mode: values.sale_pricing_mode || 'net',
-        sale_commission_type_new: values.sale_commission_type_new || null,
-        sale_commission_value_new: values.sale_commission_value_new || null,
-        sale_source_price: values.sale_source_price || null,
-        sale_margin_amount: values.sale_margin_amount || null,
-        sale_margin_percentage: values.sale_margin_percentage || null,
-        
-        monthlyPricing: values.monthlyPricing || [],
-        
-        blockedDates: aiTempData.blockedDates || [],
-        photosFromGoogleDrive: aiTempData.photosFromGoogleDrive || null
-      };
-    
-      if (isEdit) {
-        await propertiesApi.update(Number(id), formData);
-        notifications.show({
-          title: t('common.success'),
-          message: t('properties.updateSuccess'),
-          color: 'green',
-          icon: <IconCheck size={18} />
-        });
-        loadProperty();
-      } else {
-        // ✅ НОВОЕ: Создание объекта и загрузка медиа
-        const { data } = await propertiesApi.create(formData);
-        const newPropertyId = data.data.propertyId;
-
-        notifications.show({
-          title: t('common.success'),
-          message: t('properties.createSuccess'),
-          color: 'green',
-          icon: <IconCheck size={18} />
-        });
-        
-        if (values.monthlyPricing && values.monthlyPricing.length > 0) {
-          notifications.show({
-            title: t('common.success'),
-            message: t('properties.messages.savedMonthlyPrices', { count: values.monthlyPricing.length }),
-            color: 'green'
-          });
-        }
-        
-        if (aiTempData.blockedDates && aiTempData.blockedDates.length > 0) {
-          notifications.show({
-            title: t('common.success'),
-            message: t('properties.messages.savedBlockedDates', { count: aiTempData.blockedDates.length }),
-            color: 'green'
-          });
-        }
-        
-        if (aiTempData.photosFromGoogleDrive) {
-          notifications.show({
-            title: t('common.info'),
-            message: t('properties.messages.googleDrivePhotosLoading'),
-            color: 'blue'
-          });
-        }
-        
-        // ✅ НОВОЕ: Загрузка всех временных медиа
-        const hasMediaToUpload = 
-          tempPhotos.length > 0 || 
-          tempVideos.length > 0 || 
-          tempFloorPlan !== null || 
-          tempVRPanoramas.length > 0 ||
-          tempBlockedDates.length > 0;
-
-        if (hasMediaToUpload) {
-          try {
-            await uploadAllMedia(newPropertyId);
-          } catch (error) {
-            console.error('Media upload error:', error);
-          }
-        }
-        
-        setAiTempData({});
-        
-        navigate(`/properties/edit/${newPropertyId}`);
-      }
-    } catch (error: any) {
-      console.error('Submit error:', error);
-      notifications.show({
-        title: t('errors.generic'),
-        message: error.response?.data?.message || t('errors.generic'),
-        color: 'red',
-        icon: <IconX size={18} />
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleDealTypeChange = (value: string) => {
     setDealType(value as 'sale' | 'rent' | 'both');
     form.setFieldValue('deal_type', value);
@@ -1396,27 +1259,175 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
     }
   };
 
-  const handleSaveClick = async () => {
-    const validation = form.validate();
+const handleSaveClick = async () => {
+  const validationErrors = form.validate();
+  
+  if (validationErrors.hasErrors) {
+    setActiveStep(0);
+    scrollIntoView();
     
-    if (validation.hasErrors) {
+    notifications.show({
+      title: t('errors.validation'),
+      message: t('properties.form.fillRequired') || 'Заполните обязательные поля',
+      color: 'red',
+      icon: <IconX size={18} />
+    });
+    return;
+  }
+
+  if (!form.values.property_name) {
+    setActiveStep(0);
+    scrollIntoView();
+
+    notifications.show({
+      title: t('errors.generic'),
+      message: t('properties.messages.propertyNameRequired') || 'Укажите название объекта',
+      color: 'red',
+      icon: <IconX size={18} />
+    });
+    return;
+  }
+
+  if (form.values.status !== 'draft') {
+    const hasAnyDescription = form.values.translations?.ru?.description || 
+                              form.values.translations?.en?.description || 
+                              form.values.translations?.th?.description ||
+                              form.values.translations?.zh?.description ||
+                              form.values.translations?.he?.description;
+
+    if (!hasAnyDescription) {
       notifications.show({
         title: t('errors.generic'),
-        message: t('properties.messages.fillRequiredFields'),
+        message: t('properties.messages.descriptionRequired') || 'Для публикации необходимо добавить описание',
         color: 'red',
         icon: <IconX size={18} />
       });
-      setActiveStep(0);
+      setActiveStep(steps.length - 1);
       return;
     }
+  }
 
-    await handleSubmit(form.values);
-  };
+  try {
+    setLoading(true);
+
+    const propertyData = {
+      ...form.values,
+      sale_price: dealType === 'rent' ? null : form.values.sale_price,
+      year_price: dealType === 'sale' ? null : form.values.year_price,
+      year_pricing_mode: dealType === 'sale' ? null : form.values.year_pricing_mode,
+      year_commission_type: dealType === 'sale' ? null : form.values.year_commission_type,
+      year_commission_value: dealType === 'sale' ? null : form.values.year_commission_value,
+      features: {
+        property: form.values.features.property,
+        outdoor: form.values.features.outdoor,
+        rental: form.values.features.rental,
+        location: form.values.features.location,
+        views: form.values.features.views
+      },
+      monthlyPricing: dealType === 'sale' ? [] : form.values.monthlyPricing,
+      seasonalPricing: dealType === 'sale' ? [] : form.values.seasonalPricing,
+      translations: form.values.translations,
+      distance_to_beach: form.values.distance_to_beach,
+      renovation_date: form.values.renovation_date 
+        ? dayjs(form.values.renovation_date).format('YYYY-MM-01')
+        : null,
+      propertyFeatures: form.values.features?.property || [],
+      outdoorFeatures: form.values.features?.outdoor || [],
+      rentalFeatures: form.values.features?.rental || [],
+      locationFeatures: form.values.features?.location || [],
+      views: form.values.features?.views || [],
+      blockedDates: aiTempData.blockedDates || [],
+      photosFromGoogleDrive: aiTempData.photosFromGoogleDrive || null
+    };
+
+    if (isEdit) {
+      await propertiesApi.update(Number(id), propertyData);
+      notifications.show({
+        title: t('common.success'),
+        message: t('properties.updated'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
+      await loadProperty();
+      
+      // ✅ НОВОЕ: Открываем модальное окно после успешного редактирования
+      openAfterSaveModal();
+    } else {
+      setIsCreatingProperty(true);
+      const { data } = await propertiesApi.create(propertyData);
+      const newPropertyId = data.data.propertyId;
+
+      notifications.show({
+        title: t('common.success'),
+        message: t('properties.created'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
+
+      if (form.values.monthlyPricing && form.values.monthlyPricing.length > 0) {
+        notifications.show({
+          title: t('common.success'),
+          message: t('properties.messages.savedMonthlyPrices', { count: form.values.monthlyPricing.length }) || `Сохранено ${form.values.monthlyPricing.length} месячных цен`,
+          color: 'green'
+        });
+      }
+      
+      if (aiTempData.blockedDates && aiTempData.blockedDates.length > 0) {
+        notifications.show({
+          title: t('common.success'),
+          message: t('properties.messages.savedBlockedDates', { count: aiTempData.blockedDates.length }) || `Сохранено ${aiTempData.blockedDates.length} заблокированных дат`,
+          color: 'green'
+        });
+      }
+      
+      if (aiTempData.photosFromGoogleDrive) {
+        notifications.show({
+          title: t('common.info'),
+          message: t('properties.messages.googleDrivePhotosLoading') || 'Фотографии из Google Drive загружаются...',
+          color: 'blue'
+        });
+      }
+
+      const hasMediaToUpload = 
+        tempPhotos.length > 0 || 
+        tempVideos.length > 0 || 
+        tempFloorPlan !== null || 
+        tempVRPanoramas.length > 0 ||
+        tempBlockedDates.length > 0;
+
+      if (hasMediaToUpload) {
+        try {
+          await uploadAllMedia(newPropertyId);
+        } catch (error) {
+          console.error('Media upload error:', error);
+        }
+      }
+
+      setAiTempData({});
+
+      navigate(`/properties/edit/${newPropertyId}?tab=1`);
+    }
+  } catch (error: any) {
+    console.error('Save error:', error);
+    notifications.show({
+      title: t('errors.generic'),
+      message: error.response?.data?.message || t('properties.saveFailed'),
+      color: 'red',
+      icon: <IconX size={18} />
+    });
+  } finally {
+    setLoading(false);
+    setIsCreatingProperty(false);
+  }
+};
 
   const nextStep = () => {
     if (activeStep < steps.length - 1) {
-      setActiveStep(activeStep + 1);
-      scrollIntoView();
+      const nextStepIndex = activeStep + 1;
+      if (!steps[nextStepIndex].disabled) {
+        setActiveStep(nextStepIndex);
+        scrollIntoView();
+      }
     }
   };
 
@@ -1437,7 +1448,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
     </Paper>
   );
 
-  // ✅ НОВОЕ: Компонент прогресс-индикатора загрузки медиа
   const MediaUploadProgress = () => {
     if (!isUploadingMedia) return null;
 
@@ -1558,7 +1568,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
       return (
         <Stack gap="md">
           <Accordion defaultValue={['main', 'location', 'details']} multiple variant="separated">
-            {/* Основная информация */}
             <Accordion.Item value="main">
               <Accordion.Control icon={<IconBuildingEstate size={20} />}>
                 <Text fw={500}>{t('properties.form.mainInfo') || 'Основная информация'}</Text>
@@ -1773,7 +1782,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
               </Accordion.Panel>
             </Accordion.Item>
 
-            {/* Локация */}
             <Accordion.Item value="location">
               <Accordion.Control icon={<IconMapPin size={20} />}>
                 <Text fw={500}>{t('properties.form.locationInfo') || 'Местоположение'}</Text>
@@ -1915,7 +1923,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
               </Accordion.Panel>
             </Accordion.Item>
 
-            {/* Детали объекта */}
             <Accordion.Item value="details">
               <Accordion.Control icon={<IconClipboardText size={20} />}>
                 <Text fw={500}>{t('properties.form.propertyDetails') || 'Детали объекта'}</Text>
@@ -2166,11 +2173,23 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
               </Accordion.Panel>
             </Accordion.Item>
           </Accordion>
+
+          {!isViewMode && !isEdit && isMobile && (
+            <Button
+              fullWidth
+              size="lg"
+              onClick={handleSaveClick}
+              loading={loading || isCreatingProperty}
+              leftSection={<IconDeviceFloppy size={18} />}
+              rightSection={<IconChevronRight size={18} />}
+            >
+              {t('common.continue')}
+            </Button>
+          )}
         </Stack>
       );
     }
 
-    // ✅ ОБНОВЛЕНО: Шаг Media с колбэками onChange
     if (steps[activeStep].key === 'media') {
       return (
         <Stack gap="md">
@@ -2510,7 +2529,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
       );
     }
 
-    // ✅ ОБНОВЛЕНО: Шаг Calendar с колбэком onChange
     if (steps[activeStep].key === 'calendar') {
       return (
         <CalendarManager 
@@ -2679,7 +2697,6 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
 
   return (
     <Box ref={targetRef}>
-      {/* ✅ НОВОЕ: Модальное окно прогресса загрузки медиа */}
       <MediaUploadProgress />
 
       <Card shadow="sm" padding={0} radius="md" withBorder>
@@ -2749,105 +2766,113 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
                   const StepIcon = step.icon;
                   const isActive = activeStep === index;
                   const isCompleted = activeStep > index;
+                  const isDisabled = step.disabled;
                   
                   const span = index === steps.length - 1 ? 12 : 6;
                   
                   return (
                     <Grid.Col key={step.value} span={span}>
-                      <Paper
-                        p="sm"
-                        radius="md"
-                        withBorder
-                        style={{
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease',
-                          backgroundColor: isActive 
-                            ? (isDark ? theme.colors.dark[5] : theme.colors.blue[0])
-                            : isCompleted
-                            ? (isDark ? theme.colors.dark[6] : theme.colors.green[0])
-                            : (isDark ? theme.colors.dark[6] : theme.colors.gray[0]),
-                          borderColor: isActive
-                            ? theme.colors.blue[5]
-                            : isCompleted
-                            ? theme.colors.green[5]
-                            : (isDark ? theme.colors.dark[4] : theme.colors.gray[3]),
-                          borderWidth: isActive || isCompleted ? '2px' : '1px',
-                          transform: 'scale(1)',
-                          minHeight: '56px',
-                          height: '100%',
-                          boxSizing: 'border-box',
-                          display: 'flex',
-                          alignItems: 'center'
-                        }}
-                        onClick={() => setActiveStep(index)}
-                        onTouchStart={(e) => {
-                          e.currentTarget.style.transform = 'scale(0.98)';
-                        }}
-                        onTouchEnd={(e) => {
-                          e.currentTarget.style.transform = 'scale(1)';
-                        }}
-                        onMouseDown={(e) => {
-                          e.currentTarget.style.transform = 'scale(0.98)';
-                        }}
-                        onMouseUp={(e) => {
-                          e.currentTarget.style.transform = 'scale(1)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = 'scale(1)';
-                        }}
+                      <Tooltip
+                        label={isDisabled ? (t('properties.form.fillRequiredFirst') || 'Сначала заполните обязательные поля') : null}
+                        disabled={!isDisabled}
+                        withArrow
                       >
-                        <Group justify="space-between" wrap="nowrap" align="center" style={{ width: '100%' }}>
-                          <Group gap="sm" wrap="nowrap" align="center">
-                            <ThemeIcon
-                              size={36}
-                              radius="md"
-                              variant="light"
-                              color={isActive ? "blue" : isCompleted ? "green" : "gray"}
-                              style={{
-                                backgroundColor: isActive
-                                  ? (isDark ? theme.colors.blue[9] : theme.colors.blue[1])
+                        <Paper
+                          p="sm"
+                          radius="md"
+                          withBorder
+                          style={{
+                            cursor: isDisabled ? 'not-allowed' : 'pointer',
+                            opacity: isDisabled ? 0.5 : 1,
+                            transition: 'all 0.2s ease',
+                            backgroundColor: isActive 
+                              ? (isDark ? theme.colors.dark[5] : theme.colors.blue[0])
+                              : isCompleted
+                              ? (isDark ? theme.colors.dark[6] : theme.colors.green[0])
+                              : (isDark ? theme.colors.dark[6] : theme.colors.gray[0]),
+                            borderColor: isActive
+                              ? theme.colors.blue[5]
+                              : isCompleted
+                              ? theme.colors.green[5]
+                              : (isDark ? theme.colors.dark[4] : theme.colors.gray[3]),
+                            borderWidth: isActive || isCompleted ? '2px' : '1px',
+                            transform: 'scale(1)',
+                            minHeight: '56px',
+                            height: '100%',
+                            boxSizing: 'border-box',
+                            display: 'flex',
+                            alignItems: 'center'
+                          }}
+                          onClick={() => !isDisabled && setActiveStep(index)}
+                          onTouchStart={(e) => {
+                            if (!isDisabled) e.currentTarget.style.transform = 'scale(0.98)';
+                          }}
+                          onTouchEnd={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
+                          onMouseDown={(e) => {
+                            if (!isDisabled) e.currentTarget.style.transform = 'scale(0.98)';
+                          }}
+                          onMouseUp={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
+                        >
+                          <Group justify="space-between" wrap="nowrap" align="center" style={{ width: '100%' }}>
+                            <Group gap="sm" wrap="nowrap" align="center">
+                              <ThemeIcon
+                                size={36}
+                                radius="md"
+                                variant="light"
+                                color={isActive ? "blue" : isCompleted ? "green" : "gray"}
+                                style={{
+                                  backgroundColor: isActive
+                                    ? (isDark ? theme.colors.blue[9] : theme.colors.blue[1])
+                                    : isCompleted
+                                    ? (isDark ? theme.colors.green[9] : theme.colors.green[1])
+                                    : (isDark ? theme.colors.dark[5] : theme.colors.gray[1]),
+                                  flexShrink: 0
+                                }}
+                              >
+                                <StepIcon size={18} />
+                              </ThemeIcon>
+                              <Text 
+                                fw={isActive ? 600 : 500} 
+                                size="sm"
+                                c={isActive 
+                                  ? (isDark ? theme.colors.blue[3] : theme.colors.blue[7])
                                   : isCompleted
-                                  ? (isDark ? theme.colors.green[9] : theme.colors.green[1])
-                                  : (isDark ? theme.colors.dark[5] : theme.colors.gray[1]),
-                                flexShrink: 0
-                              }}
+                                  ? (isDark ? theme.colors.green[3] : theme.colors.green[7])
+                                  : (isDark ? theme.colors.gray[4] : theme.colors.gray[7])
+                                }
+                                lineClamp={1}
+                                style={{ 
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                {step.label}
+                              </Text>
+                            </Group>
+                            <ActionIcon
+                              variant={isActive ? "filled" : isCompleted ? "light" : "subtle"}
+                              color={isActive ? "blue" : isCompleted ? "green" : "gray"}
+                              size="md"
+                              radius="md"
+                              style={{ flexShrink: 0 }}
                             >
-                              <StepIcon size={18} />
-                            </ThemeIcon>
-                            <Text 
-                              fw={isActive ? 600 : 500} 
-                              size="sm"
-                              c={isActive 
-                                ? (isDark ? theme.colors.blue[3] : theme.colors.blue[7])
-                                : isCompleted
-                                ? (isDark ? theme.colors.green[3] : theme.colors.green[7])
-                                : (isDark ? theme.colors.gray[4] : theme.colors.gray[7])
-                              }
-                              lineClamp={1}
-                              style={{ 
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap'
-                              }}
-                            >
-                              {step.label}
-                            </Text>
+                              {isCompleted ? (
+                                <IconCheck size={16} />
+                              ) : (
+                                <IconChevronRight size={16} />
+                              )}
+                            </ActionIcon>
                           </Group>
-                          <ActionIcon
-                            variant={isActive ? "filled" : isCompleted ? "light" : "subtle"}
-                            color={isActive ? "blue" : isCompleted ? "green" : "gray"}
-                            size="md"
-                            radius="md"
-                            style={{ flexShrink: 0 }}
-                          >
-                            {isCompleted ? (
-                              <IconCheck size={16} />
-                            ) : (
-                              <IconChevronRight size={16} />
-                            )}
-                          </ActionIcon>
-                        </Group>
-                      </Paper>
+                        </Paper>
+                      </Tooltip>
                     </Grid.Col>
                   );
                 })}
@@ -2886,6 +2911,7 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
                       <Button
                         rightSection={<IconChevronRight size={18} />}
                         onClick={nextStep}
+                        disabled={steps[activeStep + 1]?.disabled}
                         size="md"
                       >
                         {t('common.next')}
@@ -2894,7 +2920,7 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
                       <Button
                         leftSection={<IconDeviceFloppy size={18} />}
                         onClick={handleSaveClick}
-                        loading={loading || fillingFromAI || isUploadingMedia}
+                        loading={loading || fillingFromAI || isUploadingMedia || isCreatingProperty}
                         size="md"
                       >
                         {isEdit ? t('common.save') : t('common.create')}
@@ -2905,18 +2931,34 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
               )}
             </Stack>
           ) : (
-            <Tabs value={activeStep.toString()} onChange={(value) => setActiveStep(Number(value))}>
+            <Tabs value={activeStep.toString()} onChange={(value) => {
+              const targetStep = Number(value);
+              if (!steps[targetStep].disabled) {
+                setActiveStep(targetStep);
+              }
+            }}>
               <Tabs.List grow={isTablet}>
                 {steps.map((step) => {
                   const StepIcon = step.icon;
                   return (
-                    <Tabs.Tab
+                    <Tooltip
                       key={step.value}
-                      value={step.value.toString()}
-                      leftSection={<StepIcon size={16} />}
+                      label={step.disabled ? (t('properties.form.fillRequiredFirst') || 'Сначала заполните обязательные поля') : null}
+                      disabled={!step.disabled}
+                      withArrow
                     >
-                      {step.label}
-                    </Tabs.Tab>
+                      <Tabs.Tab
+                        value={step.value.toString()}
+                        leftSection={<StepIcon size={16} />}
+                        disabled={step.disabled}
+                        style={step.disabled ? { 
+                          cursor: 'not-allowed',
+                          opacity: 0.5 
+                        } : undefined}
+                      >
+                        {step.label}
+                      </Tabs.Tab>
+                    </Tooltip>
                   );
                 })}
               </Tabs.List>
@@ -2939,7 +2981,7 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
                   leftSection={<IconDeviceFloppy size={18} />}
                   size="lg"
                   onClick={handleSaveClick}
-                  loading={loading || fillingFromAI || isUploadingMedia}
+                  loading={loading || fillingFromAI || isUploadingMedia || isCreatingProperty}
                   radius="xl"
                 >
                   {isEdit ? t('common.save') : t('common.create')}
@@ -2970,6 +3012,55 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         centered
       >
         <Text>{t('properties.complexInfoText')}</Text>
+      </Modal>
+
+      {/* ✅ НОВОЕ: Модальное окно после успешного редактирования */}
+      <Modal
+        opened={afterSaveModalOpened}
+        onClose={closeAfterSaveModal}
+        title={t('properties.afterSave.title') || 'Выберите дальнейшие действия'}
+        size="md"
+        centered
+      >
+        <Stack gap="md">
+          <Button
+            fullWidth
+            size="lg"
+            leftSection={<IconExternalLink size={20} />}
+            variant="light"
+            color="blue"
+            onClick={() => {
+              window.open(`https://novaestate.company/properties/${id}?viewupdate`, '_blank');
+              closeAfterSaveModal();
+            }}
+          >
+            {t('properties.afterSave.viewOnSite') || 'Просмотреть на сайте'}
+          </Button>
+
+          <Button
+            fullWidth
+            size="lg"
+            leftSection={<IconList size={20} />}
+            variant="light"
+            color="green"
+            onClick={() => {
+              window.location.href = 'https://admin.novaestate.company/properties';
+            }}
+          >
+            {t('properties.afterSave.goToList') || 'К списку всех объектов'}
+          </Button>
+
+          <Button
+            fullWidth
+            size="lg"
+            leftSection={<IconPencil size={20} />}
+            variant="light"
+            color="gray"
+            onClick={closeAfterSaveModal}
+          >
+            {t('properties.afterSave.continueEditing') || 'Продолжить редактирование'}
+          </Button>
+        </Stack>
       </Modal>
     </Box>
   );
