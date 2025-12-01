@@ -89,7 +89,7 @@ const PropertiesList = () => {
   // Режим просмотра (список/сетка)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
 
-  // Модальные окна
+// Модальные окна
   const [pricingModalVisible, setPricingModalVisible] = useState(false);
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
   const [ownerInfoModalVisible, setOwnerInfoModalVisible] = useState(false);
@@ -101,6 +101,11 @@ const PropertiesList = () => {
   // Модальное окно подтверждения удаления
   const [deleteModalOpened, { open: openDeleteModal, close: closeDeleteModal }] = useDisclosure(false);
   const [propertyToDelete, setPropertyToDelete] = useState<number | null>(null);
+
+  // Модальное окно выбора режима просмотра
+  const [viewModeModalOpened, { open: openViewModeModal, close: closeViewModeModal }] = useDisclosure(false);
+  const [selectedPropertyForView, setSelectedPropertyForView] = useState<number | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
   // Показ фильтров на мобильных
   const [filtersOpened, { toggle: toggleFilters }] = useDisclosure(false);
@@ -229,9 +234,53 @@ const PropertiesList = () => {
     setOwnerInfoModalVisible(true);
   };
 
-  const openHTMLGenerator = (id: number, propertyNumber: string) => {
+const openHTMLGenerator = (id: number, propertyNumber: string) => {
     setSelectedPropertyForHTML({ id, number: propertyNumber });
     setHtmlGeneratorVisible(true);
+  };
+
+  // Новые функции для просмотра
+  const openViewModeSelector = (id: number) => {
+    setSelectedPropertyForView(id);
+    openViewModeModal();
+  };
+
+  const handleViewOnSite = async () => {
+    if (!selectedPropertyForView) return;
+    
+    setIsLoadingPreview(true);
+    try {
+      const response = await propertiesApi.getPreviewUrl(selectedPropertyForView);
+      
+      if (response.data?.success && response.data.data?.previewUrl) {
+        window.open(response.data.data.previewUrl, '_blank');
+        closeViewModeModal();
+      } else {
+        notifications.show({
+          title: t('errors.generic'),
+          message: t('properties.messages.previewUrlError') || 'Ошибка получения ссылки для просмотра',
+          color: 'red',
+          icon: <IconX size={18} />
+        });
+      }
+    } catch (error) {
+      console.error('Error generating preview URL:', error);
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('properties.messages.previewUrlError') || 'Ошибка получения ссылки для просмотра',
+        color: 'red',
+        icon: <IconX size={18} />
+      });
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  const handleViewInAdmin = () => {
+    if (!selectedPropertyForView) return;
+    
+    navigate(`/properties/view/${selectedPropertyForView}`);
+    closeViewModeModal();
   };
 
   const getDealTypeColor = (type: string) => {
@@ -340,14 +389,14 @@ const PropertiesList = () => {
         <Divider my="xs" />
 
         <Group gap="xs" wrap="wrap">
-          <Tooltip label={t('common.view')}>
+<Tooltip label={t('common.view')}>
             <ActionIcon
               variant="light"
               color="blue"
               size="lg"
               onClick={(e) => {
                 e.stopPropagation();
-                navigate(`/properties/view/${property.id}`);
+                openViewModeSelector(property.id);
               }}
             >
               <IconEye size={18} />
@@ -508,12 +557,12 @@ const PropertiesList = () => {
       </Table.Td>
       <Table.Td>
         <Group gap="xs" wrap="nowrap">
-          <Tooltip label={t('common.view')}>
+<Tooltip label={t('common.view')}>
             <ActionIcon
               variant="light"
               color="blue"
               size="sm"
-              onClick={() => navigate(`/properties/view/${property.id}`)}
+              onClick={() => openViewModeSelector(property.id)}
             >
               <IconEye size={16} />
             </ActionIcon>
@@ -929,7 +978,7 @@ const PropertiesList = () => {
         />
       )}
 
-      {/* Модальное окно подтверждения удаления */}
+{/* Модальное окно подтверждения удаления */}
       <Modal
         opened={deleteModalOpened}
         onClose={closeDeleteModal}
@@ -949,6 +998,60 @@ const PropertiesList = () => {
               {t('common.yes')}
             </Button>
           </Group>
+        </Stack>
+      </Modal>
+
+      {/* Модальное окно выбора режима просмотра */}
+      <Modal
+        opened={viewModeModalOpened}
+        onClose={closeViewModeModal}
+        title={t('properties.selectViewMode') || 'Выберите режим просмотра'}
+        centered
+        size="md"
+      >
+        <Stack gap="lg">
+          <Text size="sm" c="dimmed">
+            {t('properties.selectViewModeDescription') || 'Выберите, где вы хотите просмотреть объект недвижимости'}
+          </Text>
+
+          <Stack gap="md">
+            <Button
+              size="lg"
+              variant="light"
+              color="blue"
+              leftSection={<IconHome size={20} />}
+              onClick={handleViewOnSite}
+              loading={isLoadingPreview}
+              disabled={isLoadingPreview}
+              fullWidth
+            >
+              {t('properties.viewOnSite') || 'Просмотр на сайте'}
+            </Button>
+
+            <Button
+              size="lg"
+              variant="light"
+              color="green"
+              leftSection={<IconEye size={20} />}
+              onClick={handleViewInAdmin}
+              disabled={isLoadingPreview}
+              fullWidth
+            >
+              {t('properties.viewInAdmin') || 'Просмотр в админ-панели'}
+            </Button>
+          </Stack>
+
+          <Divider />
+
+          <Button
+            variant="subtle"
+            color="gray"
+            onClick={closeViewModeModal}
+            disabled={isLoadingPreview}
+            fullWidth
+          >
+            {t('common.cancel') || 'Отмена'}
+          </Button>
         </Stack>
       </Modal>
     </Card>
