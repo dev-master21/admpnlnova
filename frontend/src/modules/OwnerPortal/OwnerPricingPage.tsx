@@ -148,74 +148,78 @@ const OwnerPricingPage = () => {
     }
   };
 
-  const handleSave = async () => {
-    // Блокируем сохранение если нет прав
-    if (!canEditPricing) {
-      notifications.show({
-        title: t('ownerPortal.accessDenied'),
-        message: t('ownerPortal.noEditPricingPermission'),
-        color: 'red',
-        icon: <IconLock size={18} />
-      });
-      return;
+const handleSave = async () => {
+  // Блокируем сохранение если нет прав
+  if (!canEditPricing) {
+    notifications.show({
+      title: t('ownerPortal.accessDenied'),
+      message: t('ownerPortal.noEditPricingPermission'),
+      color: 'red',
+      icon: <IconLock size={18} />
+    });
+    return;
+  }
+
+  setSaving(true);
+  try {
+    const values = form.values;
+
+    // Сохраняем основные цены через owner API
+    await propertyOwnersApi.updatePropertyPricing(Number(propertyId), {
+      sale_price: values.sale_price,
+      sale_pricing_mode: values.sale_pricing_mode,
+      sale_commission_type_new: values.sale_commission_type_new,
+      sale_commission_value_new: values.sale_commission_value_new,
+      sale_source_price: values.sale_source_price,
+      sale_margin_amount: values.sale_margin_amount,
+      sale_margin_percentage: values.sale_margin_percentage,
+
+      year_price: values.year_price,
+      year_pricing_mode: values.year_pricing_mode,
+      year_commission_type: values.year_commission_type,
+      year_commission_value: values.year_commission_value,
+      year_source_price: values.year_source_price,
+      year_margin_amount: values.year_margin_amount,
+      year_margin_percentage: values.year_margin_percentage,
+      
+      deposit_type: depositType,
+      deposit_amount: depositType === 'custom' ? depositAmount : null,
+      electricity_rate: values.electricity_rate,
+      water_rate: values.water_rate,
+      
+      seasonalPricing: values.seasonalPricing || []
+    });
+
+    // ✅ ИСПРАВЛЕНО: Проверяем формат API и отправляем правильно
+    if (values.monthlyPricing && values.monthlyPricing.length > 0) {
+      // Отправляем как { monthlyPricing: array }
+      await propertyOwnersApi.updatePropertyMonthlyPricing(
+        Number(propertyId), 
+        { monthlyPricing: values.monthlyPricing } as any
+      );
     }
 
-    setSaving(true);
-    try {
-      const values = form.values;
+    notifications.show({
+      title: t('common.success'),
+      message: t('ownerPortal.pricesSaved'),
+      color: 'green',
+      icon: <IconCheck size={18} />
+    });
 
-      // Сохраняем основные цены через owner API
-      await propertyOwnersApi.updatePropertyPricing(Number(propertyId), {
-        sale_price: values.sale_price,
-        sale_pricing_mode: values.sale_pricing_mode,
-        sale_commission_type_new: values.sale_commission_type_new,
-        sale_commission_value_new: values.sale_commission_value_new,
-        sale_source_price: values.sale_source_price,
-        sale_margin_amount: values.sale_margin_amount,
-        sale_margin_percentage: values.sale_margin_percentage,
-        
-        year_price: values.year_price,
-        year_pricing_mode: values.year_pricing_mode,
-        year_commission_type: values.year_commission_type,
-        year_commission_value: values.year_commission_value,
-        year_source_price: values.year_source_price,
-        year_margin_amount: values.year_margin_amount,
-        year_margin_percentage: values.year_margin_percentage,
-        
-        deposit_type: depositType,
-        deposit_amount: depositAmount,
-        electricity_rate: values.electricity_rate,
-        water_rate: values.water_rate,
-        seasonalPricing: values.seasonalPricing || []
-      });
-
-      // Сохраняем месячные цены если есть
-      if (values.monthlyPricing && values.monthlyPricing.length > 0) {
-        await propertyOwnersApi.updatePropertyMonthlyPricing(
-          Number(propertyId), 
-          values.monthlyPricing
-        );
-      }
-
-      notifications.show({
-        title: t('common.success'),
-        message: t('ownerPortal.pricesSaved'),
-        color: 'green',
-        icon: <IconCheck size={18} />
-      });
-
-      navigate('/owner/dashboard');
-    } catch (error: any) {
-      notifications.show({
-        title: t('errors.generic'),
-        message: error.response?.data?.message || t('ownerPortal.errorSavingPrices'),
-        color: 'red',
-        icon: <IconX size={18} />
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
+    // Перезагружаем данные
+    await loadProperty();
+  } catch (error: any) {
+    console.error('Save pricing error:', error);
+    notifications.show({
+      title: t('errors.generic'),
+      message: error.response?.data?.message || t('ownerPortal.errorSavingPrices'),
+      color: 'red',
+      icon: <IconX size={18} />
+    });
+  } finally {
+    setSaving(false);
+  }
+};
 
   if (loading) {
     return (
@@ -494,7 +498,14 @@ const OwnerPricingPage = () => {
                 onDepositAmountChange={setDepositAmount}
               />
 
-              <UtilitiesForm viewMode={!canEditPricing} />
+              {/* ✅ ИСПРАВЛЕНО: Добавлены props для UtilitiesForm */}
+              <UtilitiesForm 
+                viewMode={!canEditPricing}
+                electricityRate={form.values.electricity_rate}
+                waterRate={form.values.water_rate}
+                onElectricityRateChange={(value) => form.setFieldValue('electricity_rate', value)}
+                onWaterRateChange={(value) => form.setFieldValue('water_rate', value)}
+              />
             </>
           )}
 

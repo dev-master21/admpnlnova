@@ -5,9 +5,19 @@ import { useTranslation } from 'react-i18next';
 
 interface UtilitiesFormProps {
   viewMode?: boolean;
+  electricityRate?: number | null;
+  waterRate?: number | null;
+  onElectricityRateChange?: (value: number | null) => void;
+  onWaterRateChange?: (value: number | null) => void;
 }
 
-const UtilitiesForm = ({ viewMode }: UtilitiesFormProps) => {
+const UtilitiesForm = ({ 
+  viewMode,
+  electricityRate,
+  waterRate,
+  onElectricityRateChange,
+  onWaterRateChange
+}: UtilitiesFormProps) => {
   const { t } = useTranslation();
 
   return (
@@ -42,6 +52,8 @@ const UtilitiesForm = ({ viewMode }: UtilitiesFormProps) => {
 
                 <NumberInput
                   placeholder={t('utilitiesForm.electricityPlaceholder')}
+                  value={electricityRate || undefined}
+                  onChange={(value) => onElectricityRateChange?.(typeof value === 'number' ? value : null)}
                   min={0}
                   step={0.01}
                   decimalScale={2}
@@ -56,7 +68,8 @@ const UtilitiesForm = ({ viewMode }: UtilitiesFormProps) => {
                   styles={{
                     input: {
                       fontSize: '16px',
-                      background: viewMode ? 'var(--mantine-color-dark-7)' : undefined
+                      background: viewMode ? 'var(--mantine-color-dark-7)' : undefined,
+                      cursor: viewMode ? 'not-allowed' : undefined
                     }
                   }}
                 />
@@ -69,7 +82,7 @@ const UtilitiesForm = ({ viewMode }: UtilitiesFormProps) => {
             <Card shadow="sm" padding="md" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-6)' }}>
               <Stack gap="md">
                 <Group gap="xs">
-                  <ThemeIcon size="md" radius="md" variant="light" color="cyan">
+                  <ThemeIcon size="md" radius="md" variant="light" color="blue">
                     <IconDroplet size={18} />
                   </ThemeIcon>
                   <div style={{ flex: 1 }}>
@@ -80,6 +93,8 @@ const UtilitiesForm = ({ viewMode }: UtilitiesFormProps) => {
 
                 <NumberInput
                   placeholder={t('utilitiesForm.waterPlaceholder')}
+                  value={waterRate || undefined}
+                  onChange={(value) => onWaterRateChange?.(typeof value === 'number' ? value : null)}
                   min={0}
                   step={0.01}
                   decimalScale={2}
@@ -94,7 +109,8 @@ const UtilitiesForm = ({ viewMode }: UtilitiesFormProps) => {
                   styles={{
                     input: {
                       fontSize: '16px',
-                      background: viewMode ? 'var(--mantine-color-dark-7)' : undefined
+                      background: viewMode ? 'var(--mantine-color-dark-7)' : undefined,
+                      cursor: viewMode ? 'not-allowed' : undefined
                     }
                   }}
                 />

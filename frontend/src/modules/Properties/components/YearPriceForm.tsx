@@ -27,6 +27,7 @@ import { useTranslation } from 'react-i18next';
 import { useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { propertiesApi } from '@/api/properties.api';
+import { propertyOwnersApi } from '@/api/propertyOwners.api';
 
 interface YearPriceFormProps {
   propertyId: number;
@@ -38,6 +39,7 @@ interface YearPriceFormProps {
     source_price?: number | null;
   };
   viewMode?: boolean;
+  isOwnerMode?: boolean; // ✅ НОВЫЙ PROP
   onChange?: (data: any) => void;
 }
 
@@ -45,6 +47,7 @@ const YearPriceForm = ({
   propertyId, 
   initialData,
   viewMode = false,
+  isOwnerMode = false, // ✅ НОВЫЙ PROP
   onChange
 }: YearPriceFormProps) => {
   const { t } = useTranslation();
@@ -208,7 +211,6 @@ const YearPriceForm = ({
     setHasChanges(true);
   };
 
-  // ✅ ОБНОВЛЕНО: handleSave - с локальным сохранением при создании объекта
   const handleSave = async () => {
     // Валидация
     if (!price || !commissionType) {
@@ -233,12 +235,11 @@ const YearPriceForm = ({
       }
     }
 
-    // ✅ НОВОЕ: Проверка - если объект не создан, сохраняем локально
+    // Если объект не создан, сохраняем локально через onChange
     if (!propertyId || propertyId === 0) {
       setSaving(true);
 
       try {
-        // Расчёт данных
         let calculated;
         
         if (pricingMode === 'net' && editedGrossPrice !== undefined && editedGrossPrice !== null) {
@@ -257,7 +258,6 @@ const YearPriceForm = ({
           calculated = calculateMarginData(pricingMode, Number(price), commissionType, commissionValue);
         }
 
-        // ✅ НОВОЕ: Формируем данные для локального сохранения
         const localData = {
           year_price: calculated.finalPrice,
           year_pricing_mode: pricingMode,
@@ -268,14 +268,12 @@ const YearPriceForm = ({
           year_margin_percentage: calculated.marginPercentage
         };
 
-        // ✅ НОВОЕ: Сохраняем локально через onChange
         if (onChange) {
           onChange(localData);
         }
 
         setHasChanges(false);
         
-        // ✅ НОВОЕ: Уведомление о локальном сохранении (синий цвет)
         notifications.show({
           title: t('common.success'),
           message: t('properties.messages.yearPriceSavedLocally', {
@@ -300,7 +298,7 @@ const YearPriceForm = ({
       return;
     }
 
-    // ✅ СУЩЕСТВУЮЩИЙ КОД: Если объект создан - сохраняем в БД
+    // ✅ ИСПРАВЛЕНО: Если объект создан - используем правильный API
     setSaving(true);
 
     try {
@@ -332,7 +330,14 @@ const YearPriceForm = ({
         year_margin_percentage: calculated.marginPercentage
       };
 
-      await propertiesApi.update(propertyId, updateData);
+      // ✅ НОВОЕ: Используем owner API или admin API в зависимости от режима
+      if (isOwnerMode) {
+        // Используем owner API для обновления годовой цены
+        await propertyOwnersApi.updatePropertyPricing(propertyId, updateData);
+      } else {
+        // Используем admin API
+        await propertiesApi.update(propertyId, updateData);
+      }
       
       setHasChanges(false);
       
