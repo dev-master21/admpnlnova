@@ -189,7 +189,7 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
   const [showAllLocationFeatures, setShowAllLocationFeatures] = useState(false);
   const [showAllViews, setShowAllViews] = useState(false);
 
-  // ✅ ИСПРАВЛЕНО: Добавлен ref для защиты от параллельных сохранений
+  // ✅ Refs для защиты от параллельных операций (БЕЗ дебаунса!)
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const isSavingRef = useRef(false);
 
@@ -424,10 +424,71 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
 
   const progress = calculateProgress();
 
-  // ✅ ИСПРАВЛЕНО: Обновленная функция автосохранения с защитой от параллельных вызовов
-  const handleAutoSave = async () => {
+  // ✅ НОВАЯ ФУНКЦИЯ: Конвертация пустых строк в null для ENUM полей
+  const sanitizePropertyData = (data: any) => {
+    const sanitized = { ...data };
+    
+    // Список ENUM полей, которые не могут быть пустыми строками
+    const enumFields = [
+      'property_type',
+      'region',
+      'furniture_status',
+      'building_ownership',
+      'land_ownership',
+      'ownership_type',
+      'renovation_type',
+      'deposit_type',
+      'construction_month',
+      'sale_commission_type',
+      'rent_commission_type',
+      'sale_commission_type_new',
+      'year_commission_type',
+      'sale_pricing_mode',
+      'year_pricing_mode'
+    ];
+    
+    // Конвертируем пустые строки в null
+    enumFields.forEach(field => {
+      if (sanitized[field] === '') {
+        sanitized[field] = null;
+      }
+    });
+    
+    // Специальная обработка для строковых полей, которые могут быть пустыми
+    const stringFields = ['floor', 'pets_custom', 'rental_includes'];
+    stringFields.forEach(field => {
+      if (sanitized[field] === '') {
+        sanitized[field] = null;
+      }
+    });
+    
+    return sanitized;
+  };
+
+  // ✅ УЛУЧШЕННАЯ функция автосохранения с валидацией
+  const handleAutoSave = async (fromStep: number, toStep: number) => {
     // Защита от параллельных сохранений
     if (!isEdit || isViewMode || loading || isAutoSaving || isSavingRef.current) {
+      console.log('⏭️ Auto-save skipped: conditions not met');
+      return;
+    }
+
+    // ✅ КРИТИЧНО: НЕ сохранять при переходе НА вкладку Calendar (step 4)
+    // CalendarManager сам управляет своими данными
+    if (toStep === 4) {
+      console.log('⏭️ Skipping auto-save when navigating TO Calendar tab');
+      return;
+    }
+
+    // ✅ Проверяем обязательные поля перед сохранением
+    const requiredFields = ['property_number', 'property_type', 'region', 'address', 'property_name'];
+    const hasAllRequired = requiredFields.every(field => {
+      const value = form.values[field as keyof typeof form.values];
+      return value !== null && value !== undefined && value !== '';
+    });
+
+    if (!hasAllRequired) {
+      console.log('⚠️ Auto-save skipped: required fields not filled');
       return;
     }
 
@@ -435,7 +496,9 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
       isSavingRef.current = true;
       setIsAutoSaving(true);
 
-      const propertyData = {
+      console.log(`💾 Auto-saving: from step ${fromStep} to step ${toStep}`);
+
+      const propertyData = sanitizePropertyData({
         ...form.values,
         sale_price: dealType === 'rent' ? null : form.values.sale_price,
         year_price: dealType === 'sale' ? null : form.values.year_price,
@@ -463,27 +526,29 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         views: form.values.features?.views || [],
         blockedDates: aiTempData.blockedDates || [],
         photosFromGoogleDrive: aiTempData.photosFromGoogleDrive || null
-      };
+      });
 
       await propertiesApi.update(Number(id), propertyData);
+      console.log('✅ Auto-save successful');
 
     } catch (error: any) {
-      console.error('Auto-save error:', error);
-      notifications.show({
-        title: t('errors.autoSave') || 'Ошибка автосохранения',
-        message: error.response?.data?.message || t('properties.messages.autoSaveError') || 'Не удалось автоматически сохранить изменения',
-        color: 'orange',
-        icon: <IconAlertCircle size={18} />,
-        autoClose: 5000,
-      });
+      console.error('❌ Auto-save error:', error);
+      
+      // Показываем уведомление только если это не отмена запроса
+      if (error.name !== 'CanceledError' && error.code !== 'ERR_CANCELED') {
+        notifications.show({
+          title: t('errors.autoSave') || 'Ошибка автосохранения',
+          message: error.response?.data?.message || t('properties.messages.autoSaveError') || 'Не удалось автоматически сохранить изменения',
+          color: 'orange',
+          icon: <IconAlertCircle size={18} />,
+          autoClose: 5000,
+        });
+      }
     } finally {
       setIsAutoSaving(false);
       isSavingRef.current = false;
     }
   };
-
-  // ✅ УДАЛЕНО: Проблемный useEffect для автосохранения при смене activeStep
-  // Теперь автосохранение вызывается только вручную при переходах между вкладками
 
   const uploadAllMedia = async (propertyId: number) => {
     setIsUploadingMedia(true);
@@ -629,30 +694,29 @@ const PropertyForm = ({ viewMode = false }: PropertyFormProps) => {
         });
       }
 
-if (tempBlockedDates.length > 0) {
-  setUploadProgress(prev => ({
-    ...prev,
-    currentType: t('properties.calendar.blockedDates') || 'Заблокированные даты'
-  }));
+      if (tempBlockedDates.length > 0) {
+        setUploadProgress(prev => ({
+          ...prev,
+          currentType: t('properties.calendar.blockedDates') || 'Заблокированные даты'
+        }));
 
-  for (let i = 0; i < tempBlockedDates.length; i++) {
-    const blockedDate = tempBlockedDates[i];
-    currentItem++;
-    
-    setUploadProgress(prev => ({
-      ...prev,
-      current: currentItem,
-      currentItem: `${i + 1}/${tempBlockedDates.length}`,
-      percentage: Math.round((currentItem / totalItems) * 100)
-    }));
+        for (let i = 0; i < tempBlockedDates.length; i++) {
+          const blockedDate = tempBlockedDates[i];
+          currentItem++;
+          
+          setUploadProgress(prev => ({
+            ...prev,
+            current: currentItem,
+            currentItem: `${i + 1}/${tempBlockedDates.length}`,
+            percentage: Math.round((currentItem / totalItems) * 100)
+          }));
 
-    // ✅ ИСПРАВЛЕНО: Используем blocked_date (одна дата), а не период
-    await propertiesApi.addBlockedPeriod(propertyId, {
-      start_date: blockedDate.blocked_date,
-      end_date: blockedDate.blocked_date,
-      reason: blockedDate.reason || ''
-    });
-  }
+          await propertiesApi.addBlockedPeriod(propertyId, {
+            start_date: blockedDate.blocked_date,
+            end_date: blockedDate.blocked_date,
+            reason: blockedDate.reason || ''
+          });
+        }
 
         notifications.show({
           title: t('common.success'),
@@ -695,20 +759,20 @@ if (tempBlockedDates.length > 0) {
     }
   };
 
-useEffect(() => {
-  if (isEdit) {
-    loadProperty();
-  }
-  
-  const searchParams = new URLSearchParams(location.search);
-  const tab = searchParams.get('tab');
-  if (tab) {
-    const tabNumber = Number(tab);
-    if (!isNaN(tabNumber) && tabNumber >= 0 && tabNumber < steps.length) {
-      setActiveStep(tabNumber);
+  useEffect(() => {
+    if (isEdit) {
+      loadProperty();
     }
-  }
-}, [id, location.search]);
+    
+    const searchParams = new URLSearchParams(location.search);
+    const tab = searchParams.get('tab');
+    if (tab) {
+      const tabNumber = Number(tab);
+      if (!isNaN(tabNumber) && tabNumber >= 0 && tabNumber < steps.length) {
+        setActiveStep(tabNumber);
+      }
+    }
+  }, [id, location.search]);
 
   useEffect(() => {
     if (form.values.google_maps_link && (!form.values.latitude || !form.values.longitude)) {
@@ -718,9 +782,9 @@ useEffect(() => {
     }
   }, [form.values.google_maps_link, form.values.latitude, form.values.longitude]);
 
-const handleBlockedDatesChange = useCallback((dates: TempBlockedDate[]) => {
-  setTempBlockedDates(dates);
-}, []);
+  const handleBlockedDatesChange = useCallback((dates: TempBlockedDate[]) => {
+    setTempBlockedDates(dates);
+  }, []);
 
   useEffect(() => {
     if (propertyData) {
@@ -1146,9 +1210,8 @@ const handleBlockedDatesChange = useCallback((dates: TempBlockedDate[]) => {
         withCloseButton: false
       });
 
-      // ✅ ИСПРАВЛЕНО: Конвертируем данные от AI в правильный формат
       const aiBlockedDates = (propertyData.blockedDates || []).map((date: any) => ({
-        blocked_date: date.start_date || date.blocked_date, // Поддержка обоих форматов
+        blocked_date: date.start_date || date.blocked_date,
         reason: date.reason || null,
         is_check_in: date.is_check_in || false,
         is_check_out: date.is_check_out || false
@@ -1340,175 +1403,175 @@ const handleBlockedDatesChange = useCallback((dates: TempBlockedDate[]) => {
     }
   };
 
-const handleSaveClick = async () => {
-  const validationErrors = form.validate();
-  
-  if (validationErrors.hasErrors) {
-    setActiveStep(0);
-    scrollIntoView();
+  const handleSaveClick = async () => {
+    const validationErrors = form.validate();
     
-    notifications.show({
-      title: t('errors.validation'),
-      message: t('properties.form.fillRequired') || 'Заполните обязательные поля',
-      color: 'red',
-      icon: <IconX size={18} />
-    });
-    return;
-  }
-
-  if (!form.values.property_name) {
-    setActiveStep(0);
-    scrollIntoView();
-
-    notifications.show({
-      title: t('errors.generic'),
-      message: t('properties.messages.propertyNameRequired') || 'Укажите название объекта',
-      color: 'red',
-      icon: <IconX size={18} />
-    });
-    return;
-  }
-
-  if (form.values.status !== 'draft') {
-    const hasAnyDescription = form.values.translations?.ru?.description || 
-                              form.values.translations?.en?.description || 
-                              form.values.translations?.th?.description ||
-                              form.values.translations?.zh?.description ||
-                              form.values.translations?.he?.description;
-
-    if (!hasAnyDescription) {
+    if (validationErrors.hasErrors) {
+      setActiveStep(0);
+      scrollIntoView();
+      
       notifications.show({
-        title: t('errors.generic'),
-        message: t('properties.messages.descriptionRequired') || 'Для публикации необходимо добавить описание',
+        title: t('errors.validation'),
+        message: t('properties.form.fillRequired') || 'Заполните обязательные поля',
         color: 'red',
         icon: <IconX size={18} />
       });
-      setActiveStep(steps.length - 1);
       return;
     }
-  }
 
-  try {
-    setLoading(true);
-
-    const propertyData = {
-      ...form.values,
-      sale_price: dealType === 'rent' ? null : form.values.sale_price,
-      year_price: dealType === 'sale' ? null : form.values.year_price,
-      year_pricing_mode: dealType === 'sale' ? null : form.values.year_pricing_mode,
-      year_commission_type: dealType === 'sale' ? null : form.values.year_commission_type,
-      year_commission_value: dealType === 'sale' ? null : form.values.year_commission_value,
-      features: {
-        property: form.values.features.property,
-        outdoor: form.values.features.outdoor,
-        rental: form.values.features.rental,
-        location: form.values.features.location,
-        views: form.values.features.views
-      },
-      monthlyPricing: dealType === 'sale' ? [] : form.values.monthlyPricing,
-      seasonalPricing: dealType === 'sale' ? [] : form.values.seasonalPricing,
-      translations: form.values.translations,
-      distance_to_beach: form.values.distance_to_beach,
-      renovation_date: form.values.renovation_date 
-        ? dayjs(form.values.renovation_date).format('YYYY-MM-01')
-        : null,
-      propertyFeatures: form.values.features?.property || [],
-      outdoorFeatures: form.values.features?.outdoor || [],
-      rentalFeatures: form.values.features?.rental || [],
-      locationFeatures: form.values.features?.location || [],
-      views: form.values.features?.views || [],
-      blockedDates: aiTempData.blockedDates || [],
-      photosFromGoogleDrive: aiTempData.photosFromGoogleDrive || null
-    };
-
-    if (isEdit) {
-      await propertiesApi.update(Number(id), propertyData);
-      notifications.show({
-        title: t('common.success'),
-        message: t('properties.updated'),
-        color: 'green',
-        icon: <IconCheck size={18} />
-      });
-      await loadProperty();
-      
-      openAfterSaveModal();
-    } else {
-      setIsCreatingProperty(true);
-      const { data } = await propertiesApi.create(propertyData);
-      const newPropertyId = data.data.propertyId;
+    if (!form.values.property_name) {
+      setActiveStep(0);
+      scrollIntoView();
 
       notifications.show({
-        title: t('common.success'),
-        message: t('properties.created'),
-        color: 'green',
-        icon: <IconCheck size={18} />
+        title: t('errors.generic'),
+        message: t('properties.messages.propertyNameRequired') || 'Укажите название объекта',
+        color: 'red',
+        icon: <IconX size={18} />
       });
-
-      if (form.values.monthlyPricing && form.values.monthlyPricing.length > 0) {
-        notifications.show({
-          title: t('common.success'),
-          message: t('properties.messages.savedMonthlyPrices', { count: form.values.monthlyPricing.length }) || `Сохранено ${form.values.monthlyPricing.length} месячных цен`,
-          color: 'green'
-        });
-      }
-      
-      if (aiTempData.blockedDates && aiTempData.blockedDates.length > 0) {
-        notifications.show({
-          title: t('common.success'),
-          message: t('properties.messages.savedBlockedDates', { count: aiTempData.blockedDates.length }) || `Сохранено ${aiTempData.blockedDates.length} заблокированных дат`,
-          color: 'green'
-        });
-      }
-      
-      if (aiTempData.photosFromGoogleDrive) {
-        notifications.show({
-          title: t('common.info'),
-          message: t('properties.messages.googleDrivePhotosLoading') || 'Фотографии из Google Drive загружаются...',
-          color: 'blue'
-        });
-      }
-
-      const hasMediaToUpload = 
-        tempPhotos.length > 0 || 
-        tempVideos.length > 0 || 
-        tempFloorPlan !== null || 
-        tempVRPanoramas.length > 0 ||
-        tempBlockedDates.length > 0;
-
-      if (hasMediaToUpload) {
-        try {
-          await uploadAllMedia(newPropertyId);
-        } catch (error) {
-          console.error('Media upload error:', error);
-        }
-      }
-
-      setAiTempData({});
-
-      navigate(`/properties/edit/${newPropertyId}?tab=1`);
+      return;
     }
-  } catch (error: any) {
-    console.error('Save error:', error);
-    notifications.show({
-      title: t('errors.generic'),
-      message: error.response?.data?.message || t('properties.saveFailed'),
-      color: 'red',
-      icon: <IconX size={18} />
-    });
-  } finally {
-    setLoading(false);
-    setIsCreatingProperty(false);
-  }
-};
 
-  // ✅ ИСПРАВЛЕНО: nextStep с проверкой isSavingRef
+    if (form.values.status !== 'draft') {
+      const hasAnyDescription = form.values.translations?.ru?.description || 
+                                form.values.translations?.en?.description || 
+                                form.values.translations?.th?.description ||
+                                form.values.translations?.zh?.description ||
+                                form.values.translations?.he?.description;
+
+      if (!hasAnyDescription) {
+        notifications.show({
+          title: t('errors.generic'),
+          message: t('properties.messages.descriptionRequired') || 'Для публикации необходимо добавить описание',
+          color: 'red',
+          icon: <IconX size={18} />
+        });
+        setActiveStep(steps.length - 1);
+        return;
+      }
+    }
+
+    try {
+      setLoading(true);
+
+      const propertyData = sanitizePropertyData({
+        ...form.values,
+        sale_price: dealType === 'rent' ? null : form.values.sale_price,
+        year_price: dealType === 'sale' ? null : form.values.year_price,
+        year_pricing_mode: dealType === 'sale' ? null : form.values.year_pricing_mode,
+        year_commission_type: dealType === 'sale' ? null : form.values.year_commission_type,
+        year_commission_value: dealType === 'sale' ? null : form.values.year_commission_value,
+        features: {
+          property: form.values.features.property,
+          outdoor: form.values.features.outdoor,
+          rental: form.values.features.rental,
+          location: form.values.features.location,
+          views: form.values.features.views
+        },
+        monthlyPricing: dealType === 'sale' ? [] : form.values.monthlyPricing,
+        seasonalPricing: dealType === 'sale' ? [] : form.values.seasonalPricing,
+        translations: form.values.translations,
+        distance_to_beach: form.values.distance_to_beach,
+        renovation_date: form.values.renovation_date 
+          ? dayjs(form.values.renovation_date).format('YYYY-MM-01')
+          : null,
+        propertyFeatures: form.values.features?.property || [],
+        outdoorFeatures: form.values.features?.outdoor || [],
+        rentalFeatures: form.values.features?.rental || [],
+        locationFeatures: form.values.features?.location || [],
+        views: form.values.features?.views || [],
+        blockedDates: aiTempData.blockedDates || [],
+        photosFromGoogleDrive: aiTempData.photosFromGoogleDrive || null
+      });
+
+      if (isEdit) {
+        await propertiesApi.update(Number(id), propertyData);
+        notifications.show({
+          title: t('common.success'),
+          message: t('properties.updated'),
+          color: 'green',
+          icon: <IconCheck size={18} />
+        });
+        await loadProperty();
+        
+        openAfterSaveModal();
+      } else {
+        setIsCreatingProperty(true);
+        const { data } = await propertiesApi.create(propertyData);
+        const newPropertyId = data.data.propertyId;
+
+        notifications.show({
+          title: t('common.success'),
+          message: t('properties.created'),
+          color: 'green',
+          icon: <IconCheck size={18} />
+        });
+
+        if (form.values.monthlyPricing && form.values.monthlyPricing.length > 0) {
+          notifications.show({
+            title: t('common.success'),
+            message: t('properties.messages.savedMonthlyPrices', { count: form.values.monthlyPricing.length }) || `Сохранено ${form.values.monthlyPricing.length} месячных цен`,
+            color: 'green'
+          });
+        }
+        
+        if (aiTempData.blockedDates && aiTempData.blockedDates.length > 0) {
+          notifications.show({
+            title: t('common.success'),
+            message: t('properties.messages.savedBlockedDates', { count: aiTempData.blockedDates.length }) || `Сохранено ${aiTempData.blockedDates.length} заблокированных дат`,
+            color: 'green'
+          });
+        }
+        
+        if (aiTempData.photosFromGoogleDrive) {
+          notifications.show({
+            title: t('common.info'),
+            message: t('properties.messages.googleDrivePhotosLoading') || 'Фотографии из Google Drive загружаются...',
+            color: 'blue'
+          });
+        }
+
+        const hasMediaToUpload = 
+          tempPhotos.length > 0 || 
+          tempVideos.length > 0 || 
+          tempFloorPlan !== null || 
+          tempVRPanoramas.length > 0 ||
+          tempBlockedDates.length > 0;
+
+        if (hasMediaToUpload) {
+          try {
+            await uploadAllMedia(newPropertyId);
+          } catch (error) {
+            console.error('Media upload error:', error);
+          }
+        }
+
+        setAiTempData({});
+
+        navigate(`/properties/edit/${newPropertyId}?tab=1`);
+      }
+    } catch (error: any) {
+      console.error('Save error:', error);
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('properties.saveFailed'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
+    } finally {
+      setLoading(false);
+      setIsCreatingProperty(false);
+    }
+  };
+
+  // ✅ ИСПРАВЛЕНО: nextStep вызывает handleAutoSave напрямую с параметрами
   const nextStep = async () => {
     if (activeStep < steps.length - 1 && !isSavingRef.current) {
       const nextStepIndex = activeStep + 1;
       if (!steps[nextStepIndex].disabled) {
-        // Автосохранение перед переходом в режиме редактирования
+        // Автосохранение перед переходом
         if (isEdit && !isViewMode) {
-          await handleAutoSave();
+          await handleAutoSave(activeStep, nextStepIndex);
         }
         setActiveStep(nextStepIndex);
         scrollIntoView();
@@ -1516,27 +1579,28 @@ const handleSaveClick = async () => {
     }
   };
 
-  // ✅ ИСПРАВЛЕНО: prevStep с проверкой isSavingRef
+  // ✅ ИСПРАВЛЕНО: prevStep вызывает handleAutoSave напрямую с параметрами
   const prevStep = async () => {
     if (activeStep > 0 && !isSavingRef.current) {
-      // Автосохранение перед переходом в режиме редактирования
+      const prevStepIndex = activeStep - 1;
+      // Автосохранение перед переходом
       if (isEdit && !isViewMode) {
-        await handleAutoSave();
+        await handleAutoSave(activeStep, prevStepIndex);
       }
-      setActiveStep(activeStep - 1);
+      setActiveStep(prevStepIndex);
       scrollIntoView();
     }
   };
 
-  // ✅ ИСПРАВЛЕНО: handleTabChange с проверкой isSavingRef
+  // ✅ ИСПРАВЛЕНО: handleTabChange вызывает handleAutoSave напрямую с параметрами
   const handleTabChange = async (value: string | null) => {
     if (value === null || isSavingRef.current) return;
     
     const targetStep = Number(value);
     if (!steps[targetStep].disabled && activeStep !== targetStep) {
-      // Автосохранение перед переходом в режиме редактирования
+      // Автосохранение перед переходом
       if (isEdit && !isViewMode) {
-        await handleAutoSave();
+        await handleAutoSave(activeStep, targetStep);
       }
       setActiveStep(targetStep);
     }
@@ -2640,7 +2704,7 @@ const handleSaveClick = async () => {
       );
     }
 
-if (steps[activeStep].key === 'calendar') {
+    if (steps[activeStep].key === 'calendar') {
       return (
         <CalendarManager 
           propertyId={Number(id) || 0} 
@@ -2915,10 +2979,9 @@ if (steps[activeStep].key === 'calendar') {
                             alignItems: 'center'
                           }}
                           onClick={async () => {
-                            // ✅ ИСПРАВЛЕНО: Проверка isSavingRef перед переходом
                             if (!isDisabled && !isSavingRef.current) {
                               if (isEdit && !isViewMode && activeStep !== index) {
-                                await handleAutoSave();
+                                await handleAutoSave(activeStep, index);
                               }
                               setActiveStep(index);
                             }
@@ -3130,157 +3193,153 @@ if (steps[activeStep].key === 'calendar') {
         <Text>{t('properties.complexInfoText')}</Text>
       </Modal>
 
-<Modal
-  opened={afterSaveModalOpened}
-  onClose={closeAfterSaveModal}
-  title={t('properties.afterSave.title') || 'Выберите дальнейшие действия'}
-  size="md"
-  centered
->
-  <Stack gap="md">
-    <Button
-      fullWidth
-      size="lg"
-      leftSection={<IconExternalLink size={20} />}
-      variant="light"
-      color="blue"
-      onClick={async () => {
-        try {
-          setIsGeneratingPreview(true);
-          
-          // ✅ ИСПРАВЛЕНО: Открываем окно сразу синхронно при клике
-          const newWindow = window.open('about:blank', '_blank');
-          
-          if (!newWindow) {
-            // Если браузер всё равно заблокировал окно
-            notifications.show({
-              title: t('properties.messages.popupBlocked') || 'Всплывающие окна заблокированы',
-              message: t('properties.messages.popupBlockedDescription') || 'Пожалуйста, разрешите всплывающие окна для этого сайта',
-              color: 'orange',
-              icon: <IconAlertCircle size={18} />
-            });
-            setIsGeneratingPreview(false);
-            return;
-          }
-          
-          // Показываем загрузку в новом окне
-          newWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>${t('common.loading') || 'Загрузка...'}</title>
-                <style>
-                  body {
-                    margin: 0;
-                    padding: 0;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    min-height: 100vh;
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                  }
-                  .loader {
-                    text-align: center;
-                  }
-                  .spinner {
-                    width: 50px;
-                    height: 50px;
-                    border: 5px solid rgba(255, 255, 255, 0.3);
-                    border-top-color: white;
-                    border-radius: 50%;
-                    animation: spin 1s linear infinite;
-                    margin: 0 auto 20px;
-                  }
-                  @keyframes spin {
-                    to { transform: rotate(360deg); }
-                  }
-                  h2 {
-                    margin: 0;
-                    font-size: 24px;
-                    font-weight: 600;
-                  }
-                  p {
-                    margin: 10px 0 0;
-                    font-size: 14px;
-                    opacity: 0.9;
-                  }
-                </style>
-              </head>
-              <body>
-                <div class="loader">
-                  <div class="spinner"></div>
-                  <h2>${t('common.loading') || 'Загрузка...'}</h2>
-                  <p>${t('properties.messages.generatingPreview') || 'Генерируем ссылку для просмотра...'}</p>
-                </div>
-              </body>
-            </html>
-          `);
-          
-          const response = await propertiesApi.getPreviewUrl(Number(id));
-          
-          if (response.data?.success) {
-            // ✅ Перенаправляем уже открытое окно на нужный URL
-            newWindow.location.href = response.data.data.previewUrl;
-            closeAfterSaveModal();
-          } else {
-            newWindow.close();
-            notifications.show({
-              title: t('errors.generic'),
-              message: t('properties.messages.previewUrlError'),
-              color: 'red',
-              icon: <IconX size={18} />
-            });
-          }
-        } catch (error) {
-          console.error('Error generating preview:', error);
-        
-          
-          notifications.show({
-            title: t('errors.generic'),
-            message: t('properties.messages.previewUrlError'),
-            color: 'red',
-            icon: <IconX size={18} />
-          });
-        } finally {
-          setIsGeneratingPreview(false);
-        }
-      }}
-      loading={isGeneratingPreview}
-      disabled={isGeneratingPreview}
-    >
-      {t('properties.afterSave.viewOnSite')}
-    </Button>
+      <Modal
+        opened={afterSaveModalOpened}
+        onClose={closeAfterSaveModal}
+        title={t('properties.afterSave.title') || 'Выберите дальнейшие действия'}
+        size="md"
+        centered
+      >
+        <Stack gap="md">
+          <Button
+            fullWidth
+            size="lg"
+            leftSection={<IconExternalLink size={20} />}
+            variant="light"
+            color="blue"
+            onClick={async () => {
+              try {
+                setIsGeneratingPreview(true);
+                
+                const newWindow = window.open('about:blank', '_blank');
+                
+                if (!newWindow) {
+                  notifications.show({
+                    title: t('properties.messages.popupBlocked') || 'Всплывающие окна заблокированы',
+                    message: t('properties.messages.popupBlockedDescription') || 'Пожалуйста, разрешите всплывающие окна для этого сайта',
+                    color: 'orange',
+                    icon: <IconAlertCircle size={18} />
+                  });
+                  setIsGeneratingPreview(false);
+                  return;
+                }
+                
+                newWindow.document.write(`
+                  <!DOCTYPE html>
+                  <html>
+                    <head>
+                      <meta charset="UTF-8">
+                      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                      <title>${t('common.loading') || 'Загрузка...'}</title>
+                      <style>
+                        body {
+                          margin: 0;
+                          padding: 0;
+                          display: flex;
+                          justify-content: center;
+                          align-items: center;
+                          min-height: 100vh;
+                          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                          color: white;
+                        }
+                        .loader {
+                          text-align: center;
+                        }
+                        .spinner {
+                          width: 50px;
+                          height: 50px;
+                          border: 5px solid rgba(255, 255, 255, 0.3);
+                          border-top-color: white;
+                          border-radius: 50%;
+                          animation: spin 1s linear infinite;
+                          margin: 0 auto 20px;
+                        }
+                        @keyframes spin {
+                          to { transform: rotate(360deg); }
+                        }
+                        h2 {
+                          margin: 0;
+                          font-size: 24px;
+                          font-weight: 600;
+                        }
+                        p {
+                          margin: 10px 0 0;
+                          font-size: 14px;
+                          opacity: 0.9;
+                        }
+                      </style>
+                    </head>
+                    <body>
+                      <div class="loader">
+                        <div class="spinner"></div>
+                        <h2>${t('common.loading') || 'Загрузка...'}</h2>
+                        <p>${t('properties.messages.generatingPreview') || 'Генерируем ссылку для просмотра...'}</p>
+                      </div>
+                    </body>
+                  </html>
+                `);
+                
+                const response = await propertiesApi.getPreviewUrl(Number(id));
+                
+                if (response.data?.success) {
+                  newWindow.location.href = response.data.data.previewUrl;
+                  closeAfterSaveModal();
+                } else {
+                  newWindow.close();
+                  notifications.show({
+                    title: t('errors.generic'),
+                    message: t('properties.messages.previewUrlError'),
+                    color: 'red',
+                    icon: <IconX size={18} />
+                  });
+                }
+              } catch (error) {
+                console.error('Error generating preview:', error);
+              
+                
+                notifications.show({
+                  title: t('errors.generic'),
+                  message: t('properties.messages.previewUrlError'),
+                  color: 'red',
+                  icon: <IconX size={18} />
+                });
+              } finally {
+                setIsGeneratingPreview(false);
+              }
+            }}
+            loading={isGeneratingPreview}
+            disabled={isGeneratingPreview}
+          >
+            {t('properties.afterSave.viewOnSite')}
+          </Button>
 
-    <Button
-      fullWidth
-      size="lg"
-      leftSection={<IconList size={20} />}
-      variant="light"
-      color="green"
-      onClick={() => {
-        navigate('/properties');
-        closeAfterSaveModal();
-      }}
-    >
-      {t('properties.afterSave.goToList') || 'К списку всех объектов'}
-    </Button>
+          <Button
+            fullWidth
+            size="lg"
+            leftSection={<IconList size={20} />}
+            variant="light"
+            color="green"
+            onClick={() => {
+              navigate('/properties');
+              closeAfterSaveModal();
+            }}
+          >
+            {t('properties.afterSave.goToList') || 'К списку всех объектов'}
+          </Button>
 
-    <Button
-      fullWidth
-      size="lg"
-      leftSection={<IconPencil size={20} />}
-      variant="light"
-      color="gray"
-      onClick={closeAfterSaveModal}
-    >
-      {t('properties.afterSave.continueEditing') || 'Продолжить редактирование'}
-    </Button>
-  </Stack>
-</Modal>
+          <Button
+            fullWidth
+            size="lg"
+            leftSection={<IconPencil size={20} />}
+            variant="light"
+            color="gray"
+            onClick={closeAfterSaveModal}
+          >
+            {t('properties.afterSave.continueEditing') || 'Продолжить редактирование'}
+          </Button>
+        </Stack>
+      </Modal>
     </Box>
   );
 };

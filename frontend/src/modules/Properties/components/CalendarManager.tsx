@@ -99,10 +99,13 @@ const CalendarManager = ({
   const { t } = useTranslation();
   const isMobile = useMediaQuery('(max-width: 768px)');
 
-  // ✅ НОВОЕ: Refs для контроля инициализации
+  // ✅ КРИТИЧНО: Refs для защиты от множественных запросов
   const isInitialMount = useRef(true);
   const hasLoadedData = useRef(false);
+  const isLoadingRef = useRef(false); // ✅ НОВОЕ: Защита от параллельных загрузок
   const initialDatesRef = useRef(initialBlockedDates);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const propertyIdRef = useRef(propertyId); // ✅ НОВОЕ: Отслеживание изменения propertyId
 
   // Состояния
   const [tempBlockedDates, setTempBlockedDates] = useState<BlockedDate[]>(initialBlockedDates || []);
@@ -156,56 +159,116 @@ const CalendarManager = ({
   const [periodStart, setPeriodStart] = useState<string | null>(null);
   const [periodEnd, setPeriodEnd] = useState<string | null>(null);
 
-  // ✅ ИСПРАВЛЕНО: Эффект для передачи данных через колбэк БЕЗ onChange в зависимостях
+  // ✅ Очистка при размонтировании компонента
+  useEffect(() => {
+    return () => {
+      console.log('🧹 Cleaning up CalendarManager');
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      // Сбрасываем флаги
+      isLoadingRef.current = false;
+      hasLoadedData.current = false;
+    };
+  }, []);
+
+  // ✅ Эффект для передачи данных через колбэк БЕЗ onChange в зависимостях
   useEffect(() => {
     if (isCreatingMode && onChange) {
-      // Используем таймаут чтобы не вызывать onChange синхронно
       const timeoutId = setTimeout(() => {
         onChange(tempBlockedDates);
       }, 0);
       
       return () => clearTimeout(timeoutId);
     }
-  }, [tempBlockedDates, isCreatingMode]); // onChange НЕ в зависимостях!
+  }, [tempBlockedDates, isCreatingMode]);
+
+  // ✅ КРИТИЧНО: Сброс при изменении propertyId
+  useEffect(() => {
+    if (propertyIdRef.current !== propertyId) {
+      console.log('🔄 PropertyId changed, resetting...');
+      propertyIdRef.current = propertyId;
+      hasLoadedData.current = false;
+      isLoadingRef.current = false;
+      
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    }
+  }, [propertyId]);
 
   // ✅ ИСПРАВЛЕНО: Инициализация только один раз
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
       
+      console.log('📅 CalendarManager initialized', { propertyId, isCreatingMode });
+      
       if (isCreatingMode) {
-        // В режиме создания просто устанавливаем initial даты
         if (initialDatesRef.current.length > 0) {
+          console.log('📝 Setting initial blocked dates:', initialDatesRef.current.length);
           setTempBlockedDates(initialDatesRef.current);
-          loadCalendarData();
+          loadCalendarData(); // Только локальная загрузка для режима создания
         }
       } else {
-        // В режиме редактирования загружаем данные ПОСЛЕДОВАТЕЛЬНО
-        loadAllData();
+        loadAllData(); // Загружаем все данные один раз
       }
     }
-  }, []); // Пустой массив - вызывается только при монтировании
+  }, []);
 
-  // ✅ НОВОЕ: Последовательная загрузка данных вместо параллельной
+  // ✅ ОПТИМИЗИРОВАНО: Последовательная загрузка с защитой от повторных вызовов
   const loadAllData = async () => {
-    if (hasLoadedData.current) return; // Защита от повторных вызовов
+    // ✅ КРИТИЧНО: Защита от параллельных загрузок
+    if (hasLoadedData.current || isLoadingRef.current) {
+      console.log('⏭️ Data already loaded or loading, skipping');
+      return;
+    }
     
+    isLoadingRef.current = true;
     setLoading(true);
     hasLoadedData.current = true;
     
+    abortControllerRef.current = new AbortController();
+    
     try {
-      // Загружаем последовательно, чтобы не блокировать БД
+      console.log('🔄 Loading calendar data sequentially...');
+      
+      // 1. Загружаем данные календаря
       await loadCalendarData();
-      await new Promise(resolve => setTimeout(resolve, 100)); // Небольшая задержка
       
+      if (abortControllerRef.current.signal.aborted) {
+        console.log('🚫 Load sequence aborted after calendar data');
+        return;
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
+      // 2. Загружаем ICS информацию
       await loadICSInfo();
-      await new Promise(resolve => setTimeout(resolve, 100));
       
+      if (abortControllerRef.current.signal.aborted) {
+        console.log('🚫 Load sequence aborted after ICS info');
+        return;
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
+      // 3. Загружаем внешние календари
       await loadExternalCalendars();
-    } catch (error) {
-      console.error('Error loading calendar data:', error);
+      
+      console.log('✅ All calendar data loaded successfully');
+    } catch (error: any) {
+      if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
+        console.log('🚫 Load sequence was canceled');
+        return;
+      }
+      console.error('❌ Error loading calendar data:', error);
     } finally {
       setLoading(false);
+      isLoadingRef.current = false;
+      abortControllerRef.current = null;
     }
   };
 
@@ -220,7 +283,6 @@ const CalendarManager = ({
       return;
     }
 
-    // ✅ ИСПРАВЛЕНО: Не устанавливаем loading здесь, это делает loadAllData
     try {
       const { data } = await propertiesApi.getCalendar(propertyId);
       const blocked = data.data.blocked_dates || [];
@@ -233,7 +295,12 @@ const CalendarManager = ({
       });
       
       setBlockedDatesMap(blockedMap);
+      console.log('📅 Calendar data loaded:', blocked.length, 'dates');
     } catch (error: any) {
+      if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
+        return;
+      }
+      
       notifications.show({
         title: t('errors.generic'),
         message: t('calendarManager.errorLoadingCalendar'),
@@ -247,7 +314,11 @@ const CalendarManager = ({
     try {
       const { data } = await propertiesApi.getICSInfo(propertyId);
       setIcsInfo(data.data);
-    } catch (error) {
+      console.log('ℹ️ ICS info loaded');
+    } catch (error: any) {
+      if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
+        return;
+      }
       console.error('Failed to load ICS info:', error);
     }
   };
@@ -256,19 +327,29 @@ const CalendarManager = ({
     try {
       const { data } = await propertiesApi.getExternalCalendars(propertyId);
       setExternalCalendars(data.data || []);
-    } catch (error) {
+      console.log('📆 External calendars loaded:', data.data?.length || 0);
+    } catch (error: any) {
+      if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
+        return;
+      }
       console.error('Failed to load external calendars:', error);
     }
   };
 
-  // ✅ НОВОЕ: Функция перезагрузки данных
+  // ✅ УПРОЩЕНО: Перезагрузка только календаря (без лишних запросов)
   const reloadCalendarData = async () => {
     if (isCreatingMode) {
       await loadCalendarData();
-    } else {
-      // Перезагружаем только календарь и ICS, не external calendars
+      return;
+    }
+
+    console.log('🔄 Reloading calendar data...');
+    
+    try {
       await loadCalendarData();
-      await loadICSInfo();
+      console.log('✅ Calendar data reloaded');
+    } catch (error) {
+      console.error('❌ Error reloading calendar data:', error);
     }
   };
 
@@ -277,7 +358,6 @@ const CalendarManager = ({
     if (viewMode || !calendarSelectionMode) return;
 
     if (selectionType === 'days') {
-      // Режим выбора отдельных дней
       setSelectedCalendarDates(prev => {
         if (prev.includes(dateStr)) {
           return prev.filter(d => d !== dateStr);
@@ -286,26 +366,20 @@ const CalendarManager = ({
         }
       });
     } else if (selectionType === 'period') {
-      // Режим выбора периода
       if (!periodStart) {
-        // Выбираем начало периода
         setPeriodStart(dateStr);
         setPeriodEnd(null);
       } else if (!periodEnd) {
-        // Выбираем конец периода
         const start = dayjs(periodStart);
         const end = dayjs(dateStr);
         
         if (end.isBefore(start)) {
-          // Если выбрали дату раньше начала, делаем её началом
           setPeriodStart(dateStr);
           setPeriodEnd(null);
         } else {
-          // Устанавливаем конец периода
           setPeriodEnd(dateStr);
         }
       } else {
-        // Если оба выбраны, начинаем заново
         setPeriodStart(dateStr);
         setPeriodEnd(null);
       }
@@ -356,11 +430,9 @@ const CalendarManager = ({
       }
     }
 
-    // НЕ выключаем режим выбора, просто открываем модальное окно
     openBlockModal();
   };
 
-  // Добавление блокировки
   const handleOpenAddOccupancy = () => {
     setSelectionType('period');
     setReason('');
@@ -383,7 +455,6 @@ const CalendarManager = ({
   };
 
   const handleSubmitBlock = async (forceAdd: boolean = false) => {
-    // Режим выбора отдельных дней
     if (selectionType === 'days' && selectedCalendarDates.length > 0) {
       const conflicts = selectedCalendarDates.filter(date => blockedDatesMap.has(date));
       
@@ -412,6 +483,8 @@ const CalendarManager = ({
         setSelectedCalendarDates([]);
         setCalendarSelectionMode(false);
         setReason('');
+        
+        // ✅ ОПТИМИЗИРОВАНО: Только локальная перезагрузка без запросов к серверу
         await loadCalendarData();
         return;
       }
@@ -442,7 +515,9 @@ const CalendarManager = ({
         setSelectedCalendarDates([]);
         setCalendarSelectionMode(false);
         setReason('');
-        await reloadCalendarData(); // ✅ Используем reloadCalendarData
+        
+        // ✅ ОПТИМИЗИРОВАНО: Только календарь, без ICS и внешних календарей
+        await reloadCalendarData();
       } catch (error: any) {
         notifications.show({
           title: t('errors.generic'),
@@ -454,12 +529,10 @@ const CalendarManager = ({
       return;
     }
 
-    // Режим выбора периода
     if (selectionType === 'period' && periodStart && periodEnd) {
       const start = dayjs(periodStart);
       const end = dayjs(periodEnd);
 
-      // Проверяем конфликты
       const conflicts: string[] = [];
       let current = start;
       
@@ -503,6 +576,8 @@ const CalendarManager = ({
         setPeriodEnd(null);
         setCalendarSelectionMode(false);
         setReason('');
+        
+        // ✅ ОПТИМИЗИРОВАНО: Только локальная перезагрузка
         await loadCalendarData();
         return;
       }
@@ -532,7 +607,9 @@ const CalendarManager = ({
         setPeriodEnd(null);
         setCalendarSelectionMode(false);
         setReason('');
-        await reloadCalendarData(); // ✅ Используем reloadCalendarData
+        
+        // ✅ ОПТИМИЗИРОВАНО: Только календарь
+        await reloadCalendarData();
       } catch (error: any) {
         notifications.show({
           title: t('errors.generic'),
@@ -560,7 +637,8 @@ const CalendarManager = ({
         color: 'green',
         icon: <IconCheck size={18} />
       });
-      await loadCalendarData(); // Только локальная перезагрузка
+      // ✅ ОПТИМИЗИРОВАНО: Только локальная перезагрузка
+      await loadCalendarData();
       return;
     }
 
@@ -572,7 +650,8 @@ const CalendarManager = ({
         color: 'green',
         icon: <IconCheck size={18} />
       });
-      await reloadCalendarData(); // ✅ Используем reloadCalendarData
+      // ✅ ОПТИМИЗИРОВАНО: Только календарь
+      await reloadCalendarData();
     } catch (error: any) {
       notifications.show({
         title: t('errors.generic'),
@@ -583,7 +662,6 @@ const CalendarManager = ({
     }
   };
 
-  // Внешние календари
   const handleAddExternalCalendar = () => {
     setCalendarName('');
     setIcsUrl('');
@@ -624,7 +702,8 @@ const CalendarManager = ({
       });
       
       closeExternalCalendarModal();
-      loadExternalCalendars();
+      // ✅ ОПТИМИЗИРОВАНО: Только внешние календари
+      await loadExternalCalendars();
     } catch (error: any) {
       notifications.show({
         title: t('errors.generic'),
@@ -647,14 +726,15 @@ const CalendarManager = ({
       closeDeleteCalendarModal();
       setCalendarToDelete(null);
       
-      // ✅ ИСПРАВЛЕНО: Последовательная загрузка с задержками
+      // ✅ ОПТИМИЗИРОВАНО: Последовательная загрузка с задержками
       await loadExternalCalendars();
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise(resolve => setTimeout(resolve, 200));
       
-      await loadCalendarData();
-      await new Promise(resolve => setTimeout(resolve, 150));
-      
-      await loadICSInfo();
+      if (removeDates) {
+        await loadCalendarData();
+        await new Promise(resolve => setTimeout(resolve, 200));
+        await loadICSInfo();
+      }
     } catch (error: any) {
       notifications.show({
         title: t('errors.generic'),
@@ -676,7 +756,8 @@ const CalendarManager = ({
         color: 'green',
         icon: <IconCheck size={18} />
       });
-      loadExternalCalendars();
+      // ✅ ОПТИМИЗИРОВАНО: Только внешние календари
+      await loadExternalCalendars();
     } catch (error: any) {
       notifications.show({
         title: t('errors.generic'),
@@ -754,12 +835,12 @@ const CalendarManager = ({
         });
       }
 
-      // ✅ ИСПРАВЛЕНО: Последовательная загрузка с задержками
+      // ✅ ОПТИМИЗИРОВАНО: Последовательная загрузка с задержками
       await loadExternalCalendars();
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise(resolve => setTimeout(resolve, 200));
       
       await loadCalendarData();
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise(resolve => setTimeout(resolve, 200));
       
       await loadICSInfo();
       
@@ -944,7 +1025,6 @@ const CalendarManager = ({
       textColor = '#228BE6';
     }
 
-    // Визуальное выделение для режима выбора периода
     if (selectionType === 'period' && calendarSelectionMode) {
       if (isPeriodStartDay || isPeriodEndDay) {
         backgroundColor = '#7950F2';
@@ -957,14 +1037,12 @@ const CalendarManager = ({
       }
     }
 
-    // Визуальное выделение для режима выбора дней
     if (selectionType === 'days' && isSelected) {
       backgroundColor = '#1864AB';
       textColor = '#FFFFFF';
       borderColor = '#1864AB';
     }
 
-    // Заблокированная дата
     if (status.blocked && !isSelected && !isPeriodStartDay && !isPeriodEndDay && !isInPeriod) {
       if (status.checkIn && status.checkOut) {
         dayStyle = {
@@ -1115,7 +1193,10 @@ const CalendarManager = ({
   if (loading && !isCreatingMode) {
     return (
       <Center p="xl">
-        <Loader size="lg" />
+        <Stack align="center" gap="md">
+          <Loader size="lg" />
+          <Text c="dimmed">{t('common.loading')}</Text>
+        </Stack>
       </Center>
     );
   }
@@ -1529,7 +1610,8 @@ const CalendarManager = ({
         </Card>
       )}
 
-      {/* Модальные окна */}
+      {/* Модальные окна остаются без изменений... */}
+      {/* (Все модальные окна из оригинального кода) */}
       
       {/* Модальное окно выбора типа добавления */}
       <Modal
@@ -1600,7 +1682,10 @@ const CalendarManager = ({
         </Stack>
       </Modal>
 
-      {/* Модальное окно добавления блокировки */}
+      {/* Остальные модальные окна без изменений... */}
+      {/* (Копируем все остальные модальные окна из оригинального кода) */}
+
+{/* Модальное окно добавления блокировки */}
       <Modal
         opened={blockModalOpened}
         onClose={() => {
