@@ -11,6 +11,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 // Импортируем стили Mantine
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
+import '@mantine/carousel/styles.css';
 
 dayjs.extend(relativeTime);
 

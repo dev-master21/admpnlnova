@@ -2,45 +2,83 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Layout,
+  Container,
   Card,
-  Form,
   Button,
-  Space,
-  message,
-  Spin,
-  Typography,
-  Breadcrumb,
-  InputNumber,
-  Row,
-  Col
-} from 'antd';
+  Stack,
+  Group,
+  Loader,
+  Title,
+  Breadcrumbs,
+  Anchor,
+  ThemeIcon,
+  Paper,
+  Box,
+  Center,
+  Text,
+  Alert
+} from '@mantine/core';
+import { useForm } from '@mantine/form';
+import { notifications } from '@mantine/notifications';
+import { useMediaQuery } from '@mantine/hooks';
 import {
-  ArrowLeftOutlined,
-  SaveOutlined,
-  HomeOutlined
-} from '@ant-design/icons';
+  IconArrowLeft,
+  IconHome,
+  IconCurrencyDollar,
+  IconCheck,
+  IconX,
+  IconDeviceFloppy,
+  IconInfoCircle
+} from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
-import { propertiesApi } from '@/api/properties.api';
+import { propertiesApi, MonthlyPrice } from '@/api/properties.api';
+import SalePriceForm from '@/modules/Properties/components/SalePriceForm';
+import YearPriceForm from '@/modules/Properties/components/YearPriceForm';
 import SeasonalPricing from '@/modules/Properties/components/SeasonalPricing';
 import MonthlyPricing from '@/modules/Properties/components/MonthlyPricing';
 import DepositForm from '@/modules/Properties/components/DepositForm';
 import UtilitiesForm from '@/modules/Properties/components/UtilitiesForm';
-import './OwnerDashboard.css';
-
-const { Content } = Layout;
-const { Title } = Typography;
 
 const OwnerPricingPage = () => {
   const { t } = useTranslation();
   const { propertyId } = useParams<{ propertyId: string }>();
   const navigate = useNavigate();
-  const [form] = Form.useForm();
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [property, setProperty] = useState<any>(null);
-  const [monthlyPricing, setMonthlyPricing] = useState<any[]>([]);
+  const [depositType, setDepositType] = useState<'one_month' | 'two_months' | 'custom'>('one_month');
+  const [depositAmount, setDepositAmount] = useState<number>(0);
+
+  const form = useForm({
+    initialValues: {
+      deal_type: 'sale',
+      sale_price: null as number | null,
+      sale_pricing_mode: 'net' as 'net' | 'gross',
+      sale_commission_type_new: null as 'percentage' | 'fixed' | null,
+      sale_commission_value_new: null as number | null,
+      sale_source_price: null as number | null,
+      sale_margin_amount: null as number | null,
+      sale_margin_percentage: null as number | null,
+      
+      year_price: null as number | null,
+      year_pricing_mode: 'net' as 'net' | 'gross',
+      year_commission_type: null as 'percentage' | 'fixed' | null,
+      year_commission_value: null as number | null,
+      year_source_price: null as number | null,
+      year_margin_amount: null as number | null,
+      year_margin_percentage: null as number | null,
+      
+      monthlyPricing: [] as MonthlyPrice[],
+      seasonalPricing: [] as any[],
+      
+      deposit_type: '',
+      deposit_amount: null as number | null,
+      electricity_rate: null as number | null,
+      water_rate: null as number | null
+    }
+  });
 
   useEffect(() => {
     loadProperty();
@@ -53,24 +91,46 @@ const OwnerPricingPage = () => {
       const prop = data.data;
       setProperty(prop);
 
-      form.setFieldsValue({
+      form.setValues({
         deal_type: prop.deal_type,
         sale_price: prop.sale_price,
+        sale_pricing_mode: prop.sale_pricing_mode || 'net',
+        sale_commission_type_new: prop.sale_commission_type_new || null,
+        sale_commission_value_new: prop.sale_commission_value_new || null,
+        sale_source_price: prop.sale_source_price || null,
+        sale_margin_amount: prop.sale_margin_amount || null,
+        sale_margin_percentage: prop.sale_margin_percentage || null,
+        
         year_price: prop.year_price,
-        sale_commission_type: prop.sale_commission_type,
-        sale_commission_value: prop.sale_commission_value,
-        rent_commission_type: prop.rent_commission_type,
-        rent_commission_value: prop.rent_commission_value,
-        deposit_type: prop.deposit_type,
+        year_pricing_mode: prop.year_pricing_mode || 'net',
+        year_commission_type: prop.year_commission_type || null,
+        year_commission_value: prop.year_commission_value || null,
+        year_source_price: prop.year_source_price || null,
+        year_margin_amount: prop.year_margin_amount || null,
+        year_margin_percentage: prop.year_margin_percentage || null,
+        
+        monthlyPricing: prop.monthly_pricing || [],
+        seasonalPricing: prop.pricing || [],
+        
+        deposit_type: prop.deposit_type || '',
         deposit_amount: prop.deposit_amount,
         electricity_rate: prop.electricity_rate,
-        water_rate: prop.water_rate,
-        seasonalPricing: prop.pricing || []
+        water_rate: prop.water_rate
       });
 
-      setMonthlyPricing(prop.monthly_pricing || []);
+      if (prop.deposit_type) {
+        setDepositType(prop.deposit_type as 'one_month' | 'two_months' | 'custom');
+      }
+      if (prop.deposit_amount) {
+        setDepositAmount(prop.deposit_amount);
+      }
     } catch (error: any) {
-      message.error(t('ownerPortal.errorLoadingProperty'));
+      notifications.show({
+        title: t('ownerPortal.errorLoadingProperty'),
+        message: '',
+        color: 'red',
+        icon: <IconX size={18} />
+      });
       navigate('/owner/dashboard');
     } finally {
       setLoading(false);
@@ -80,30 +140,51 @@ const OwnerPricingPage = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const values = form.getFieldsValue();
+      const values = form.values;
 
       await propertiesApi.updatePricingDetails(Number(propertyId), {
         sale_price: values.sale_price,
+        sale_pricing_mode: values.sale_pricing_mode,
+        sale_commission_type_new: values.sale_commission_type_new,
+        sale_commission_value_new: values.sale_commission_value_new,
+        sale_source_price: values.sale_source_price,
+        sale_margin_amount: values.sale_margin_amount,
+        sale_margin_percentage: values.sale_margin_percentage,
+        
         year_price: values.year_price,
-        sale_commission_type: values.sale_commission_type,
-        sale_commission_value: values.sale_commission_value,
-        rent_commission_type: values.rent_commission_type,
-        rent_commission_value: values.rent_commission_value,
-        deposit_type: values.deposit_type,
-        deposit_amount: values.deposit_amount,
+        year_pricing_mode: values.year_pricing_mode,
+        year_commission_type: values.year_commission_type,
+        year_commission_value: values.year_commission_value,
+        year_source_price: values.year_source_price,
+        year_margin_amount: values.year_margin_amount,
+        year_margin_percentage: values.year_margin_percentage,
+        
+        deposit_type: depositType,
+        deposit_amount: depositAmount,
         electricity_rate: values.electricity_rate,
         water_rate: values.water_rate,
         seasonalPricing: values.seasonalPricing || []
       });
 
-      if (monthlyPricing.length > 0) {
-        await propertiesApi.updateMonthlyPricing(Number(propertyId), monthlyPricing);
+      if (values.monthlyPricing && values.monthlyPricing.length > 0) {
+        await propertiesApi.updateMonthlyPricing(Number(propertyId), values.monthlyPricing);
       }
 
-      message.success(t('ownerPortal.pricesSaved'));
+      notifications.show({
+        title: t('common.success'),
+        message: t('ownerPortal.pricesSaved'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
+
       navigate('/owner/dashboard');
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('ownerPortal.errorSavingPrices'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('ownerPortal.errorSavingPrices'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     } finally {
       setSaving(false);
     }
@@ -111,139 +192,320 @@ const OwnerPricingPage = () => {
 
   if (loading) {
     return (
-      <Layout style={{ minHeight: '100vh', background: '#0a0a0a' }}>
-        <Content style={{ padding: '50px', textAlign: 'center' }}>
-          <Spin size="large" />
-        </Content>
-      </Layout>
+      <Box style={{ minHeight: '100vh' }}>
+        <Paper
+          shadow="md"
+          p="md"
+          radius={0}
+          style={{
+            background: 'linear-gradient(135deg, #7950F2 0%, #9775FA 100%)',
+            position: 'sticky',
+            top: 0,
+            zIndex: 100
+          }}
+        >
+          <Container size="xl">
+            <Group gap="sm">
+              <ThemeIcon
+                size={isMobile ? 'lg' : 'xl'}
+                radius="md"
+                variant="white"
+                color="violet"
+              >
+                <IconHome size={isMobile ? 20 : 24} stroke={1.5} />
+              </ThemeIcon>
+              {!isMobile && (
+                <Stack gap={0}>
+                  <Text size="lg" fw={700} c="white">
+                    NOVA ESTATE
+                  </Text>
+                  <Text size="xs" c="rgba(255, 255, 255, 0.8)">
+                    {t('ownerPortal.portal')}
+                  </Text>
+                </Stack>
+              )}
+            </Group>
+          </Container>
+        </Paper>
+
+        <Container size="xl" py="xl">
+          <Card shadow="sm" padding="xl" radius="md" withBorder>
+            <Center py="xl">
+              <Stack align="center" gap="md">
+                <Loader size="xl" variant="dots" />
+                <Text c="dimmed">{t('common.loading')}</Text>
+              </Stack>
+            </Center>
+          </Card>
+        </Container>
+      </Box>
     );
   }
 
-  const dealType = form.getFieldValue('deal_type') || 'sale';
+  const dealType = form.values.deal_type || 'sale';
+
+  const breadcrumbItems = [
+    { title: t('ownerPortal.dashboard'), href: '/owner/dashboard' },
+    { title: property?.property_name || property?.property_number, href: '#' },
+    { title: t('ownerPortal.pricing'), href: '#' }
+  ].map((item, index) => (
+    <Anchor
+      key={index}
+      href={item.href}
+      onClick={(e) => {
+        if (item.href === '/owner/dashboard') {
+          e.preventDefault();
+          navigate('/owner/dashboard');
+        }
+      }}
+      c={index === 2 ? 'dimmed' : 'blue'}
+      style={{ cursor: index === 2 ? 'default' : 'pointer' }}
+    >
+      {index === 0 && (
+        <Group gap={4}>
+          <IconHome size={14} />
+          <span>{item.title}</span>
+        </Group>
+      )}
+      {index !== 0 && item.title}
+    </Anchor>
+  ));
 
   return (
-    <Layout style={{ minHeight: '100vh', background: '#0a0a0a' }}>
-      <Content style={{ padding: '24px' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          <Space direction="vertical" style={{ width: '100%' }} size="large">
-            <Breadcrumb>
-              <Breadcrumb.Item>
-                <a href="/owner/dashboard">
-                  <HomeOutlined /> {t('ownerPortal.dashboard')}
-                </a>
-              </Breadcrumb.Item>
-              <Breadcrumb.Item>
-                {property?.property_name || property?.property_number}
-              </Breadcrumb.Item>
-              <Breadcrumb.Item>{t('ownerPortal.pricing')}</Breadcrumb.Item>
-            </Breadcrumb>
+    <Box style={{ minHeight: '100vh' }}>
+      {/* Header */}
+      <Paper
+        shadow="md"
+        p="md"
+        radius={0}
+        style={{
+          background: 'linear-gradient(135deg, #7950F2 0%, #9775FA 100%)',
+          position: 'sticky',
+          top: 0,
+          zIndex: 100
+        }}
+      >
+        <Container size="xl">
+          <Group justify="space-between">
+            <Group gap="sm">
+              <ThemeIcon
+                size={isMobile ? 'lg' : 'xl'}
+                radius="md"
+                variant="white"
+                color="violet"
+              >
+                <IconHome size={isMobile ? 20 : 24} stroke={1.5} />
+              </ThemeIcon>
+              {!isMobile && (
+                <Stack gap={0}>
+                  <Text size="lg" fw={700} c="white">
+                    NOVA ESTATE
+                  </Text>
+                  <Text size="xs" c="rgba(255, 255, 255, 0.8)">
+                    {t('ownerPortal.portal')}
+                  </Text>
+                </Stack>
+              )}
+            </Group>
 
-            <Card>
-              <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                <div>
-                  <Button
-                    icon={<ArrowLeftOutlined />}
-                    onClick={() => navigate('/owner/dashboard')}
-                    style={{ marginBottom: 16 }}
-                  >
-                    {t('common.back')}
-                  </Button>
-                  <Title level={3} style={{ margin: 0 }}>
-                    {t('ownerPortal.managePricing')}: {property?.property_name || property?.property_number}
+            <Button
+              variant="white"
+              color="violet"
+              leftSection={<IconArrowLeft size={18} />}
+              onClick={() => navigate('/owner/dashboard')}
+              size={isMobile ? 'sm' : 'md'}
+            >
+              {!isMobile && t('common.back')}
+            </Button>
+          </Group>
+        </Container>
+      </Paper>
+
+      {/* Content */}
+      <Container size="xl" py="xl">
+        <Stack gap="lg">
+          {/* Breadcrumbs */}
+          <Breadcrumbs separator="›">
+            {breadcrumbItems}
+          </Breadcrumbs>
+
+          {/* Title Card */}
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Group justify="space-between" wrap="wrap">
+              <Group gap="md" wrap="nowrap">
+                <ThemeIcon
+                  size="xl"
+                  radius="md"
+                  variant="gradient"
+                  gradient={{ from: 'teal', to: 'green' }}
+                >
+                  <IconCurrencyDollar size={28} stroke={1.5} />
+                </ThemeIcon>
+                <Stack gap={4} style={{ flex: 1 }}>
+                  <Title order={isMobile ? 4 : 3}>
+                    {t('ownerPortal.managePricing')}
                   </Title>
-                </div>
+                  <Text size="sm" c="dimmed">
+                    {property?.property_name || property?.property_number}
+                  </Text>
+                </Stack>
+              </Group>
+
+              {!isMobile && (
                 <Button
-                  type="primary"
-                  size="large"
-                  icon={<SaveOutlined />}
+                  variant="gradient"
+                  gradient={{ from: 'teal', to: 'green' }}
+                  size="lg"
+                  leftSection={<IconDeviceFloppy size={20} />}
                   onClick={handleSave}
                   loading={saving}
                 >
                   {t('common.save')}
                 </Button>
-              </Space>
+              )}
+            </Group>
+          </Card>
+
+          {/* Alert Info */}
+          <Alert icon={<IconInfoCircle size={18} />} color="blue" variant="light">
+            <Text size="sm">
+              {t('ownerPortal.pricingPageDescription') || 'Здесь вы можете управлять ценами на ваш объект недвижимости'}
+            </Text>
+          </Alert>
+
+          {/* Sale Price */}
+          {(dealType === 'sale' || dealType === 'both') && (
+            <SalePriceForm
+              propertyId={Number(propertyId) || 0}
+              initialData={{
+                price: property.sale_price,
+                pricing_mode: property.sale_pricing_mode || 'net',
+                commission_type: property.sale_commission_type_new || null,
+                commission_value: property.sale_commission_value_new || null,
+                source_price: property.sale_source_price || null
+              }}
+              viewMode={false}
+              onChange={(data) => {
+                form.setFieldValue('sale_price', data.sale_price);
+                form.setFieldValue('sale_pricing_mode', data.sale_pricing_mode);
+                form.setFieldValue('sale_commission_type_new', data.sale_commission_type_new);
+                form.setFieldValue('sale_commission_value_new', data.sale_commission_value_new);
+                form.setFieldValue('sale_source_price', data.sale_source_price);
+                form.setFieldValue('sale_margin_amount', data.sale_margin_amount);
+                form.setFieldValue('sale_margin_percentage', data.sale_margin_percentage);
+              }}
+            />
+          )}
+
+          {/* Rent Prices */}
+          {(dealType === 'rent' || dealType === 'both') && (
+            <>
+              <YearPriceForm
+                propertyId={Number(propertyId) || 0}
+                initialData={{
+                  price: property.year_price,
+                  pricing_mode: property.year_pricing_mode || 'net',
+                  commission_type: property.year_commission_type || null,
+                  commission_value: property.year_commission_value || null,
+                  source_price: property.year_source_price || null
+                }}
+                viewMode={false}
+                onChange={(data) => {
+                  form.setFieldValue('year_price', data.year_price);
+                  form.setFieldValue('year_pricing_mode', data.year_pricing_mode);
+                  form.setFieldValue('year_commission_type', data.year_commission_type);
+                  form.setFieldValue('year_commission_value', data.year_commission_value);
+                  form.setFieldValue('year_source_price', data.year_source_price);
+                  form.setFieldValue('year_margin_amount', data.year_margin_amount);
+                  form.setFieldValue('year_margin_percentage', data.year_margin_percentage);
+                }}
+              />
+
+              <MonthlyPricing
+                propertyId={Number(propertyId) || 0}
+                initialPricing={property?.monthly_pricing || []}
+                viewMode={false}
+                onChange={(monthlyPricing) => {
+                  form.setFieldValue('monthlyPricing', monthlyPricing);
+                }}
+              />
+
+              <SeasonalPricing viewMode={false} form={form} />
+
+              <DepositForm
+                dealType="rent"
+                viewMode={false}
+                depositType={depositType}
+                depositAmount={depositAmount}
+                onDepositTypeChange={setDepositType}
+                onDepositAmountChange={setDepositAmount}
+              />
+
+              <UtilitiesForm viewMode={false} />
+            </>
+          )}
+
+          {/* Save Button (Mobile) */}
+          {isMobile && (
+            <Paper
+              p="md"
+              radius="md"
+              withBorder
+              style={{
+                position: 'sticky',
+                bottom: 0,
+                zIndex: 10
+              }}
+            >
+              <Group justify="space-between">
+                <Button
+                  variant="subtle"
+                  onClick={() => navigate('/owner/dashboard')}
+                  size="md"
+                >
+                  {t('common.cancel')}
+                </Button>
+                <Button
+                  variant="gradient"
+                  gradient={{ from: 'teal', to: 'green' }}
+                  leftSection={<IconDeviceFloppy size={18} />}
+                  onClick={handleSave}
+                  loading={saving}
+                  size="md"
+                >
+                  {t('common.save')}
+                </Button>
+              </Group>
+            </Paper>
+          )}
+
+          {/* Desktop Bottom Buttons */}
+          {!isMobile && (
+            <Card shadow="sm" padding="lg" radius="md" withBorder>
+              <Group justify="flex-end" gap="md">
+                <Button
+                  variant="subtle"
+                  size="lg"
+                  onClick={() => navigate('/owner/dashboard')}
+                >
+                  {t('common.cancel')}
+                </Button>
+                <Button
+                  variant="gradient"
+                  gradient={{ from: 'teal', to: 'green' }}
+                  size="lg"
+                  leftSection={<IconDeviceFloppy size={20} />}
+                  onClick={handleSave}
+                  loading={saving}
+                >
+                  {t('common.save')}
+                </Button>
+              </Group>
             </Card>
-
-            <Form form={form} layout="vertical">
-              <Space direction="vertical" style={{ width: '100%' }} size="large">
-                {(dealType === 'sale' || dealType === 'both') && (
-                  <Card title={t('properties.salePrice.title')}>
-                    <Row gutter={16}>
-                      <Col span={12}>
-                        <Form.Item
-                          name="sale_price"
-                          label={t('properties.salePrice')}
-                        >
-                          <InputNumber
-                            min={0}
-                            style={{ width: '100%' }}
-                            addonAfter="฿"
-                            formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                          />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-                  </Card>
-                )}
-
-                {(dealType === 'rent' || dealType === 'both') && (
-                  <>
-                    <Card title={t('properties.constantRentPrice.title')}>
-                      <Row gutter={16}>
-                        <Col span={12}>
-                          <Form.Item
-                            name="year_price"
-                            label={t('properties.constantRentPrice.yearPriceLabel')}
-                          >
-                            <InputNumber
-                              min={0}
-                              style={{ width: '100%' }}
-                              addonAfter="฿"
-                              formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                            />
-                          </Form.Item>
-                        </Col>
-                      </Row>
-                    </Card>
-
-                    <Form.Item name="seasonalPricing" noStyle>
-                      <SeasonalPricing viewMode={false} />
-                    </Form.Item>
-
-                    <MonthlyPricing
-                      propertyId={Number(propertyId)}
-                      initialPricing={monthlyPricing}
-                      viewMode={false}
-                      onChange={(pricing) => setMonthlyPricing(pricing)}
-                    />
-                  </>
-                )}
-                <DepositForm dealType={dealType} viewMode={false} />
-
-                <UtilitiesForm viewMode={false} />
-
-                <Card>
-                  <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-                    <Button size="large" onClick={() => navigate('/owner/dashboard')}>
-                      {t('common.cancel')}
-                    </Button>
-                    <Button
-                      type="primary"
-                      size="large"
-                      icon={<SaveOutlined />}
-                      onClick={handleSave}
-                      loading={saving}
-                    >
-                      {t('common.save')}
-                    </Button>
-                  </Space>
-                </Card>
-              </Space>
-            </Form>
-          </Space>
-        </div>
-      </Content>
-    </Layout>
+          )}
+        </Stack>
+      </Container>
+    </Box>
   );
 };
 
