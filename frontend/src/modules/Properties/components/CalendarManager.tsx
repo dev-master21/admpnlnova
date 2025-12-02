@@ -342,12 +342,14 @@ const CalendarManager = ({
       await loadCalendarData();
       return;
     }
-
+  
     console.log('🔄 Reloading calendar data...');
     
     try {
       await loadCalendarData();
-      console.log('✅ Calendar data reloaded');
+      await new Promise(resolve => setTimeout(resolve, 200)); // Небольшая задержка
+      await loadICSInfo(); // ✅ ДОБАВЛЕНО: Обновляем ICS информацию
+      console.log('✅ Calendar data and ICS info reloaded');
     } catch (error) {
       console.error('❌ Error reloading calendar data:', error);
     }

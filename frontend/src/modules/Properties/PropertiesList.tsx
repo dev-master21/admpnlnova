@@ -245,36 +245,50 @@ const openHTMLGenerator = (id: number, propertyNumber: string) => {
     openViewModeModal();
   };
 
-  const handleViewOnSite = async () => {
-    if (!selectedPropertyForView) return;
+const handleViewOnSite = async () => {
+  if (!selectedPropertyForView) return;
+  
+  // ✅ КРИТИЧНО: Открываем окно СИНХРОННО, до async запроса
+  const newWindow = window.open('about:blank', '_blank');
+  
+  setIsLoadingPreview(true);
+  try {
+    const response = await propertiesApi.getPreviewUrl(selectedPropertyForView);
     
-    setIsLoadingPreview(true);
-    try {
-      const response = await propertiesApi.getPreviewUrl(selectedPropertyForView);
-      
-      if (response.data?.success && response.data.data?.previewUrl) {
-        window.open(response.data.data.previewUrl, '_blank');
-        closeViewModeModal();
-      } else {
-        notifications.show({
-          title: t('errors.generic'),
-          message: t('properties.messages.previewUrlError') || 'Ошибка получения ссылки для просмотра',
-          color: 'red',
-          icon: <IconX size={18} />
-        });
+    if (response.data?.success && response.data.data?.previewUrl) {
+      // ✅ Обновляем URL уже открытого окна
+      if (newWindow) {
+        newWindow.location.href = response.data.data.previewUrl;
       }
-    } catch (error) {
-      console.error('Error generating preview URL:', error);
+      closeViewModeModal();
+    } else {
+      // ✅ Закрываем окно при ошибке
+      if (newWindow) {
+        newWindow.close();
+      }
       notifications.show({
         title: t('errors.generic'),
         message: t('properties.messages.previewUrlError') || 'Ошибка получения ссылки для просмотра',
         color: 'red',
         icon: <IconX size={18} />
       });
-    } finally {
-      setIsLoadingPreview(false);
     }
-  };
+  } catch (error) {
+    console.error('Error generating preview URL:', error);
+    // ✅ Закрываем окно при ошибке
+    if (newWindow) {
+      newWindow.close();
+    }
+    notifications.show({
+      title: t('errors.generic'),
+      message: t('properties.messages.previewUrlError') || 'Ошибка получения ссылки для просмотра',
+      color: 'red',
+      icon: <IconX size={18} />
+    });
+  } finally {
+    setIsLoadingPreview(false);
+  }
+};
 
   const handleViewInAdmin = () => {
     if (!selectedPropertyForView) return;

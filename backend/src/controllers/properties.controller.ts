@@ -851,6 +851,24 @@ const propertyResult = await connection.query(
         logger.error('❌ Failed to download photos from Google Drive:', photoError);
       }
     }
+        try {
+      const icsData = await icsGeneratorService.generateICSFile(
+        propertyId,
+        property_name || null,
+        [] // Пустой массив событий
+      );
+    
+      await connection.query(
+        `INSERT INTO property_ics (property_id, ics_url, ics_filename, ics_file_path, total_blocked_days)
+         VALUES (?, ?, ?, ?, 0)`,
+        [propertyId, icsData.url, icsData.filename, icsData.filepath]
+      );
+    
+      logger.info(`Empty ICS file created for property ${propertyId}: ${icsData.filename}`);
+    } catch (icsError) {
+      logger.error(`Failed to create ICS file for property ${propertyId}:`, icsError);
+      // Не прерываем создание объекта, если .ics не создался
+    }
 
     await db.commit(connection);
 
@@ -1483,7 +1501,7 @@ async addBlockedPeriod(req: AuthRequest, res: Response): Promise<void> {
 
     const icsData = await icsGeneratorService.generateICSFile(
       property.id,
-      property.property_number,
+      property.property_name || null,  // ✅ Новый формат
       allBlockedDates
     );
 
@@ -1543,7 +1561,7 @@ async removeBlockedDates(req: AuthRequest, res: Response): Promise<void> {
 
     // Проверяем существование объекта
     const propertyResult: any = await connection.query(
-      'SELECT id, property_number FROM properties WHERE id = ? AND deleted_at IS NULL',
+      'SELECT id, property_name, property_number FROM properties WHERE id = ? AND deleted_at IS NULL',
       [id]
     );
 
@@ -1577,37 +1595,26 @@ async removeBlockedDates(req: AuthRequest, res: Response): Promise<void> {
       ? remainingDates[0] 
       : remainingDates;
 
-    // Обновляем .ics файл
-    if (remainingDatesArray.length > 0) {
-      const icsData = await icsGeneratorService.generateICSFile(
-        property.id,
-        property.property_number,
-        remainingDatesArray
-      );
+    // ✅ ИСПРАВЛЕНО: Всегда обновляем .ics файл, даже если дат не осталось
+    const icsData = await icsGeneratorService.generateICSFile(
+      property.id,
+      property.property_name || null,
+      remainingDatesArray // Может быть пустым массивом
+    );
 
-      await connection.query(
-        `UPDATE property_ics 
-         SET ics_url = ?, ics_filename = ?, ics_file_path = ?, 
-             total_blocked_days = ?, updated_at = NOW()
-         WHERE property_id = ?`,
-        [icsData.url, icsData.filename, icsData.filepath, remainingDatesArray.length, id]
-      );
-    } else {
-      // Если дат не осталось, удаляем .ics файл
-      const icsInfoResult: any = await connection.query(
-        'SELECT ics_file_path FROM property_ics WHERE property_id = ?',
-        [id]
-      );
+    await connection.query(
+      `INSERT INTO property_ics (property_id, ics_url, ics_filename, ics_file_path, total_blocked_days)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE 
+         ics_url = VALUES(ics_url),
+         ics_filename = VALUES(ics_filename),
+         ics_file_path = VALUES(ics_file_path),
+         total_blocked_days = VALUES(total_blocked_days),
+         updated_at = NOW()`,
+      [id, icsData.url, icsData.filename, icsData.filepath, remainingDatesArray.length]
+    );
 
-      const icsInfo = Array.isArray(icsInfoResult[0]) 
-        ? icsInfoResult[0][0] 
-        : icsInfoResult[0];
-
-      if (icsInfo) {
-        await icsGeneratorService.deleteICSFile(icsInfo.ics_file_path);
-        await connection.query('DELETE FROM property_ics WHERE property_id = ?', [id]);
-      }
-    }
+    logger.info(`ICS file updated for property ${id}: ${remainingDatesArray.length} blocked dates`);
 
     await connection.commit();
 
@@ -2717,7 +2724,7 @@ async removeExternalCalendar(req: AuthRequest, res: Response): Promise<void> {
       if (allBlockedDates.length > 0) {
         const icsData = await icsGeneratorService.generateICSFile(
           parseInt(id),
-          property.property_number,
+          property.property_name || null,
           allBlockedDates
         );
 
@@ -2933,7 +2940,7 @@ async syncExternalCalendars(req: AuthRequest, res: Response): Promise<void> {
 
     const icsData = await icsGeneratorService.generateICSFile(
       property.id,
-      property.property_number,
+      property.property_name || null,
       allBlockedDates
     );
 

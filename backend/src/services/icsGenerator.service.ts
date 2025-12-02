@@ -9,7 +9,6 @@ interface CalendarEvent {
 }
 
 class ICSGeneratorService {
-  // ✅ ИСПРАВЛЕНО: Правильный путь к директории
   private icsDirectory = path.join('/var/www/www-root/data/www/admin.novaestate.company/backend/public', 'ics');
 
   constructor() {
@@ -26,19 +25,36 @@ class ICSGeneratorService {
   }
 
   /**
+   * Генерирует безопасное имя файла из названия объекта
+   */
+  private sanitizePropertyName(propertyName: string | null): string {
+    if (!propertyName) return 'Property';
+    
+    // Убираем все символы, кроме букв, цифр и пробелов
+    // Заменяем пробелы на подчеркивание
+    return propertyName
+      .replace(/[^a-zA-Z0-9а-яА-ЯёЁ\s]/g, '')
+      .replace(/\s+/g, '_')
+      .substring(0, 50) // Ограничиваем длину
+      || 'Property';
+  }
+
+  /**
    * Генерирует .ics файл для объекта
+   * НОВЫЙ ФОРМАТ: PropertyName_PropertyID.ics
    */
   async generateICSFile(
     propertyId: number,
-    propertyNumber: string,
+    propertyName: string | null,
     events: CalendarEvent[]
   ): Promise<{ filename: string; filepath: string; url: string }> {
-    const filename = `property_${propertyId}_${propertyNumber}.ics`;
+    const safeName = this.sanitizePropertyName(propertyName);
+    const filename = `${safeName}_${propertyId}.ics`;
     const filepath = path.join(this.icsDirectory, filename);
-    const url = `/ics/${filename}`; // ✅ Относительный путь
+    const url = `/ics/${filename}`;
 
     // Генерируем содержимое .ics файла
-    const icsContent = this.generateICSContent(propertyNumber, events);
+    const icsContent = this.generateICSContent(propertyName || `Property ${propertyId}`, events);
 
     // Сохраняем файл
     await fs.writeFile(filepath, icsContent, 'utf-8');
@@ -55,7 +71,7 @@ class ICSGeneratorService {
   /**
    * Генерирует содержимое .ics файла в формате iCalendar
    */
-  private generateICSContent(propertyNumber: string, events: CalendarEvent[]): string {
+  private generateICSContent(propertyIdentifier: string, events: CalendarEvent[]): string {
     const now = new Date();
     const timestamp = this.formatDateTimeForICS(now);
 
@@ -65,7 +81,7 @@ class ICSGeneratorService {
       'PRODID:-//NovaEstate//Property Calendar//EN',
       'CALSCALE:GREGORIAN',
       'METHOD:PUBLISH',
-      `X-WR-CALNAME:Property ${propertyNumber} - Blocked Dates`,
+      `X-WR-CALNAME:${this.escapeICSText(propertyIdentifier)} - Blocked Dates`,
       'X-WR-TIMEZONE:Asia/Bangkok',
       'X-WR-CALDESC:Blocked dates for property rental'
     ].join('\r\n');
@@ -74,7 +90,7 @@ class ICSGeneratorService {
     const groupedEvents = this.groupConsecutiveDates(events);
 
     groupedEvents.forEach((group, index) => {
-      const eventId = `${propertyNumber}-${index}-${timestamp}`;
+      const eventId = `${propertyIdentifier}-${index}-${timestamp}`;
       const startDate = this.formatDateOnlyForICS(new Date(group.startDate));
       const endDate = this.formatDateOnlyForICS(new Date(new Date(group.endDate).getTime() + 86400000)); // +1 день
       const summary = group.reason || 'Blocked';
@@ -96,7 +112,6 @@ class ICSGeneratorService {
     });
 
     icsContent += '\r\nEND:VCALENDAR';
-
     return icsContent;
   }
 
@@ -110,7 +125,6 @@ class ICSGeneratorService {
   }> {
     if (events.length === 0) return [];
 
-    // Сортируем по дате
     const sorted = [...events].sort((a, b) => 
       new Date(a.blocked_date).getTime() - new Date(b.blocked_date).getTime()
     );
@@ -123,15 +137,13 @@ class ICSGeneratorService {
     };
 
     for (let i = 1; i < sorted.length; i++) {
-      const current = new Date(sorted[i].blocked_date);
-      const previous = new Date(sorted[i - 1].blocked_date);
-      const dayDiff = (current.getTime() - previous.getTime()) / 86400000;
+      const currentDate = new Date(sorted[i].blocked_date);
+      const previousDate = new Date(sorted[i - 1].blocked_date);
+      const dayDiff = (currentDate.getTime() - previousDate.getTime()) / (1000 * 60 * 60 * 24);
 
-      // Если дата следующая и reason одинаковый - добавляем к текущей группе
       if (dayDiff === 1 && sorted[i].reason === currentGroup.reason) {
         currentGroup.endDate = sorted[i].blocked_date;
       } else {
-        // Иначе сохраняем текущую группу и начинаем новую
         groups.push({ ...currentGroup });
         currentGroup = {
           startDate: sorted[i].blocked_date,
