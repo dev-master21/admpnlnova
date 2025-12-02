@@ -292,6 +292,15 @@ export const propertiesApi = {
   async getPreviewUrl(propertyId: number) {
     return api.get(`/properties/${propertyId}/preview-url`);
   },
+  
+  importFromGoogleDrive: (id: number, driveUrl: string) =>
+    api.post(`/properties/${id}/import-from-drive`, { driveUrl }),
+
+  importFromDropbox: (id: number, dropboxUrl: string) =>
+    api.post(`/properties/${id}/import-from-dropbox`, { dropboxUrl }),
+
+  getImportStatus: (id: number) =>
+    api.get(`/properties/${id}/import-status`),
 
 deleteFloorPlan: (propertyId: number) => 
   api.delete(`/properties/${propertyId}/floor-plan`),

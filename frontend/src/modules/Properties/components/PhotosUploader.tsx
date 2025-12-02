@@ -22,7 +22,11 @@ import {
   Divider,
   Center,
   FileButton,
-  Collapse
+  Collapse,
+  TextInput,
+  Transition,
+  Title,
+  RingProgress
 } from '@mantine/core';
 import {
   IconUpload,
@@ -49,7 +53,17 @@ import {
   IconInfoCircle,
   IconX,
   IconCheck,
-  IconAlertCircle
+  IconAlertCircle,
+  IconBrandGoogle,
+  IconBrandDropbox,
+  IconClock,
+  IconClipboard,
+  IconLink,
+  IconPhotoUp,
+  IconVideo,
+  IconAlertTriangle,
+  IconCircleCheck,
+  IconLoader2
 } from '@tabler/icons-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
@@ -66,11 +80,22 @@ interface Photo {
   is_primary: boolean;
 }
 
-// ✅ НОВОЕ: Интерфейс для временного фото
 interface TempPhoto {
   file: File;
   category: string;
   preview: string;
+}
+
+interface ImportStatus {
+  status: 'initializing' | 'downloading' | 'processing' | 'completed' | 'error';
+  message: string;
+  processed: number;
+  total: number;
+  photos: number;
+  videos: number;
+  errors: number;
+  errorDetails: string[];
+  duration?: number;
 }
 
 interface PhotosUploaderProps {
@@ -79,7 +104,7 @@ interface PhotosUploaderProps {
   bedrooms: number;
   onUpdate: () => void;
   viewMode?: boolean;
-  onChange?: (photos: TempPhoto[]) => void; // ✅ НОВОЕ: Колбэк для передачи данных
+  onChange?: (photos: TempPhoto[]) => void;
 }
 
 const CategoryIcons: { [key: string]: any } = {
@@ -99,7 +124,7 @@ const PhotosUploader = ({
   bedrooms: initialBedrooms, 
   onUpdate, 
   viewMode = false,
-  onChange // ✅ НОВОЕ
+  onChange
 }: PhotosUploaderProps) => {
   const { t } = useTranslation();
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -119,7 +144,6 @@ const PhotosUploader = ({
   const [positionModalOpened, { open: openPositionModal, close: closePositionModal }] = useDisclosure(false);
   const [newPosition, setNewPosition] = useState<number | string>('');
   
-  // Модальные окна для удаления
   const [deletePhotoId, setDeletePhotoId] = useState<number | null>(null);
   const [deleteModalOpened, { open: openDeleteModal, close: closeDeleteModal }] = useDisclosure(false);
   
@@ -131,14 +155,20 @@ const PhotosUploader = ({
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [downloadingSelected, setDownloadingSelected] = useState(false);
 
-  // ✅ НОВОЕ: Эффект для передачи данных через колбэк
+  // ✅ Состояния для импорта
+  const [importUrl, setImportUrl] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
+  const [importModalOpened, { open: openImportModal, close: closeImportModal }] = useDisclosure(false);
+  const [importType, setImportType] = useState<'drive' | 'dropbox' | null>(null);
+  const [urlError, setUrlError] = useState<string>('');
+
   useEffect(() => {
     if (isCreatingMode && onChange) {
       onChange(tempPhotos);
     }
   }, [tempPhotos, isCreatingMode, onChange]);
 
-  // ✅ НОВОЕ: Cleanup для preview URLs
   useEffect(() => {
     return () => {
       tempPhotos.forEach(photo => {
@@ -146,6 +176,132 @@ const PhotosUploader = ({
       });
     };
   }, []);
+
+  // ✅ Валидация URL в реальном времени
+  useEffect(() => {
+    if (!importUrl.trim()) {
+      setUrlError('');
+      return;
+    }
+
+  if (importType === 'drive') {
+    const drivePatterns = [
+      /drive\.google\.com\/file\/d\//,
+      /drive\.google\.com\/drive\/folders\//,
+      /drive\.google\.com\/.*[?&]id=/,
+      /drive\.google\.com\/open\?id=/
+    ];
+      const isValid = drivePatterns.some(pattern => pattern.test(importUrl));
+      setUrlError(isValid ? '' : t('photosUploader.invalidDriveUrl'));
+    } else if (importType === 'dropbox') {
+      const isValid = importUrl.includes('dropbox.com');
+      setUrlError(isValid ? '' : t('photosUploader.invalidDropboxUrl'));
+    }
+  }, [importUrl, importType, t]);
+
+  // ✅ Polling для статуса импорта
+  useEffect(() => {
+    if (!importing || isCreatingMode) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await propertiesApi.getImportStatus(propertyId);
+        const status = response.data.data;
+        setImportStatus(status);
+
+        if (status.status === 'completed' || status.status === 'error') {
+          setImporting(false);
+          
+          if (status.status === 'completed') {
+            notifications.show({
+              title: t('common.success'),
+              message: `${t('photosUploader.importCompleted')}: ${status.photos} ${t('photosUploader.photos')}, ${status.videos} ${t('photosUploader.videos')}`,
+              color: 'green',
+              icon: <IconCheck size={18} />,
+              autoClose: 10000
+            });
+            onUpdate();
+          } else {
+            notifications.show({
+              title: t('errors.generic'),
+              message: status.message,
+              color: 'red',
+              icon: <IconX size={18} />,
+              autoClose: false
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching import status:', error);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [importing, propertyId, isCreatingMode, t, onUpdate]);
+
+  // ✅ Вставка из буфера обмена
+  const handlePasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      setImportUrl(text);
+      notifications.show({
+        message: t('photosUploader.urlPasted'),
+        color: 'blue',
+        icon: <IconCheck size={18} />,
+        autoClose: 2000
+      });
+    } catch (error) {
+      notifications.show({
+        message: t('photosUploader.clipboardError'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
+    }
+  };
+
+  // ✅ Обработчик импорта
+  const handleStartImport = async () => {
+    if (!importUrl.trim() || !importType || urlError) return;
+
+    try {
+      setImporting(true);
+      setImportStatus({
+        status: 'initializing',
+        message: t('photosUploader.importStarting'),
+        processed: 0,
+        total: 0,
+        photos: 0,
+        videos: 0,
+        errors: 0,
+        errorDetails: []
+      });
+
+      if (importType === 'drive') {
+        await propertiesApi.importFromGoogleDrive(propertyId, importUrl);
+      } else {
+        await propertiesApi.importFromDropbox(propertyId, importUrl);
+      }
+
+      closeImportModal();
+      setImportUrl('');
+      setUrlError('');
+      
+      notifications.show({
+        title: t('common.info'),
+        message: t('photosUploader.importStarted'),
+        color: 'blue',
+        icon: <IconClock size={18} />
+      });
+    } catch (error: any) {
+      setImporting(false);
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('photosUploader.importError'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
+    }
+  };
 
   useEffect(() => {
     setLocalPhotos(photos);
@@ -253,7 +409,7 @@ const PhotosUploader = ({
   const handleFileSelect = async (files: File[]) => {
     if (files.length === 0) return;
 
-    const oversizedFiles = files.filter(file => file.size > 5000 * 1024 * 1024);
+    const oversizedFiles = files.filter(file => file.size > 50 * 1024 * 1024);
     if (oversizedFiles.length > 0) {
       notifications.show({
         title: t('errors.generic'),
@@ -279,7 +435,6 @@ const PhotosUploader = ({
       return;
     }
 
-    // ✅ ИЗМЕНЕНО: Режим создания - сохраняем в память
     if (isCreatingMode) {
       const newTempPhotos = await Promise.all(
         files.map(async (file) => {
@@ -308,7 +463,6 @@ const PhotosUploader = ({
       return;
     }
 
-    // Режим редактирования - загружаем на сервер
     try {
       setUploading(true);
       setUploadProgress(0);
@@ -344,7 +498,6 @@ const PhotosUploader = ({
     }
   };
 
-  // ✅ ИЗМЕНЕНО: Удаление временного фото с cleanup URL
   const handleDeleteTempPhoto = (index: number) => {
     const photoToDelete = tempPhotos[index];
     URL.revokeObjectURL(photoToDelete.preview);
@@ -768,8 +921,287 @@ const PhotosUploader = ({
     }
   };
 
+  // ✅ Вычисляем прогресс в процентах
+  const progressPercent = importStatus && importStatus.total > 0 
+    ? Math.round((importStatus.processed / importStatus.total) * 100) 
+    : 0;
+
   return (
     <Stack gap="lg">
+      {/* ✅ ПЕРЕРАБОТАННЫЙ: Панель быстрого импорта */}
+      {!isCreatingMode && !viewMode && (
+        <Card 
+          shadow="md" 
+          radius="md" 
+          withBorder
+          style={{
+            background: 'linear-gradient(135deg, rgba(66, 153, 225, 0.1) 0%, rgba(147, 51, 234, 0.1) 100%)',
+            borderColor: 'var(--mantine-color-blue-3)'
+          }}
+        >
+          <Stack gap="lg">
+            {/* Header */}
+            <Group justify="space-between" wrap="nowrap">
+              <Group gap="sm">
+                <ThemeIcon 
+                  size="xl" 
+                  radius="md" 
+                  variant="gradient"
+                  gradient={{ from: 'blue', to: 'cyan', deg: 45 }}
+                >
+                  <IconLink size={24} />
+                </ThemeIcon>
+                <div>
+                  <Title order={4} mb={4}>
+                    {t('photosUploader.bulkImport')}
+                  </Title>
+                  <Text size="sm" c="dimmed">
+                    {t('photosUploader.importDescription')}
+                  </Text>
+                </div>
+              </Group>
+            </Group>
+
+            {/* ✅ Кнопки выбора источника - только если не идет импорт */}
+            {!importing && (
+              <>
+                <Divider />
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                  {/* Google Drive Button */}
+                  <Paper
+                    p="md"
+                    radius="md"
+                    withBorder
+                    style={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      background: 'var(--mantine-color-dark-6)',
+                      borderColor: 'var(--mantine-color-dark-4)'
+                    }}
+                    onClick={() => {
+                      setImportType('drive');
+                      openImportModal();
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(66, 153, 225, 0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <Stack gap="md" align="center">
+                      <ThemeIcon size={60} radius="xl" variant="light" color="red">
+                        <IconBrandGoogle size={32} />
+                      </ThemeIcon>
+                      <div style={{ textAlign: 'center' }}>
+                        <Text fw={600} size="lg" mb={4}>
+                          Google Drive
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {t('photosUploader.importFromFolder')}
+                        </Text>
+                      </div>
+                    </Stack>
+                  </Paper>
+
+                  {/* Dropbox Button */}
+                  <Paper
+                    p="md"
+                    radius="md"
+                    withBorder
+                    style={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      background: 'var(--mantine-color-dark-6)',
+                      borderColor: 'var(--mantine-color-dark-4)'
+                    }}
+                    onClick={() => {
+                      setImportType('dropbox');
+                      openImportModal();
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <Stack gap="md" align="center">
+                      <ThemeIcon size={60} radius="xl" variant="light" color="blue">
+                        <IconBrandDropbox size={32} />
+                      </ThemeIcon>
+                      <div style={{ textAlign: 'center' }}>
+                        <Text fw={600} size="lg" mb={4}>
+                          Dropbox
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {t('photosUploader.importFromArchive')}
+                        </Text>
+                      </div>
+                    </Stack>
+                  </Paper>
+                </SimpleGrid>
+              </>
+            )}
+
+{/* ✅ УЛУЧШЕННЫЙ: Прогресс импорта */}
+{importing && importStatus && (
+  <Transition mounted={importing && !!importStatus} transition="fade" duration={300}>
+    {(styles) => (
+      <Box style={styles}>
+        <Divider mb="md" />
+        
+        <Paper p="lg" radius="md" withBorder bg="dark.7">
+          <Stack gap="lg">
+            {/* Заголовок с статусом */}
+            <Group justify="space-between">
+              <Group gap="sm">
+                {importStatus.status === 'completed' ? (
+                  <ThemeIcon size="lg" radius="xl" color="green" variant="light">
+                    <IconCircleCheck size={20} />
+                  </ThemeIcon>
+                ) : importStatus.status === 'error' ? (
+                  <ThemeIcon size="lg" radius="xl" color="red" variant="light">
+                    <IconAlertTriangle size={20} />
+                  </ThemeIcon>
+                ) : (
+                  <ThemeIcon size="lg" radius="xl" color="blue" variant="light">
+                    <IconLoader2 size={20} className="rotating-icon" />
+                  </ThemeIcon>
+                )}
+                <div>
+                  <Text fw={600} size="lg">
+                    {importStatus.message}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {importStatus.status === 'initializing' && t('photosUploader.preparingImport')}
+                    {importStatus.status === 'downloading' && t('photosUploader.downloadingFiles')}
+                    {importStatus.status === 'processing' && t('photosUploader.processingFiles')}
+                    {importStatus.status === 'completed' && t('photosUploader.importFinished')}
+                    {importStatus.status === 'error' && t('photosUploader.importFailed')}
+                  </Text>
+                </div>
+              </Group>
+              
+              <Badge 
+                size="lg" 
+                variant="filled"
+                color={
+                  importStatus.status === 'completed' ? 'green' :
+                  importStatus.status === 'error' ? 'red' : 'blue'
+                }
+              >
+                {importStatus.status}
+              </Badge>
+            </Group>
+
+            {/* Круговой прогресс с числами */}
+            {importStatus.total > 0 && (
+              <>
+                <Group justify="space-between" align="flex-start">
+                  {/* Левая часть - круговой прогресс */}
+                  <Group gap="xl">
+                    <RingProgress
+                      size={120}
+                      thickness={12}
+                      roundCaps
+                      sections={[
+                        { value: progressPercent, color: importStatus.status === 'error' ? 'red' : 'blue' }
+                      ]}
+                      label={
+                        <Center>
+                          <Stack gap={0} align="center">
+                            <Text size="xl" fw={700}>
+                              {progressPercent}%
+                            </Text>
+                            <Text size="xs" c="dimmed">
+                              {t('photosUploader.complete')}
+                            </Text>
+                          </Stack>
+                        </Center>
+                      }
+                    />
+
+                    {/* Статистика */}
+                    <Stack gap="xs">
+                      <Group gap="xs">
+                        <ThemeIcon size="sm" radius="xl" color="blue" variant="light">
+                          <IconPhotoUp size={14} />
+                        </ThemeIcon>
+                        <Text size="sm">
+                          <Text span fw={600}>{importStatus.photos}</Text> {t('photosUploader.photos')}
+                        </Text>
+                      </Group>
+                      
+                      <Group gap="xs">
+                        <ThemeIcon size="sm" radius="xl" color="grape" variant="light">
+                          <IconVideo size={14} />
+                        </ThemeIcon>
+                        <Text size="sm">
+                          <Text span fw={600}>{importStatus.videos}</Text> {t('photosUploader.videos')}
+                        </Text>
+                      </Group>
+                      
+                      {importStatus.errors > 0 && (
+                        <Group gap="xs">
+                          <ThemeIcon size="sm" radius="xl" color="red" variant="light">
+                            <IconAlertCircle size={14} />
+                          </ThemeIcon>
+                          <Text size="sm" c="red">
+                            <Text span fw={600}>{importStatus.errors}</Text> {t('common.errors')}
+                          </Text>
+                        </Group>
+                      )}
+                      
+                      <Divider my={4} />
+                      
+                      <Text size="xs" c="dimmed">
+                        {importStatus.processed} / {importStatus.total} {t('photosUploader.filesProcessed')}
+                      </Text>
+                    </Stack>
+                  </Group>
+                </Group>
+
+                {/* Линейный прогресс-бар */}
+                <Progress
+                  value={progressPercent}
+                  size="xl"
+                  radius="xl"
+                  animated={importStatus.status === 'processing'}
+                  color={importStatus.status === 'error' ? 'red' : 'blue'}
+                  styles={{
+                    label: { fontSize: '14px', fontWeight: 600 }
+                  }}
+                />
+              </>
+            )}
+
+            {/* Предупреждение об ошибках */}
+            {importStatus.errors > 0 && (
+              <Alert 
+                color="orange" 
+                icon={<IconAlertCircle size={16} />}
+                title={t('photosUploader.errorsDetected')}
+              >
+                <Text size="sm">
+                  {t('photosUploader.someFilesNotProcessed', { count: importStatus.errors })}
+                </Text>
+              </Alert>
+            )}
+          </Stack>
+        </Paper>
+      </Box>
+    )}
+  </Transition>
+)}
+          </Stack>
+        </Card>
+      )}
+
       {/* Selection and Download Panel */}
       {!isCreatingMode && localPhotos.length > 0 && (
         <Paper p="md" radius="md" withBorder bg="dark.6">
@@ -822,7 +1254,6 @@ const PhotosUploader = ({
               </Group>
             </Group>
 
-            {/* Массовые действия */}
             {selectedPhotos.size > 0 && (
               <>
                 <Divider />
@@ -1161,7 +1592,6 @@ const PhotosUploader = ({
                                         cursor: viewMode ? 'default' : 'move'
                                       }}
                                     >
-                                      {/* Selection Checkbox */}
                                       <Checkbox
                                         checked={selectedPhotos.has(photo.id)}
                                         onChange={() => handleTogglePhoto(photo.id)}
@@ -1179,7 +1609,6 @@ const PhotosUploader = ({
                                         }}
                                       />
 
-                                      {/* Photo Image */}
                                       <Image
                                         src={photo.photo_url}
                                         alt={`Photo ${photo.id}`}
@@ -1187,7 +1616,6 @@ const PhotosUploader = ({
                                         fit="cover"
                                       />
 
-                                      {/* Primary Badge */}
                                       {photo.is_primary && (
                                         <Badge
                                           variant="filled"
@@ -1203,7 +1631,6 @@ const PhotosUploader = ({
                                         </Badge>
                                       )}
 
-                                      {/* Position Badge */}
                                       <Badge
                                         variant="filled"
                                         color="dark"
@@ -1216,7 +1643,6 @@ const PhotosUploader = ({
                                         #{index + 1}
                                       </Badge>
 
-                                      {/* Action Buttons */}
                                       {!viewMode && (
                                         <Group
                                           gap={4}
@@ -1442,6 +1868,160 @@ const PhotosUploader = ({
           </Group>
         </Stack>
       </Modal>
+
+      {/* ✅ ПЕРЕРАБОТАННОЕ: Модальное окно импорта */}
+      <Modal
+        opened={importModalOpened}
+        onClose={() => {
+          closeImportModal();
+          setImportUrl('');
+          setImportType(null);
+          setUrlError('');
+        }}
+        title={
+          <Group gap="sm">
+            <ThemeIcon 
+              size="lg" 
+              radius="md" 
+              variant="gradient"
+              gradient={importType === 'drive' ? 
+                { from: 'red', to: 'orange', deg: 45 } : 
+                { from: 'blue', to: 'cyan', deg: 45 }
+              }
+            >
+              {importType === 'drive' ? <IconBrandGoogle size={20} /> : <IconBrandDropbox size={20} />}
+            </ThemeIcon>
+            <Text fw={600}>
+              {importType === 'drive' ? 'Google Drive' : 'Dropbox'}
+            </Text>
+          </Group>
+        }
+        size="lg"
+        centered
+      >
+        <Stack gap="lg">
+          {/* Инструкции */}
+          <Alert color="blue" variant="light" icon={<IconInfoCircle size={16} />}>
+            <Text size="sm" fw={500} mb={4}>
+              {importType === 'drive' 
+                ? t('photosUploader.howToImportDrive')
+                : t('photosUploader.howToImportDropbox')
+              }
+            </Text>
+            <Text size="xs" c="dimmed">
+              {importType === 'drive' 
+                ? t('photosUploader.driveInstructions')
+                : t('photosUploader.dropboxInstructions')
+              }
+            </Text>
+          </Alert>
+
+          {/* Поле ввода с кнопкой вставки */}
+          <Box>
+            <TextInput
+              label={t('photosUploader.pasteLink')}
+              placeholder={importType === 'drive' 
+                ? 'https://drive.google.com/drive/folders/...'
+                : 'https://www.dropbox.com/...'
+              }
+              value={importUrl}
+              onChange={(e) => setImportUrl(e.target.value)}
+              size="md"
+              error={urlError}
+              rightSection={
+                <Tooltip label={t('photosUploader.pasteFromClipboard')}>
+                  <ActionIcon
+                    variant="subtle"
+                    color="blue"
+                    onClick={handlePasteFromClipboard}
+                    size="lg"
+                  >
+                    <IconClipboard size={18} />
+                  </ActionIcon>
+                </Tooltip>
+              }
+              rightSectionWidth={50}
+              styles={{
+                input: { fontSize: '14px', paddingRight: 50 }
+              }}
+            />
+            <Text size="xs" c="dimmed" mt={4}>
+              {t('photosUploader.clickPasteButton')}
+            </Text>
+          </Box>
+
+          {/* Примеры ссылок */}
+          <Paper p="sm" radius="md" bg="dark.6">
+            <Text size="xs" fw={500} mb={8} c="dimmed">
+              {t('photosUploader.exampleLinks')}:
+            </Text>
+            <Stack gap={4}>
+              {importType === 'drive' ? (
+                <>
+                  <Text size="xs" c="dimmed" ff="monospace">
+                    drive.google.com/drive/folders/xxxxx
+                  </Text>
+                  <Text size="xs" c="dimmed" ff="monospace">
+                    drive.google.com/file/d/xxxxx/view
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text size="xs" c="dimmed" ff="monospace">
+                    dropbox.com/scl/fo/xxxxx
+                  </Text>
+                  <Text size="xs" c="dimmed" ff="monospace">
+                    dropbox.com/s/xxxxx
+                  </Text>
+                </>
+              )}
+            </Stack>
+          </Paper>
+
+          {/* Кнопки */}
+          <Group justify="space-between">
+            <Button
+              variant="subtle"
+              onClick={() => {
+                closeImportModal();
+                setImportUrl('');
+                setImportType(null);
+                setUrlError('');
+              }}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              onClick={handleStartImport}
+              disabled={!importUrl.trim() || !!urlError}
+              leftSection={importType === 'drive' ? <IconBrandGoogle size={18} /> : <IconBrandDropbox size={18} />}
+              variant="gradient"
+              gradient={importType === 'drive' ? 
+                { from: 'red', to: 'orange', deg: 45 } : 
+                { from: 'blue', to: 'cyan', deg: 45 }
+              }
+            >
+              {t('photosUploader.startImport')}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* ✅ CSS для анимации */}
+      <style>{`
+        @keyframes rotate {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
+        
+        .rotating-icon {
+          animation: rotate 2s linear infinite;
+        }
+      `}</style>
     </Stack>
   );
 };

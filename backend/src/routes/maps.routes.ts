@@ -48,7 +48,25 @@ router.post('/expand-url', async (req: Request, res: Response) => {
       }
     }
 
-    const coordinates = extractCoordinates(finalUrl);
+    let coordinates = extractCoordinates(finalUrl);
+
+    // ✅ МЕТОД 1: Если не удалось извлечь координаты напрямую, пробуем через адрес из параметра q
+    if (!coordinates) {
+      const addressFromQuery = extractAddressFromQueryParam(finalUrl);
+      if (addressFromQuery && GOOGLE_MAPS_API_KEY) {
+        logger.info(`Extracted address from query: ${addressFromQuery}, attempting to geocode`);
+        coordinates = await getCoordinatesFromAddress(addressFromQuery);
+      }
+    }
+
+    // ✅ МЕТОД 2: Если все еще нет координат, пробуем через Place ID
+    if (!coordinates) {
+      const placeId = extractPlaceId(finalUrl);
+      if (placeId && GOOGLE_MAPS_API_KEY) {
+        logger.info(`Extracted Place ID: ${placeId}, attempting to get coordinates via API`);
+        coordinates = await getCoordinatesFromPlaceId(placeId);
+      }
+    }
 
     if (coordinates) {
       logger.info(`Extracted coordinates: ${coordinates.lat}, ${coordinates.lng}`);
@@ -94,6 +112,144 @@ router.post('/expand-url', async (req: Request, res: Response) => {
 });
 
 /**
+ * ✅ НОВАЯ ФУНКЦИЯ: Извлечение адреса из параметра q
+ */
+function extractAddressFromQueryParam(url: string): string | null {
+  try {
+    const match = url.match(/[?&]q=([^&]+)/);
+    if (match) {
+      const encodedAddress = match[1];
+      const decodedAddress = decodeURIComponent(encodedAddress)
+        .replace(/\+/g, ' ')
+        .trim();
+      
+      // Проверяем, что это не просто координаты
+      if (decodedAddress && !decodedAddress.match(/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/)) {
+        logger.info(`Extracted address from q parameter: ${decodedAddress}`);
+        return decodedAddress;
+      }
+    }
+    return null;
+  } catch (error) {
+    logger.error('Error extracting address from query param:', error);
+    return null;
+  }
+}
+
+/**
+ * ✅ НОВАЯ ФУНКЦИЯ: Получение координат по адресу через Google Geocoding API
+ */
+async function getCoordinatesFromAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    if (!GOOGLE_MAPS_API_KEY) {
+      logger.warn('Google Maps API key is not configured');
+      return null;
+    }
+
+    const encodedAddress = encodeURIComponent(address);
+    const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodedAddress}&key=${GOOGLE_MAPS_API_KEY}`;
+    
+    logger.info(`Geocoding address: ${address}`);
+
+    const response = await axios.get(geocodeUrl, {
+      timeout: 10000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+
+    if (response.data.status === 'OK' && response.data.results && response.data.results.length > 0) {
+      const location = response.data.results[0].geometry?.location;
+      if (location && location.lat && location.lng) {
+        logger.info(`Got coordinates from address: ${location.lat}, ${location.lng}`);
+        return {
+          lat: location.lat,
+          lng: location.lng
+        };
+      }
+    }
+    
+    logger.warn(`Geocoding by address failed: ${response.data.status}`);
+    return null;
+  } catch (error: any) {
+    logger.error('Error geocoding address:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Извлечение Place ID из URL
+ */
+function extractPlaceId(url: string): string | null {
+  try {
+    // Формат: ftid=0x3050373609bd112b:0xb8e33e9b5c5d1597
+    const ftidMatch = url.match(/[?&]ftid=([^&]+)/);
+    if (ftidMatch) {
+      logger.info(`Extracted ftid: ${ftidMatch[1]}`);
+      return ftidMatch[1];
+    }
+
+    // Формат: place_id=ChIJ...
+    const placeIdMatch = url.match(/[?&]place_id=([^&]+)/);
+    if (placeIdMatch) {
+      logger.info(`Extracted place_id: ${placeIdMatch[1]}`);
+      return placeIdMatch[1];
+    }
+
+    return null;
+  } catch (error) {
+    logger.error('Error extracting Place ID:', error);
+    return null;
+  }
+}
+
+/**
+ * Получение координат по Place ID через Google Places API
+ */
+async function getCoordinatesFromPlaceId(placeId: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    if (!GOOGLE_MAPS_API_KEY) {
+      logger.warn('Google Maps API key is not configured');
+      return null;
+    }
+
+    // ✅ ИСПРАВЛЕНО: Для hex Place ID (формат: 0x...:0x...) не используем API
+    // так как это внутренний формат Google, который не работает с публичными API
+    if (placeId.startsWith('0x')) {
+      logger.info(`Place ID is in hex format, skipping API call (not supported)`);
+      return null;
+    }
+
+    // Для обычного Place ID используем Places API
+    const placesUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=geometry&key=${GOOGLE_MAPS_API_KEY}`;
+    
+    logger.info(`Getting place details for: ${placeId}`);
+
+    const response = await axios.get(placesUrl, {
+      timeout: 10000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+
+    if (response.data.status === 'OK' && response.data.result?.geometry?.location) {
+      const location = response.data.result.geometry.location;
+      logger.info(`Got coordinates from Place ID: ${location.lat}, ${location.lng}`);
+      return {
+        lat: location.lat,
+        lng: location.lng
+      };
+    }
+
+    logger.warn(`Places API failed: ${response.data.status}`);
+    return null;
+  } catch (error: any) {
+    logger.error('Error getting coordinates from Place ID:', error.message);
+    return null;
+  }
+}
+
+/**
  * Получение адреса по координатам через Google Geocoding API
  */
 async function getAddressFromCoordinates(lat: number, lng: number): Promise<string | null> {
@@ -117,10 +273,8 @@ async function getAddressFromCoordinates(lat: number, lng: number): Promise<stri
     if (response.data.status === 'OK' && response.data.results && response.data.results.length > 0) {
       const result = response.data.results[0];
       
-      // ✅ ИСПРАВЛЕНО: Используем formatted_address или собираем из компонентов
       let address = result.formatted_address;
       
-      // Если formatted_address пустой - собираем адрес из компонентов
       if (!address && result.address_components) {
         address = buildDetailedAddress(result.address_components);
         logger.info(`Built address from components: ${address}`);
@@ -141,7 +295,6 @@ async function getAddressFromCoordinates(lat: number, lng: number): Promise<stri
 }
 
 /**
- * ✅ ИСПРАВЛЕНО: Теперь используется
  * Построение детального адреса из компонентов Google Geocoding API
  */
 function buildDetailedAddress(addressComponents: any[]): string {
@@ -296,7 +449,22 @@ function extractCoordinates(url: string): { lat: number; lng: number } | null {
   try {
     logger.info(`Attempting to extract coordinates from: ${url}`);
 
-    let match = url.match(/\/search\/(-?\d+\.?\d*),\s*\+?(-?\d+\.?\d*)/);
+    // ✅ ПАТТЕРН 1: @lat,lng,zoomm (например @7.998158,98.3251492,639m)
+    let match = url.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*),\d+[a-z]/i);
+    if (match) {
+      logger.info('Pattern matched: @lat,lng,zoomm');
+      return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+    }
+
+    // ✅ ПАТТЕРН 2: @lat,lng,zoom (например @7.998158,98.3251492,17z)
+    match = url.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*),[\d.]+z/i);
+    if (match) {
+      logger.info('Pattern matched: @lat,lng,zoomz');
+      return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+    }
+
+    // Существующие паттерны
+    match = url.match(/\/search\/(-?\d+\.?\d*),\s*\+?(-?\d+\.?\d*)/);
     if (match) {
       logger.info('Pattern matched: /search/lat,lng');
       return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };

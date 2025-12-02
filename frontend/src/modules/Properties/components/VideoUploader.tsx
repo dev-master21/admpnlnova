@@ -48,7 +48,6 @@ interface Video {
   thumbnail_url?: string;
 }
 
-// ✅ НОВОЕ: Интерфейс для временного видео
 interface TempVideo {
   file: File;
   title?: string;
@@ -61,7 +60,7 @@ interface VideoUploaderProps {
   videos?: Video[];
   onUpdate: () => void;
   viewMode?: boolean;
-  onChange?: (videos: TempVideo[]) => void; // ✅ НОВОЕ: Колбэк для передачи данных
+  onChange?: (videos: TempVideo[]) => void;
 }
 
 const VideoUploader = ({ 
@@ -69,7 +68,7 @@ const VideoUploader = ({
   videos = [], 
   onUpdate, 
   viewMode = false,
-  onChange // ✅ НОВОЕ
+  onChange
 }: VideoUploaderProps) => {
   const { t } = useTranslation();
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -77,7 +76,6 @@ const VideoUploader = ({
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   
-  // ✅ НОВОЕ: Состояние для временных видео
   const [tempVideos, setTempVideos] = useState<TempVideo[]>([]);
   const isCreatingMode = propertyId === 0;
 
@@ -86,30 +84,24 @@ const VideoUploader = ({
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   
-  // ✅ НОВОЕ: Состояния для редактирования временного видео
   const [editingTempVideoIndex, setEditingTempVideoIndex] = useState<number | null>(null);
   const [tempEditTitle, setTempEditTitle] = useState('');
   const [tempEditDescription, setTempEditDescription] = useState('');
   
   const [playerModalOpened, { open: openPlayerModal, close: closePlayerModal }] = useDisclosure(false);
   const [playingVideo, setPlayingVideo] = useState<Video | null>(null);
-  
-  // ✅ НОВОЕ: Состояние для проигрывания временного видео
   const [playingTempVideo, setPlayingTempVideo] = useState<TempVideo | null>(null);
   
-  // Модальное окно для удаления
   const [deleteModalOpened, { open: openDeleteModal, close: closeDeleteModal }] = useDisclosure(false);
   const [deletingVideo, setDeletingVideo] = useState<Video | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // ✅ НОВОЕ: Эффект для передачи данных через колбэк
   useEffect(() => {
     if (isCreatingMode && onChange) {
       onChange(tempVideos);
     }
   }, [tempVideos, isCreatingMode, onChange]);
 
-  // ✅ НОВОЕ: Cleanup для preview URLs
   useEffect(() => {
     return () => {
       tempVideos.forEach(video => {
@@ -140,7 +132,6 @@ const VideoUploader = ({
       return;
     }
 
-    // ✅ ИЗМЕНЕНО: Режим создания - сохраняем в память
     if (isCreatingMode) {
       const newTempVideos: TempVideo[] = files.map(file => {
         const preview = URL.createObjectURL(file);
@@ -161,7 +152,6 @@ const VideoUploader = ({
       return;
     }
 
-    // Режим редактирования - загружаем на сервер
     try {
       setUploading(true);
       setUploadProgress(0);
@@ -195,7 +185,6 @@ const VideoUploader = ({
     }
   };
 
-  // ✅ НОВОЕ: Удаление временного видео
   const handleRemoveTempVideo = (index: number) => {
     const videoToDelete = tempVideos[index];
     URL.revokeObjectURL(videoToDelete.preview);
@@ -209,7 +198,6 @@ const VideoUploader = ({
     });
   };
 
-  // ✅ НОВОЕ: Редактирование временного видео
   const handleEditTempVideo = (index: number) => {
     const video = tempVideos[index];
     setEditingTempVideoIndex(index);
@@ -218,7 +206,6 @@ const VideoUploader = ({
     openEditModal();
   };
 
-  // ✅ НОВОЕ: Сохранение изменений временного видео
   const handleSaveTempVideoEdit = () => {
     if (editingTempVideoIndex === null) return;
 
@@ -317,7 +304,6 @@ const VideoUploader = ({
     openPlayerModal();
   };
 
-  // ✅ НОВОЕ: Воспроизведение временного видео
   const handlePlayTempVideo = (video: TempVideo) => {
     setPlayingTempVideo(video);
     setPlayingVideo(null);
@@ -416,10 +402,14 @@ const VideoUploader = ({
               <Text size="sm">
                 {t('videoUploader.maxSize')}
               </Text>
+              {!isCreatingMode && (
+                <Text size="sm" mt="xs">
+                  {t('videoUploader.importHint')}
+                </Text>
+              )}
             </Alert>
           )}
 
-          {/* ✅ НОВОЕ: Alert о временном хранении */}
           {isCreatingMode && tempVideos.length > 0 && (
             <Alert icon={<IconInfoCircle size={18} />} color="orange" variant="light">
               <Text size="sm">
@@ -441,12 +431,17 @@ const VideoUploader = ({
                   <Text size="lg" c="dimmed" ta="center">
                     {t('videoUploader.noVideos')}
                   </Text>
+                  {!isCreatingMode && (
+                    <Text size="sm" c="dimmed" ta="center">
+                      {t('videoUploader.uploadOrImportVideos')}
+                    </Text>
+                  )}
                 </Stack>
               </Center>
             </Paper>
           )}
 
-          {/* ✅ НОВОЕ: Temporary Videos List */}
+          {/* Temporary Videos List */}
           {isCreatingMode && tempVideos.length > 0 && (
             <Stack gap="md">
               <Text size="sm" fw={600} c="dimmed">
@@ -479,7 +474,6 @@ const VideoUploader = ({
                         }}
                       />
                       
-                      {/* Play Button Overlay */}
                       <Center
                         style={{
                           position: 'absolute',
@@ -603,7 +597,6 @@ const VideoUploader = ({
                         />
                       )}
                       
-                      {/* Play Button Overlay */}
                       <Center
                         style={{
                           position: 'absolute',

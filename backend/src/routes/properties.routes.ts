@@ -16,7 +16,8 @@ import {
   uploadVideo 
 } from '../config/upload.config';
 import { generatePreviewUrl } from '../utils/previewToken';
-
+import logger from '../utils/logger';
+import db from '../config/database';
 
 const router = Router();
 
@@ -92,6 +93,127 @@ router.patch(
   authenticate, 
   canEditProperty,
   propertiesController.setPrimaryPhoto.bind(propertiesController)
+);
+
+// ✅ НОВОЕ: Импорт медиа из Google Drive и Dropbox
+router.post(
+  '/:id/import-from-drive',
+  authenticate,
+  canEditProperty,
+  async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const { driveUrl } = req.body;
+
+      if (!driveUrl) {
+        return res.status(400).json({
+          success: false,
+          message: 'Не указана ссылка на Google Drive'
+        });
+      }
+
+      // Проверяем существование объекта
+      const property = await db.queryOne(
+        'SELECT id FROM properties WHERE id = ? AND deleted_at IS NULL',
+        [id]
+      );
+
+      if (!property) {
+        return res.status(404).json({
+          success: false,
+          message: 'Объект не найден'
+        });
+      }
+
+      // Запускаем импорт асинхронно
+      const mediaImportService = require('../services/mediaImport.service').default;
+      mediaImportService.importFromGoogleDrive(parseInt(id), driveUrl);
+
+      res.status(202).json({
+        success: true,
+        message: 'Импорт из Google Drive начат. Проверяйте статус через /import-status'
+      });
+    } catch (error: any) {
+      logger.error('Start Google Drive import error:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Ошибка запуска импорта'
+      });
+    }
+  }
+);
+
+router.post(
+  '/:id/import-from-dropbox',
+  authenticate,
+  canEditProperty,
+  async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const { dropboxUrl } = req.body;
+
+      if (!dropboxUrl) {
+        return res.status(400).json({
+          success: false,
+          message: 'Не указана ссылка на Dropbox'
+        });
+      }
+
+      // Проверяем существование объекта
+      const property = await db.queryOne(
+        'SELECT id FROM properties WHERE id = ? AND deleted_at IS NULL',
+        [id]
+      );
+
+      if (!property) {
+        return res.status(404).json({
+          success: false,
+          message: 'Объект не найден'
+        });
+      }
+
+      // Запускаем импорт асинхронно
+      const mediaImportService = require('../services/mediaImport.service').default;
+      mediaImportService.importFromDropbox(parseInt(id), dropboxUrl);
+
+      res.status(202).json({
+        success: true,
+        message: 'Импорт из Dropbox начат. Проверяйте статус через /import-status'
+      });
+    } catch (error: any) {
+      logger.error('Start Dropbox import error:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Ошибка запуска импорта'
+      });
+    }
+  }
+);
+
+// Получение статуса импорта
+router.get(
+  '/:id/import-status',
+  authenticate,
+  requirePermission('properties.read'),
+  async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      
+      const mediaImportService = require('../services/mediaImport.service').default;
+      const status = mediaImportService.getImportStatus(parseInt(id));
+
+      res.json({
+        success: true,
+        data: status
+      });
+    } catch (error: any) {
+      logger.error('Get import status error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Ошибка получения статуса'
+      });
+    }
+  }
 );
 
 // Планировка
