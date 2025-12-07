@@ -3,41 +3,65 @@ import { useState, useEffect } from 'react';
 import {
   Card,
   Button,
-  Space,
-  Descriptions,
-  Table,
-  Tag,
+  Badge,
+  Stack,
+  Group,
+  Text,
+  Title,
+  Grid,
+  Paper,
+  Image,
+  Center,
+  Loader,
   Divider,
-  message,
-  Modal,
-  Row,
-  Col,
-  Statistic,
-  Typography,
-  Image
-} from 'antd';
+  Box,
+  ThemeIcon,
+  useMantineTheme,
+  RingProgress,
+  SimpleGrid,
+  Table,
+  Progress
+} from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { modals } from '@mantine/modals';
+import { useMediaQuery } from '@mantine/hooks';
 import {
-  ArrowLeftOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  DownloadOutlined,
-  FileTextOutlined,
-  QrcodeOutlined,
-  LinkOutlined
-} from '@ant-design/icons';
+  IconArrowLeft,
+  IconTrash,
+  IconDownload,
+  IconFileText,
+  IconQrcode,
+  IconEdit,
+  IconLink,
+  IconCheck,
+  IconX,
+  IconCurrencyBaht,
+  IconCalendar,
+  IconUser,
+  IconFileInvoice,
+  IconReceipt,
+  IconCreditCard,
+  IconBuildingBank,
+  IconPackage,
+  IconAlertCircle,
+  IconBuilding,
+  IconClock,
+  IconInfoCircle,
+  IconChartPie,
+  IconPercentage
+} from '@tabler/icons-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { financialDocumentsApi, Invoice, Receipt } from '@/api/financialDocuments.api';
-import type { ColumnsType } from 'antd/es/table';
-import './InvoiceDetail.css';
+import { financialDocumentsApi, Invoice } from '@/api/financialDocuments.api';
 import EditInvoiceModal from './components/EditInvoiceModal';
-
-const { Title, Text } = Typography;
 
 const InvoiceDetail = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const theme = useMantineTheme();
   const { id } = useParams<{ id: string }>();
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -54,7 +78,12 @@ const InvoiceDetail = () => {
       const response = await financialDocumentsApi.getInvoiceById(Number(id));
       setInvoice(response.data.data);
     } catch (error: any) {
-      message.error(t('invoiceDetail.messages.loadError'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('invoiceDetail.messages.loadError'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
       navigate('/financial-documents');
     } finally {
       setLoading(false);
@@ -62,19 +91,35 @@ const InvoiceDetail = () => {
   };
 
   const handleDelete = () => {
-    Modal.confirm({
+    modals.openConfirmModal({
       title: t('invoiceDetail.confirm.deleteTitle'),
-      content: t('invoiceDetail.confirm.deleteDescription'),
-      okText: t('common.delete'),
-      okType: 'danger',
-      cancelText: t('common.cancel'),
-      onOk: async () => {
+      children: (
+        <Text size="sm">
+          {t('invoiceDetail.confirm.deleteDescription')}
+        </Text>
+      ),
+      labels: {
+        confirm: t('common.delete'),
+        cancel: t('common.cancel')
+      },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
         try {
           await financialDocumentsApi.deleteInvoice(Number(id));
-          message.success(t('invoiceDetail.messages.deleted'));
+          notifications.show({
+            title: t('common.success'),
+            message: t('invoiceDetail.messages.deleted'),
+            color: 'green',
+            icon: <IconCheck size={18} />
+          });
           navigate('/financial-documents');
         } catch (error: any) {
-          message.error(t('invoiceDetail.messages.deleteError'));
+          notifications.show({
+            title: t('errors.generic'),
+            message: t('invoiceDetail.messages.deleteError'),
+            color: 'red',
+            icon: <IconX size={18} />
+          });
         }
       }
     });
@@ -82,22 +127,45 @@ const InvoiceDetail = () => {
 
   const handleCopyLink = async () => {
     if (!invoice?.uuid) {
-      message.error(t('invoiceDetail.messages.uuidNotFound'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('invoiceDetail.messages.uuidNotFound'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
       return;
     }
     
     const link = `https://admin.novaestate.company/invoice-verify/${invoice.uuid}`;
     try {
       await navigator.clipboard.writeText(link);
-      message.success(t('invoiceDetail.messages.linkCopied'));
+      notifications.show({
+        title: t('common.success'),
+        message: t('invoiceDetail.messages.linkCopied'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
     } catch (error) {
-      message.error(t('invoiceDetail.messages.linkCopyError'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('invoiceDetail.messages.linkCopyError'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     }
   };
 
   const handleDownloadPDF = async () => {
     try {
-      message.loading({ content: t('invoiceDetail.messages.generatingPDF'), key: 'pdf' });
+      notifications.show({
+        id: 'pdf-download',
+        loading: true,
+        title: t('invoiceDetail.messages.generatingPDF'),
+        message: t('common.pleaseWait'),
+        autoClose: false,
+        withCloseButton: false
+      });
+
       const response = await financialDocumentsApi.downloadInvoicePDF(Number(id));
       
       const blob = new Blob([response.data], { type: 'application/pdf' });
@@ -110,466 +178,891 @@ const InvoiceDetail = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
       
-      message.success({ content: t('invoiceDetail.messages.pdfDownloaded'), key: 'pdf' });
+      notifications.update({
+        id: 'pdf-download',
+        color: 'green',
+        title: t('common.success'),
+        message: t('invoiceDetail.messages.pdfDownloaded'),
+        icon: <IconCheck size={18} />,
+        loading: false,
+        autoClose: 3000
+      });
     } catch (error: any) {
-      message.error({ content: t('invoiceDetail.messages.pdfDownloadError'), key: 'pdf' });
+      notifications.update({
+        id: 'pdf-download',
+        color: 'red',
+        title: t('errors.generic'),
+        message: t('invoiceDetail.messages.pdfDownloadError'),
+        icon: <IconX size={18} />,
+        loading: false,
+        autoClose: 3000
+      });
     }
   };
 
-  const getStatusTag = (status: string) => {
-    const statusConfig: Record<string, { color: string; text: string }> = {
-      draft: { color: 'default', text: t('invoiceDetail.statuses.draft') },
-      sent: { color: 'processing', text: t('invoiceDetail.statuses.sent') },
-      partially_paid: { color: 'warning', text: t('invoiceDetail.statuses.partiallyPaid') },
-      paid: { color: 'success', text: t('invoiceDetail.statuses.paid') },
-      overdue: { color: 'error', text: t('invoiceDetail.statuses.overdue') },
-      cancelled: { color: 'default', text: t('invoiceDetail.statuses.cancelled') }
+  const getStatusBadge = (status: string) => {
+    const statusConfig: Record<string, { color: string; icon: React.ReactNode }> = {
+      draft: { color: 'gray', icon: <IconEdit size={14} /> },
+      sent: { color: 'blue', icon: <IconClock size={14} /> },
+      partially_paid: { color: 'yellow', icon: <IconPercentage size={14} /> },
+      paid: { color: 'green', icon: <IconCheck size={14} /> },
+      overdue: { color: 'red', icon: <IconAlertCircle size={14} /> },
+      cancelled: { color: 'gray', icon: <IconX size={14} /> }
     };
     
-    const config = statusConfig[status] || { color: 'default', text: status };
-    return <Tag color={config.color}>{config.text}</Tag>;
+    const config = statusConfig[status] || { color: 'gray', icon: null };
+    const text = t(`invoiceDetail.statuses.${status}`);
+    
+    return (
+      <Badge 
+        size="lg" 
+        color={config.color} 
+        variant="light"
+        leftSection={config.icon}
+      >
+        {text}
+      </Badge>
+    );
+  };
+
+  const getPaymentMethodText = (method: string) => {
+    return t(`invoiceDetail.paymentMethods.${method}`);
+  };
+
+  const getReceiptStatusBadge = (status: string) => {
+    const statusConfig: Record<string, { color: string; icon: React.ReactNode }> = {
+      pending: { color: 'blue', icon: <IconClock size={12} /> },
+      verified: { color: 'green', icon: <IconCheck size={12} /> },
+      rejected: { color: 'red', icon: <IconX size={12} /> }
+    };
+    
+    const config = statusConfig[status] || { color: 'gray', icon: null };
+    const text = t(`invoiceDetail.receiptStatuses.${status}`);
+    
+    return (
+      <Badge 
+        size="sm" 
+        color={config.color} 
+        variant="light"
+        leftSection={config.icon}
+      >
+        {text}
+      </Badge>
+    );
   };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US').format(amount);
   };
 
-  const getPaymentMethodText = (method: string) => {
-    const methods: Record<string, string> = {
-      bank_transfer: t('invoiceDetail.paymentMethods.bank'),
-      cash: t('invoiceDetail.paymentMethods.cash'),
-      crypto: t('invoiceDetail.paymentMethods.crypto'),
-      barter: t('invoiceDetail.paymentMethods.barter')
-    };
-    return methods[method] || method;
-  };
-
-  const getReceiptStatusTag = (status: string) => {
-    const statusConfig: Record<string, { color: string; text: string }> = {
-      pending: { color: 'processing', text: t('invoiceDetail.receiptStatuses.pending') },
-      verified: { color: 'success', text: t('invoiceDetail.receiptStatuses.verified') },
-      rejected: { color: 'error', text: t('invoiceDetail.receiptStatuses.rejected') }
-    };
-    const config = statusConfig[status] || { color: 'default', text: status };
-    return <Tag color={config.color}>{config.text}</Tag>;
-  };
-
-  const itemColumns: ColumnsType<any> = [
-    {
-      title: t('invoiceDetail.table.items.number'),
-      key: 'index',
-      width: 50,
-      render: (_, __, index) => index + 1,
-      responsive: ['md']
-    },
-    {
-      title: t('invoiceDetail.table.items.description'),
-      dataIndex: 'description',
-      key: 'description',
-      ellipsis: true
-    },
-    {
-      title: t('invoiceDetail.table.items.quantity'),
-      dataIndex: 'quantity',
-      key: 'quantity',
-      width: 80,
-      align: 'center',
-      responsive: ['md']
-    },
-    {
-      title: t('invoiceDetail.table.items.price'),
-      dataIndex: 'unit_price',
-      key: 'unit_price',
-      width: 120,
-      align: 'right',
-      render: (price) => `${formatCurrency(price)} THB`,
-      responsive: ['lg']
-    },
-    {
-      title: t('invoiceDetail.table.items.total'),
-      dataIndex: 'total_price',
-      key: 'total_price',
-      width: 140,
-      align: 'right',
-      render: (price) => (
-        <span style={{ fontWeight: 600 }}>
-          {formatCurrency(price)} THB
-        </span>
-      )
-    }
-  ];
-
-  const receiptColumns: ColumnsType<Receipt> = [
-    {
-      title: t('invoiceDetail.table.receipts.receiptNumber'),
-      dataIndex: 'receipt_number',
-      key: 'receipt_number',
-      render: (text, record) => (
-        <Button 
-          type="link" 
-          onClick={() => navigate(`/financial-documents/receipts/${record.id}`)}
-        >
-          {text}
-        </Button>
-      )
-    },
-    {
-      title: t('invoiceDetail.table.receipts.date'),
-      dataIndex: 'receipt_date',
-      key: 'receipt_date',
-      width: 120,
-      render: (date) => new Date(date).toLocaleDateString('ru-RU'),
-      responsive: ['md']
-    },
-    {
-      title: t('invoiceDetail.table.receipts.amount'),
-      dataIndex: 'amount_paid',
-      key: 'amount_paid',
-      width: 140,
-      align: 'right',
-      render: (amount) => (
-        <span style={{ fontWeight: 600, color: '#52c41a' }}>
-          {formatCurrency(amount)} THB
-        </span>
-      )
-    },
-    {
-      title: t('invoiceDetail.table.receipts.method'),
-      dataIndex: 'payment_method',
-      key: 'payment_method',
-      width: 150,
-      render: (method) => getPaymentMethodText(method),
-      responsive: ['lg']
-    },
-    {
-      title: t('invoiceDetail.table.receipts.status'),
-      dataIndex: 'status',
-      key: 'status',
-      width: 120,
-      render: (status) => getReceiptStatusTag(status),
-      responsive: ['md']
-    }
-  ];
-
-  if (!invoice) {
+  if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '100px 20px' }}>
-        {loading ? t('invoiceDetail.loading') : t('invoiceDetail.notFound')}
-      </div>
+      <Center style={{ height: '70vh' }}>
+        <Stack align="center" gap="md">
+          <Loader size="lg" />
+          <Text size="sm" c="dimmed">
+            {t('invoiceDetail.loading')}
+          </Text>
+        </Stack>
+      </Center>
     );
   }
 
+  if (!invoice) {
+    return (
+      <Center style={{ height: '70vh' }}>
+        <Stack align="center" gap="md">
+          <ThemeIcon size={80} radius="xl" variant="light" color="red">
+            <IconFileInvoice size={40} />
+          </ThemeIcon>
+          <Text size="lg" fw={600}>
+            {t('invoiceDetail.notFound')}
+          </Text>
+          <Button
+            leftSection={<IconArrowLeft size={18} />}
+            onClick={() => navigate('/financial-documents')}
+          >
+            {t('invoiceDetail.buttons.backToList')}
+          </Button>
+        </Stack>
+      </Center>
+    );
+  }
+
+  const paymentProgress = (invoice.amount_paid / invoice.total_amount) * 100;
+  const remainingAmount = invoice.total_amount - invoice.amount_paid;
+
+  const InfoItem = ({ 
+    icon, 
+    label, 
+    value, 
+    color = 'gray' 
+  }: { 
+    icon: React.ReactNode; 
+    label: string; 
+    value: React.ReactNode; 
+    color?: string;
+  }) => (
+    <Paper p="md" radius="md" withBorder>
+      <Group gap="sm" wrap="nowrap">
+        <ThemeIcon size="lg" radius="md" variant="light" color={color}>
+          {icon}
+        </ThemeIcon>
+        <Box style={{ flex: 1 }}>
+          <Text size="xs" c="dimmed" mb={4}>
+            {label}
+          </Text>
+          <Text size="sm" fw={500}>
+            {value}
+          </Text>
+        </Box>
+      </Group>
+    </Paper>
+  );
+
+  const PartyCard = ({ 
+    title, 
+    type, 
+    data 
+  }: { 
+    title: string; 
+    type: 'company' | 'individual'; 
+    data: any;
+  }) => (
+    <Card shadow="sm" padding="lg" radius="md" withBorder>
+      <Stack gap="md">
+        <Group gap="sm">
+          <ThemeIcon size="lg" radius="md" variant="light" color="violet">
+            {type === 'company' ? <IconBuilding size={20} /> : <IconUser size={20} />}
+          </ThemeIcon>
+          <Title order={5}>{title}</Title>
+        </Group>
+
+        <Stack gap="xs">
+          {type === 'company' ? (
+            <>
+              <InfoItem
+                icon={<IconBuilding size={18} />}
+                label={t('invoiceDetail.fields.company')}
+                value={data.company_name}
+                color="blue"
+              />
+              <InfoItem
+                icon={<IconFileText size={18} />}
+                label={t('invoiceDetail.fields.taxId')}
+                value={data.company_tax_id}
+                color="gray"
+              />
+              {data.company_address && (
+                <InfoItem
+                  icon={<IconInfoCircle size={18} />}
+                  label={t('invoiceDetail.fields.address')}
+                  value={data.company_address}
+                  color="teal"
+                />
+              )}
+              {data.director_name && (
+                <InfoItem
+                  icon={<IconUser size={18} />}
+                  label={t('invoiceDetail.fields.director')}
+                  value={data.director_name}
+                  color="violet"
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <InfoItem
+                icon={<IconUser size={18} />}
+                label={t('invoiceDetail.fields.fullName')}
+                value={data.individual_name}
+                color="blue"
+              />
+              <InfoItem
+                icon={<IconInfoCircle size={18} />}
+                label={t('invoiceDetail.fields.country')}
+                value={data.individual_country}
+                color="teal"
+              />
+              <InfoItem
+                icon={<IconFileText size={18} />}
+                label={t('invoiceDetail.fields.passport')}
+                value={data.individual_passport}
+                color="gray"
+              />
+            </>
+          )}
+        </Stack>
+      </Stack>
+    </Card>
+  );
+
   return (
-    <div className="invoice-detail-container">
-      <div className="mobile-back-button">
-        <Button 
-          icon={<ArrowLeftOutlined />} 
+    <Stack gap="lg" p={isMobile ? 'sm' : 'md'}>
+      {/* Кнопка назад для мобильных */}
+      {isMobile && (
+        <Button
+          variant="light"
+          leftSection={<IconArrowLeft size={18} />}
           onClick={() => navigate('/financial-documents')}
-          block
+          fullWidth
         >
           {t('invoiceDetail.buttons.backToList')}
         </Button>
-      </div>
+      )}
 
-      <Card
-        title={
-          <Space>
-            <FileTextOutlined />
-            <span>{t('invoiceDetail.title')} {invoice.invoice_number}</span>
-            {getStatusTag(invoice.status)}
-          </Space>
-        }
-        extra={
-          <Space wrap className="detail-actions">
-            <Button
-              icon={<ArrowLeftOutlined />}
-              onClick={() => navigate('/financial-documents')}
-              className="desktop-only"
-            >
-              {t('invoiceDetail.buttons.back')}
-            </Button>
-            <Button
-              icon={<EditOutlined />}
-              onClick={() => setEditModalVisible(true)}
-            >
-              <span className="button-text">{t('invoiceDetail.buttons.edit')}</span>
-            </Button>
-            <Button
-              icon={<LinkOutlined />}
-              onClick={handleCopyLink}
-            >
-              <span className="button-text">{t('invoiceDetail.buttons.copyLink')}</span>
-            </Button>
-            <Button
-              icon={<DownloadOutlined />}
-              onClick={handleDownloadPDF}
-            >
-              <span className="button-text">{t('invoiceDetail.buttons.downloadPDF')}</span>
-            </Button>
-            <Button
-              danger
-              icon={<DeleteOutlined />}
-              onClick={handleDelete}
-            >
-              <span className="button-text">{t('common.delete')}</span>
-            </Button>
-          </Space>
-        }
-      >
-        <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-          <Col xs={24} sm={8}>
-            <Card>
-              <Statistic
-                title={t('invoiceDetail.stats.totalAmount')}
-                value={invoice.total_amount}
-                suffix="THB"
-                valueStyle={{ color: '#1890ff' }}
-                formatter={(value) => formatCurrency(Number(value))}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={8}>
-            <Card>
-              <Statistic
-                title={t('invoiceDetail.stats.paid')}
-                value={invoice.amount_paid}
-                suffix="THB"
-                valueStyle={{ color: '#52c41a' }}
-                formatter={(value) => formatCurrency(Number(value))}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={8}>
-            <Card>
-              <Statistic
-                title={t('invoiceDetail.stats.remaining')}
-                value={invoice.total_amount - invoice.amount_paid}
-                suffix="THB"
-                valueStyle={{ color: '#faad14' }}
-                formatter={(value) => formatCurrency(Number(value))}
-              />
-            </Card>
-          </Col>
-        </Row>
-
-        <Descriptions 
-          title={t('invoiceDetail.sections.mainInfo')} 
-          bordered 
-          column={{ xs: 1, sm: 2, md: 2 }}
-          size="small"
-        >
-          <Descriptions.Item label={t('invoiceDetail.fields.invoiceDate')}>
-            {new Date(invoice.invoice_date).toLocaleDateString('ru-RU')}
-          </Descriptions.Item>
-          <Descriptions.Item label={t('invoiceDetail.fields.dueDate')}>
-            {invoice.due_date 
-              ? new Date(invoice.due_date).toLocaleDateString('ru-RU')
-              : t('invoiceDetail.notSpecified')
-            }
-          </Descriptions.Item>
-          {invoice.agreement_number && (
-            <Descriptions.Item label={t('invoiceDetail.fields.agreement')}>
-              <Button 
-                type="link" 
-                size="small"
-                onClick={() => navigate(`/agreements/${invoice.agreement_id}`)}
+      {/* Заголовок и действия */}
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="md">
+          {/* Заголовок */}
+          <Group justify="space-between" wrap="wrap">
+            <Group gap="sm">
+              <ThemeIcon 
+                size="xl" 
+                radius="md" 
+                variant="gradient"
+                gradient={{ from: 'blue', to: 'cyan' }}
               >
-                {invoice.agreement_number}
+                <IconFileInvoice size={24} />
+              </ThemeIcon>
+              <Box>
+                <Group gap="xs">
+                  <Title order={isMobile ? 4 : 3}>
+                    {invoice.invoice_number}
+                  </Title>
+                  {getStatusBadge(invoice.status)}
+                </Group>
+                <Text size="xs" c="dimmed">
+                  {t('invoiceDetail.title')}
+                </Text>
+              </Box>
+            </Group>
+
+            {!isMobile && (
+              <Button
+                variant="light"
+                leftSection={<IconArrowLeft size={18} />}
+                onClick={() => navigate('/financial-documents')}
+              >
+                {t('invoiceDetail.buttons.back')}
               </Button>
-            </Descriptions.Item>
-          )}
-          <Descriptions.Item label={t('invoiceDetail.fields.created')}>
-            {new Date(invoice.created_at).toLocaleDateString('ru-RU')}{' '}
-            {invoice.created_by_name && `(${invoice.created_by_name})`}
-          </Descriptions.Item>
-        </Descriptions>
+            )}
+          </Group>
 
-        <Divider />
+          <Divider />
 
-        <Row gutter={16}>
-          <Col xs={24} md={12}>
-            <Card size="small" title={t('invoiceDetail.sections.from')} style={{ marginBottom: 16 }}>
-              {invoice.from_type === 'company' ? (
-                <Descriptions column={1} size="small">
-                  <Descriptions.Item label={t('invoiceDetail.fields.company')}>
-                    {invoice.from_company_name}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t('invoiceDetail.fields.taxId')}>
-                    {invoice.from_company_tax_id}
-                  </Descriptions.Item>
-                  {invoice.from_company_address && (
-                    <Descriptions.Item label={t('invoiceDetail.fields.address')}>
-                      {invoice.from_company_address}
-                    </Descriptions.Item>
+          {/* Кнопки действий */}
+          <Group gap="xs" wrap="wrap">
+            <Button
+              variant="light"
+              leftSection={<IconEdit size={18} />}
+              onClick={() => setEditModalVisible(true)}
+              flex={isMobile ? 1 : undefined}
+            >
+              {!isMobile && t('invoiceDetail.buttons.edit')}
+            </Button>
+            <Button
+              variant="light"
+              color="blue"
+              leftSection={<IconLink size={18} />}
+              onClick={handleCopyLink}
+              flex={isMobile ? 1 : undefined}
+            >
+              {!isMobile && t('invoiceDetail.buttons.copyLink')}
+            </Button>
+            <Button
+              variant="light"
+              color="teal"
+              leftSection={<IconDownload size={18} />}
+              onClick={handleDownloadPDF}
+              flex={isMobile ? 1 : undefined}
+            >
+              {!isMobile && t('invoiceDetail.buttons.downloadPDF')}
+            </Button>
+            <Button
+              variant="light"
+              color="red"
+              leftSection={<IconTrash size={18} />}
+              onClick={handleDelete}
+              flex={isMobile ? 1 : undefined}
+            >
+              {!isMobile && t('common.delete')}
+            </Button>
+          </Group>
+        </Stack>
+      </Card>
+
+      {/* Статистика с прогрессом */}
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="lg">
+          <Group justify="space-between" wrap="wrap">
+            <Group gap="sm">
+              <ThemeIcon size="lg" radius="md" variant="light" color="violet">
+                <IconChartPie size={20} />
+              </ThemeIcon>
+              <Title order={4}>{t('invoiceDetail.sections.paymentStatus')}</Title>
+            </Group>
+
+            <RingProgress
+              size={80}
+              thickness={8}
+              sections={[
+                { value: paymentProgress, color: 'green' },
+                { value: 100 - paymentProgress, color: 'gray' }
+              ]}
+              label={
+                <Center>
+                  <Text size="xs" fw={700}>
+                    {Math.round(paymentProgress)}%
+                  </Text>
+                </Center>
+              }
+            />
+          </Group>
+
+          <Progress.Root size="xl">
+            <Progress.Section value={paymentProgress} color="green">
+              <Progress.Label>{t('invoiceDetail.stats.paid')}</Progress.Label>
+            </Progress.Section>
+            <Progress.Section value={100 - paymentProgress} color="yellow">
+              <Progress.Label>{t('invoiceDetail.stats.remaining')}</Progress.Label>
+            </Progress.Section>
+          </Progress.Root>
+
+          <Grid gutter="md">
+            <Grid.Col span={{ base: 12, sm: 4 }}>
+              <Paper
+                p="lg"
+                radius="md"
+                withBorder
+                style={{
+                  background: `linear-gradient(135deg, ${theme.colors.blue[9]} 0%, ${theme.colors.cyan[9]} 100%)`,
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = `0 8px 24px ${theme.colors.blue[9]}40`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <Stack gap="xs">
+                  <Group gap="xs">
+                    <ThemeIcon size="md" radius="md" variant="white" color="blue">
+                      <IconCurrencyBaht size={20} />
+                    </ThemeIcon>
+                    <Text size="sm" c="white" opacity={0.9}>
+                      {t('invoiceDetail.stats.totalAmount')}
+                    </Text>
+                  </Group>
+                  <Group align="baseline" gap={4}>
+                    <Text size="1.8rem" fw={700} c="white" style={{ lineHeight: 1 }}>
+                      {formatCurrency(invoice.total_amount)}
+                    </Text>
+                    <Text size="md" c="white" opacity={0.9}>
+                      {t('common.currencyTHB')}
+                    </Text>
+                  </Group>
+                </Stack>
+              </Paper>
+            </Grid.Col>
+
+            <Grid.Col span={{ base: 12, sm: 4 }}>
+              <Paper
+                p="lg"
+                radius="md"
+                withBorder
+                style={{
+                  background: `linear-gradient(135deg, ${theme.colors.green[9]} 0%, ${theme.colors.teal[9]} 100%)`,
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = `0 8px 24px ${theme.colors.green[9]}40`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <Stack gap="xs">
+                  <Group gap="xs">
+                    <ThemeIcon size="md" radius="md" variant="white" color="green">
+                      <IconCheck size={20} />
+                    </ThemeIcon>
+                    <Text size="sm" c="white" opacity={0.9}>
+                      {t('invoiceDetail.stats.paid')}
+                    </Text>
+                  </Group>
+                  <Group align="baseline" gap={4}>
+                    <Text size="1.8rem" fw={700} c="white" style={{ lineHeight: 1 }}>
+                      {formatCurrency(invoice.amount_paid)}
+                    </Text>
+                    <Text size="md" c="white" opacity={0.9}>
+                      {t('common.currencyTHB')}
+                    </Text>
+                  </Group>
+                </Stack>
+              </Paper>
+            </Grid.Col>
+
+            <Grid.Col span={{ base: 12, sm: 4 }}>
+              <Paper
+                p="lg"
+                radius="md"
+                withBorder
+                style={{
+                  background: `linear-gradient(135deg, ${theme.colors.yellow[9]} 0%, ${theme.colors.orange[9]} 100%)`,
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = `0 8px 24px ${theme.colors.yellow[9]}40`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <Stack gap="xs">
+                  <Group gap="xs">
+                    <ThemeIcon size="md" radius="md" variant="white" color="yellow">
+                      <IconAlertCircle size={20} />
+                    </ThemeIcon>
+                    <Text size="sm" c="white" opacity={0.9}>
+                      {t('invoiceDetail.stats.remaining')}
+                    </Text>
+                  </Group>
+                  <Group align="baseline" gap={4}>
+                    <Text size="1.8rem" fw={700} c="white" style={{ lineHeight: 1 }}>
+                      {formatCurrency(remainingAmount)}
+                    </Text>
+                    <Text size="md" c="white" opacity={0.9}>
+                      {t('common.currencyTHB')}
+                    </Text>
+                  </Group>
+                </Stack>
+              </Paper>
+            </Grid.Col>
+          </Grid>
+        </Stack>
+      </Card>
+
+      {/* Основная информация */}
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="md">
+          <Group gap="sm">
+            <ThemeIcon size="lg" radius="md" variant="light" color="blue">
+              <IconInfoCircle size={20} />
+            </ThemeIcon>
+            <Title order={4}>{t('invoiceDetail.sections.mainInfo')}</Title>
+          </Group>
+
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <InfoItem
+              icon={<IconCalendar size={20} />}
+              label={t('invoiceDetail.fields.invoiceDate')}
+              value={new Date(invoice.invoice_date).toLocaleDateString('ru-RU')}
+              color="teal"
+            />
+
+            <InfoItem
+              icon={<IconClock size={20} />}
+              label={t('invoiceDetail.fields.dueDate')}
+              value={
+                invoice.due_date
+                  ? new Date(invoice.due_date).toLocaleDateString('ru-RU')
+                  : t('invoiceDetail.notSpecified')
+              }
+              color="orange"
+            />
+
+            {invoice.agreement_number && (
+              <InfoItem
+                icon={<IconFileText size={20} />}
+                label={t('invoiceDetail.fields.agreement')}
+                value={
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    p={0}
+                    onClick={() => navigate(`/agreements/${invoice.agreement_id}`)}
+                  >
+                    {invoice.agreement_number}
+                  </Button>
+                }
+                color="violet"
+              />
+            )}
+
+            <InfoItem
+              icon={<IconUser size={20} />}
+              label={t('invoiceDetail.fields.created')}
+              value={
+                <>
+                  {new Date(invoice.created_at).toLocaleDateString('ru-RU')}
+                  {invoice.created_by_name && (
+                    <>
+                      <br />
+                      <Text size="xs" c="dimmed">
+                        {invoice.created_by_name}
+                      </Text>
+                    </>
                   )}
-                  {invoice.from_director_name && (
-                    <Descriptions.Item label={t('invoiceDetail.fields.director')}>
-                      {invoice.from_director_name}
-                    </Descriptions.Item>
-                  )}
-                </Descriptions>
-              ) : (
-                <Descriptions column={1} size="small">
-                  <Descriptions.Item label={t('invoiceDetail.fields.fullName')}>
-                    {invoice.from_individual_name}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t('invoiceDetail.fields.country')}>
-                    {invoice.from_individual_country}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t('invoiceDetail.fields.passport')}>
-                    {invoice.from_individual_passport}
-                  </Descriptions.Item>
-                </Descriptions>
-              )}
-            </Card>
-          </Col>
+                </>
+              }
+              color="gray"
+            />
+          </SimpleGrid>
+        </Stack>
+      </Card>
 
-          <Col xs={24} md={12}>
-            <Card size="small" title={t('invoiceDetail.sections.to')} style={{ marginBottom: 16 }}>
-              {invoice.to_type === 'company' ? (
-                <Descriptions column={1} size="small">
-                  <Descriptions.Item label={t('invoiceDetail.fields.company')}>
-                    {invoice.to_company_name}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t('invoiceDetail.fields.taxId')}>
-                    {invoice.to_company_tax_id}
-                  </Descriptions.Item>
-                  {invoice.to_company_address && (
-                    <Descriptions.Item label={t('invoiceDetail.fields.address')}>
-                      {invoice.to_company_address}
-                    </Descriptions.Item>
-                  )}
-                  {invoice.to_director_name && (
-                    <Descriptions.Item label={t('invoiceDetail.fields.director')}>
-                      {invoice.to_director_name}
-                    </Descriptions.Item>
-                  )}
-                </Descriptions>
-              ) : (
-                <Descriptions column={1} size="small">
-                  <Descriptions.Item label={t('invoiceDetail.fields.fullName')}>
-                    {invoice.to_individual_name}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t('invoiceDetail.fields.country')}>
-                    {invoice.to_individual_country}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t('invoiceDetail.fields.passport')}>
-                    {invoice.to_individual_passport}
-                  </Descriptions.Item>
-                </Descriptions>
-              )}
-            </Card>
-          </Col>
-        </Row>
-
-        <Divider />
-
-        <Title level={5}>{t('invoiceDetail.sections.items')}</Title>
-        <Table
-          columns={itemColumns}
-          dataSource={invoice.items || []}
-          rowKey="id"
-          pagination={false}
-          scroll={{ x: 600 }}
-          summary={() => (
-            <Table.Summary>
-              <Table.Summary.Row>
-                <Table.Summary.Cell index={0} colSpan={3} align="right">
-                  <strong>{t('invoiceDetail.summary.subtotal')}:</strong>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={1} align="right">
-                  <strong>{formatCurrency(invoice.subtotal)} THB</strong>
-                </Table.Summary.Cell>
-              </Table.Summary.Row>
-              {invoice.tax_amount > 0 && (
-                <Table.Summary.Row>
-                  <Table.Summary.Cell index={0} colSpan={3} align="right">
-                    <strong>{t('invoiceDetail.summary.tax')}:</strong>
-                  </Table.Summary.Cell>
-                  <Table.Summary.Cell index={1} align="right">
-                    <strong>{formatCurrency(invoice.tax_amount)} THB</strong>
-                  </Table.Summary.Cell>
-                </Table.Summary.Row>
-              )}
-              <Table.Summary.Row>
-                <Table.Summary.Cell index={0} colSpan={3} align="right">
-                  <strong style={{ fontSize: '16px' }}>{t('invoiceDetail.summary.total')}:</strong>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={1} align="right">
-                  <strong style={{ fontSize: '16px', color: '#52c41a' }}>
-                    {formatCurrency(invoice.total_amount)} THB
-                  </strong>
-                </Table.Summary.Cell>
-              </Table.Summary.Row>
-            </Table.Summary>
-          )}
+      {/* От / Кому */}
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+        <PartyCard
+          title={t('invoiceDetail.sections.from')}
+          type={invoice.from_type as 'company' | 'individual'}
+          data={{
+            company_name: invoice.from_company_name,
+            company_tax_id: invoice.from_company_tax_id,
+            company_address: invoice.from_company_address,
+            director_name: invoice.from_director_name,
+            individual_name: invoice.from_individual_name,
+            individual_country: invoice.from_individual_country,
+            individual_passport: invoice.from_individual_passport
+          }}
         />
 
-        {(invoice.bank_name || invoice.bank_account_name || invoice.bank_account_number) && (
-          <>
-            <Divider />
-            <Card size="small" title={t('invoiceDetail.sections.bankDetails')}>
-              <Descriptions column={{ xs: 1, sm: 2 }} size="small">
-                {invoice.bank_name && (
-                  <Descriptions.Item label={t('invoiceDetail.fields.bank')}>
-                    {invoice.bank_name}
-                  </Descriptions.Item>
-                )}
-                {invoice.bank_account_name && (
-                  <Descriptions.Item label={t('invoiceDetail.fields.accountHolder')}>
-                    {invoice.bank_account_name}
-                  </Descriptions.Item>
-                )}
-                {invoice.bank_account_number && (
-                  <Descriptions.Item label={t('invoiceDetail.fields.accountNumber')} span={2}>
-                    {invoice.bank_account_number}
-                  </Descriptions.Item>
-                )}
-              </Descriptions>
-            </Card>
-          </>
-        )}
+        <PartyCard
+          title={t('invoiceDetail.sections.to')}
+          type={invoice.to_type as 'company' | 'individual'}
+          data={{
+            company_name: invoice.to_company_name,
+            company_tax_id: invoice.to_company_tax_id,
+            company_address: invoice.to_company_address,
+            director_name: invoice.to_director_name,
+            individual_name: invoice.to_individual_name,
+            individual_country: invoice.to_individual_country,
+            individual_passport: invoice.to_individual_passport
+          }}
+        />
+      </SimpleGrid>
 
-        {invoice.qr_code_base64 && (
-          <>
-            <Divider />
-            <Card size="small" title={<><QrcodeOutlined /> {t('invoiceDetail.sections.qrCode')}</>}>
-              <div style={{ textAlign: 'center' }}>
+      {/* Позиции инвойса */}
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="md">
+          <Group gap="sm">
+            <ThemeIcon size="lg" radius="md" variant="light" color="green">
+              <IconPackage size={20} />
+            </ThemeIcon>
+            <Title order={4}>{t('invoiceDetail.sections.items')}</Title>
+          </Group>
+
+          {isMobile ? (
+            <Stack gap="xs">
+              {invoice.items && invoice.items.map((item, index) => (
+                <Paper
+                  key={item.id || index}
+                  p="md"
+                  radius="md"
+                  withBorder
+                  style={{
+                    transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateX(4px)';
+                    e.currentTarget.style.boxShadow = theme.shadows.md;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateX(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <Stack gap="xs">
+                    <Group justify="space-between" align="flex-start">
+                      <Box style={{ flex: 1 }}>
+                        <Badge size="xs" variant="light" mb={4}>
+                          {index + 1}
+                        </Badge>
+                        <Text fw={600} size="sm" mb={4}>
+                          {item.description}
+                        </Text>
+                        <Group gap={4}>
+                          <Badge size="sm" variant="light" color="gray">
+                            {item.quantity} x {formatCurrency(item.unit_price || 0)} {t('common.currencyTHB')}
+                          </Badge>
+                        </Group>
+                      </Box>
+                      <Box ta="right">
+                        <Text size="lg" fw={700} c="green">
+                          {formatCurrency(item.total_price || 0)}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {t('common.currencyTHB')}
+                        </Text>
+                      </Box>
+                    </Group>
+                  </Stack>
+                </Paper>
+              ))}
+            </Stack>
+          ) : (
+            <Table.ScrollContainer minWidth={600}>
+              <Table striped highlightOnHover withTableBorder withColumnBorders>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th w={50}>{t('invoiceDetail.table.items.number')}</Table.Th>
+                    <Table.Th>{t('invoiceDetail.table.items.description')}</Table.Th>
+                    <Table.Th ta="center" w={100}>{t('invoiceDetail.table.items.quantity')}</Table.Th>
+                    <Table.Th ta="right" w={150}>{t('invoiceDetail.table.items.price')}</Table.Th>
+                    <Table.Th ta="right" w={150}>{t('invoiceDetail.table.items.total')}</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {invoice.items && invoice.items.map((item, index) => (
+                    <Table.Tr key={item.id || index}>
+                      <Table.Td>{index + 1}</Table.Td>
+                      <Table.Td>{item.description}</Table.Td>
+                      <Table.Td ta="center">{item.quantity}</Table.Td>
+                      <Table.Td ta="right">
+                        {formatCurrency(item.unit_price || 0)} {t('common.currencyTHB')}
+                      </Table.Td>
+                      <Table.Td ta="right">
+                        <Text fw={600} c="green">
+                          {formatCurrency(item.total_price || 0)} {t('common.currencyTHB')}
+                        </Text>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+                <Table.Tfoot>
+                  <Table.Tr>
+                    <Table.Td colSpan={4} ta="right">
+                      <Text fw={600}>{t('invoiceDetail.summary.subtotal')}:</Text>
+                    </Table.Td>
+                    <Table.Td ta="right">
+                      <Text fw={600}>
+                        {formatCurrency(invoice.subtotal)} {t('common.currencyTHB')}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                  {invoice.tax_amount > 0 && (
+                    <Table.Tr>
+                      <Table.Td colSpan={4} ta="right">
+                        <Text fw={600}>{t('invoiceDetail.summary.tax')}:</Text>
+                      </Table.Td>
+                      <Table.Td ta="right">
+                        <Text fw={600}>
+                          {formatCurrency(invoice.tax_amount)} {t('common.currencyTHB')}
+                        </Text>
+                      </Table.Td>
+                    </Table.Tr>
+                  )}
+                  <Table.Tr>
+                    <Table.Td colSpan={4} ta="right">
+                      <Text size="lg" fw={700}>{t('invoiceDetail.summary.total')}:</Text>
+                    </Table.Td>
+                    <Table.Td ta="right">
+                      <Text size="lg" fw={700} c="green">
+                        {formatCurrency(invoice.total_amount)} {t('common.currencyTHB')}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                </Table.Tfoot>
+              </Table>
+            </Table.ScrollContainer>
+          )}
+        </Stack>
+      </Card>
+
+      {/* Банковские реквизиты */}
+      {(invoice.bank_name || invoice.bank_account_name || invoice.bank_account_number) && (
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="md">
+            <Group gap="sm">
+              <ThemeIcon size="lg" radius="md" variant="light" color="indigo">
+                <IconBuildingBank size={20} />
+              </ThemeIcon>
+              <Title order={4}>{t('invoiceDetail.sections.bankDetails')}</Title>
+            </Group>
+
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+              {invoice.bank_name && (
+                <InfoItem
+                  icon={<IconBuildingBank size={18} />}
+                  label={t('invoiceDetail.fields.bank')}
+                  value={invoice.bank_name}
+                  color="blue"
+                />
+              )}
+              {invoice.bank_account_name && (
+                <InfoItem
+                  icon={<IconUser size={18} />}
+                  label={t('invoiceDetail.fields.accountHolder')}
+                  value={invoice.bank_account_name}
+                  color="violet"
+                />
+              )}
+              {invoice.bank_account_number && (
+                <Box style={{ gridColumn: isMobile ? 'auto' : 'span 2' }}>
+                  <InfoItem
+                    icon={<IconCreditCard size={18} />}
+                    label={t('invoiceDetail.fields.accountNumber')}
+                    value={invoice.bank_account_number}
+                    color="teal"
+                  />
+                </Box>
+              )}
+            </SimpleGrid>
+          </Stack>
+        </Card>
+      )}
+
+      {/* QR код */}
+      {invoice.qr_code_base64 && (
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="md">
+            <Group gap="sm">
+              <ThemeIcon size="lg" radius="md" variant="light" color="indigo">
+                <IconQrcode size={20} />
+              </ThemeIcon>
+              <Title order={4}>{t('invoiceDetail.sections.qrCode')}</Title>
+            </Group>
+
+            <Center>
+              <Paper p="md" radius="md" withBorder>
                 <Image
                   src={invoice.qr_code_base64}
                   alt="QR Code"
-                  style={{ maxWidth: '200px' }}
-                  preview={false}
+                  w={200}
+                  h={200}
                 />
-              </div>
-            </Card>
-          </>
-        )}
+              </Paper>
+            </Center>
+          </Stack>
+        </Card>
+      )}
 
-        {invoice.receipts && invoice.receipts.length > 0 && (
-          <>
-            <Divider />
-            <Title level={5}>{t('invoiceDetail.sections.paymentHistory')}</Title>
-            <Table
-              columns={receiptColumns}
-              dataSource={invoice.receipts}
-              rowKey="id"
-              pagination={false}
-              scroll={{ x: 600 }}
-            />
-          </>
-        )}
+      {/* История платежей */}
+      {invoice.receipts && invoice.receipts.length > 0 && (
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="md">
+            <Group gap="sm">
+              <ThemeIcon size="lg" radius="md" variant="light" color="green">
+                <IconReceipt size={20} />
+              </ThemeIcon>
+              <Title order={4}>{t('invoiceDetail.sections.paymentHistory')}</Title>
+            </Group>
 
-        {invoice.notes && (
-          <>
-            <Divider />
-            <Card size="small" title={t('invoiceDetail.sections.notes')}>
-              <Text>{invoice.notes}</Text>
-            </Card>
-          </>
-        )}
-      </Card>
+            {isMobile ? (
+              <Stack gap="xs">
+                {invoice.receipts.map((receipt) => (
+                  <Paper
+                    key={receipt.id}
+                    p="md"
+                    radius="md"
+                    withBorder
+                    style={{
+                      transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => navigate(`/financial-documents/receipts/${receipt.id}`)}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = theme.shadows.md;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <Stack gap="xs">
+                      <Group justify="space-between">
+                        <Text fw={600} size="sm">
+                          {receipt.receipt_number}
+                        </Text>
+                        {getReceiptStatusBadge(receipt.status)}
+                      </Group>
+                      <Group justify="space-between">
+                        <Text size="xs" c="dimmed">
+                          {new Date(receipt.receipt_date).toLocaleDateString('ru-RU')}
+                        </Text>
+                        <Text size="lg" fw={700} c="green">
+                          {formatCurrency(receipt.amount_paid)} {t('common.currencyTHB')}
+                        </Text>
+                      </Group>
+                      <Badge size="sm" variant="light">
+                        {getPaymentMethodText(receipt.payment_method)}
+                      </Badge>
+                    </Stack>
+                  </Paper>
+                ))}
+              </Stack>
+            ) : (
+              <Table.ScrollContainer minWidth={600}>
+                <Table striped highlightOnHover withTableBorder withColumnBorders>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>{t('invoiceDetail.table.receipts.receiptNumber')}</Table.Th>
+                      <Table.Th w={120}>{t('invoiceDetail.table.receipts.date')}</Table.Th>
+                      <Table.Th ta="right" w={150}>{t('invoiceDetail.table.receipts.amount')}</Table.Th>
+                      <Table.Th w={150}>{t('invoiceDetail.table.receipts.method')}</Table.Th>
+                      <Table.Th w={120}>{t('invoiceDetail.table.receipts.status')}</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {invoice.receipts.map((receipt) => (
+                      <Table.Tr
+                        key={receipt.id}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => navigate(`/financial-documents/receipts/${receipt.id}`)}
+                      >
+                        <Table.Td>
+                          <Button variant="subtle" size="xs" p={0}>
+                            {receipt.receipt_number}
+                          </Button>
+                        </Table.Td>
+                        <Table.Td>
+                          {new Date(receipt.receipt_date).toLocaleDateString('ru-RU')}
+                        </Table.Td>
+                        <Table.Td ta="right">
+                          <Text fw={600} c="green">
+                            {formatCurrency(receipt.amount_paid)} {t('common.currencyTHB')}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>{getPaymentMethodText(receipt.payment_method)}</Table.Td>
+                        <Table.Td>{getReceiptStatusBadge(receipt.status)}</Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
+            )}
+          </Stack>
+        </Card>
+      )}
 
+      {/* Примечания */}
+      {invoice.notes && (
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="md">
+            <Group gap="sm">
+              <ThemeIcon size="lg" radius="md" variant="light" color="yellow">
+                <IconAlertCircle size={20} />
+              </ThemeIcon>
+              <Title order={4}>{t('invoiceDetail.sections.notes')}</Title>
+            </Group>
+
+            <Paper p="md" radius="md" withBorder>
+              <Text size="sm">{invoice.notes}</Text>
+            </Paper>
+          </Stack>
+        </Card>
+      )}
+
+      {/* Модальное окно редактирования */}
       <EditInvoiceModal
         visible={editModalVisible}
         invoice={invoice}
@@ -579,7 +1072,7 @@ const InvoiceDetail = () => {
           fetchInvoice();
         }}
       />
-    </div>
+    </Stack>
   );
 };
 

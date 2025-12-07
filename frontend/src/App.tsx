@@ -3,6 +3,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { ConfigProvider, theme } from 'antd';
 import { MantineProvider, createTheme } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
+import { ModalsProvider } from '@mantine/modals';
 import ruRU from 'antd/locale/ru_RU';
 import AppRoutes from './routes';
 import './styles/index.css';
@@ -77,25 +78,27 @@ const mantineTheme = createTheme({
 function App() {
   return (
     <MantineProvider theme={mantineTheme} defaultColorScheme="dark">
-      <Notifications 
-        position="top-right" 
-        zIndex={10000}
-        autoClose={4000}
-      />
-      <ConfigProvider
-        locale={ruRU}
-        theme={{
-          algorithm: theme.darkAlgorithm,
-          token: {
-            colorPrimary: '#1890ff',
-            borderRadius: 6,
-          },
-        }}
-      >
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </ConfigProvider>
+      <ModalsProvider>
+        <Notifications 
+          position="top-right" 
+          zIndex={10000}
+          autoClose={4000}
+        />
+        <ConfigProvider
+          locale={ruRU}
+          theme={{
+            algorithm: theme.darkAlgorithm,
+            token: {
+              colorPrimary: '#1890ff',
+              borderRadius: 6,
+            },
+          }}
+        >
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </ConfigProvider>
+      </ModalsProvider>
     </MantineProvider>
   );
 }

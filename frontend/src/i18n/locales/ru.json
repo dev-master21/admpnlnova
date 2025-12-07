@@ -1,5 +1,7 @@
 {
   "common": {
+    "currencyTHB": "THB",
+    "pleaseWait": "Пожалуйста, подождите...",
     "warning": "Предупреждение",
     "inactive": "Неактивен",
     "active": "Активен",
@@ -2445,8 +2447,8 @@
     "notFound": "Чек не найден",
     "noFiles": "Файлы не загружены",
     "buttons": {
-      "backToList": "Назад к списку",
       "back": "Назад",
+      "backToList": "Вернуться к списку",
       "edit": "Редактировать",
       "copyLink": "Скопировать ссылку",
       "downloadPDF": "Скачать PDF"
@@ -2493,51 +2495,17 @@
       "pdfDownloadError": "Ошибка скачивания PDF"
     }
   },
-    "invoiceDetail": {
+  "invoiceDetail": {
     "title": "Инвойс",
-    "loading": "Загрузка...",
+    "loading": "Загрузка инвойса...",
     "notFound": "Инвойс не найден",
-    "notSpecified": "Не указан",
+    "notSpecified": "Не указано",
     "buttons": {
-      "backToList": "Назад к списку",
       "back": "Назад",
+      "backToList": "Вернуться к списку",
       "edit": "Редактировать",
       "copyLink": "Скопировать ссылку",
       "downloadPDF": "Скачать PDF"
-    },
-    "statuses": {
-      "draft": "Черновик",
-      "sent": "Отправлен",
-      "partiallyPaid": "Частично оплачен",
-      "paid": "Оплачен",
-      "overdue": "Просрочен",
-      "cancelled": "Отменён"
-    },
-    "paymentMethods": {
-      "bank": "Банк",
-      "cash": "Наличные",
-      "crypto": "Крипто",
-      "barter": "Бартер"
-    },
-    "receiptStatuses": {
-      "pending": "В обработке",
-      "verified": "Проверен",
-      "rejected": "Отклонён"
-    },
-    "stats": {
-      "totalAmount": "Общая сумма",
-      "paid": "Оплачено",
-      "remaining": "Осталось"
-    },
-    "sections": {
-      "mainInfo": "Основная информация",
-      "from": "От кого (From)",
-      "to": "Кому (To)",
-      "items": "Позиции",
-      "bankDetails": "Банковские реквизиты",
-      "qrCode": "QR-код для верификации",
-      "paymentHistory": "История оплат",
-      "notes": "Примечания"
     },
     "fields": {
       "invoiceDate": "Дата инвойса",
@@ -2545,7 +2513,7 @@
       "agreement": "Договор",
       "created": "Создан",
       "company": "Компания",
-      "taxId": "TAX ID",
+      "taxId": "ИНН",
       "address": "Адрес",
       "director": "Директор",
       "fullName": "ФИО",
@@ -2554,6 +2522,41 @@
       "bank": "Банк",
       "accountHolder": "Владелец счета",
       "accountNumber": "Номер счета"
+    },
+    "sections": {
+      "paymentStatus": "Статус оплаты",
+      "mainInfo": "Основная информация",
+      "from": "От",
+      "to": "Кому",
+      "items": "Позиции",
+      "bankDetails": "Банковские реквизиты",
+      "qrCode": "QR-код",
+      "paymentHistory": "История платежей",
+      "notes": "Примечания"
+    },
+    "stats": {
+      "totalAmount": "Общая сумма",
+      "paid": "Оплачено",
+      "remaining": "Осталось"
+    },
+    "statuses": {
+      "draft": "Черновик",
+      "sent": "Отправлен",
+      "partially_paid": "Частично оплачен",
+      "paid": "Оплачен",
+      "overdue": "Просрочен",
+      "cancelled": "Отменён"
+    },
+    "paymentMethods": {
+      "bank": "Банковский перевод",
+      "cash": "Наличные",
+      "crypto": "Криптовалюта",
+      "barter": "Бартер"
+    },
+    "receiptStatuses": {
+      "pending": "Ожидает проверки",
+      "verified": "Проверен",
+      "rejected": "Отклонен"
     },
     "table": {
       "items": {
@@ -2567,7 +2570,7 @@
         "receiptNumber": "Номер чека",
         "date": "Дата",
         "amount": "Сумма",
-        "method": "Способ",
+        "method": "Способ оплаты",
         "status": "Статус"
       }
     },
@@ -2584,17 +2587,21 @@
       "loadError": "Ошибка загрузки инвойса",
       "deleted": "Инвойс успешно удалён",
       "deleteError": "Ошибка удаления инвойса",
-      "uuidNotFound": "UUID инвойса не найден",
       "linkCopied": "Ссылка скопирована в буфер обмена",
       "linkCopyError": "Ошибка копирования ссылки",
+      "uuidNotFound": "UUID инвойса не найден",
       "generatingPDF": "Генерация PDF...",
       "pdfDownloaded": "PDF успешно скачан",
       "pdfDownloadError": "Ошибка скачивания PDF"
     }
   },
-    "financialDocuments": {
+  "financialDocuments": {
     "title": "Финансовые документы",
-    "search": "Поиск...",
+    "loading": "Загрузка...",
+    "noInvoices": "Инвойсы не найдены",
+    "noReceipts": "Чеки не найдены",
+    "search": "Поиск по номеру",
+    "paymentProgress": "Прогресс оплаты",
     "tabs": {
       "invoices": "Инвойсы",
       "receipts": "Чеки"
@@ -2605,30 +2612,26 @@
       "totalAmount": "Общая сумма",
       "amountReceived": "Получено"
     },
-    "filters": {
-      "status": "Статус",
-      "all": "Все"
-    },
     "statuses": {
       "draft": "Черновик",
       "sent": "Отправлен",
       "partiallyPaid": "Частично оплачен",
       "paid": "Оплачен",
       "overdue": "Просрочен",
-      "cancelled": "Отменен",
-      "pending": "Ожидает",
-      "verified": "Подтвержден",
+      "cancelled": "Отменён",
+      "pending": "Ожидает проверки",
+      "verified": "Проверен",
       "rejected": "Отклонен"
     },
     "paymentMethods": {
-      "bankTransfer": "Банк. перевод",
+      "bankTransfer": "Банковский перевод",
       "cash": "Наличные",
-      "crypto": "Крипто",
+      "crypto": "Криптовалюта",
       "barter": "Бартер"
     },
-    "buttons": {
-      "createInvoice": "Создать инвойс",
-      "createReceipt": "Создать чек"
+    "filters": {
+      "status": "Статус",
+      "all": "Все"
     },
     "table": {
       "invoices": {
@@ -2650,59 +2653,79 @@
         "actions": "Действия"
       }
     },
+    "buttons": {
+      "createInvoice": "Создать инвойс",
+      "createReceipt": "Создать чек"
+    },
     "actions": {
       "view": "Просмотр",
       "downloadPDF": "Скачать PDF"
     },
+    "confirm": {
+      "deleteInvoiceTitle": "Удалить инвойс?",
+      "deleteReceiptTitle": "Удалить чек?",
+      "deleteDescription": "Это действие нельзя отменить"
+    },
     "messages": {
       "invoicesLoadError": "Ошибка загрузки инвойсов",
       "receiptsLoadError": "Ошибка загрузки чеков",
-      "pdfDownloaded": "PDF скачан",
+      "downloadingPDF": "Скачивание PDF...",
+      "pdfDownloaded": "PDF успешно скачан",
       "pdfDownloadError": "Ошибка скачивания PDF",
-      "invoiceDeleted": "Инвойс удален",
+      "invoiceDeleted": "Инвойс успешно удалён",
+      "receiptDeleted": "Чек успешно удалён",
       "invoiceDeleteError": "Ошибка удаления инвойса",
-      "receiptDeleted": "Чек удален",
       "receiptDeleteError": "Ошибка удаления чека"
     }
   },
-    "createInvoiceModal": {
-    "title": "Создание инвойса",
+  "createInvoiceModal": {
+    "title": "Создать инвойс",
     "steps": {
       "basic": "Основное",
+      "basicDesc": "Дата и договор",
       "parties": "Стороны",
+      "partiesDesc": "От кого и кому",
       "items": "Позиции",
-      "bank": "Банк"
+      "itemsDesc": "Товары и услуги",
+      "bank": "Банк",
+      "bankDesc": "Реквизиты"
     },
-    "sections": {
-      "from": "От кого (From)",
-      "to": "Кому (To)",
-      "director": "Директор",
-      "bankDetails": "Банковские реквизиты для оплаты",
-      "summary": "Итоговая информация"
+    "alerts": {
+      "basicInfoTitle": "Начните с основной информации",
+      "basicInfoDesc": "Выберите договор для автозаполнения или заполните вручную",
+      "itemsTitle": "Добавьте позиции инвойса",
+      "itemsDesc": "Укажите товары или услуги, которые будут включены в инвойс"
     },
     "fields": {
       "agreement": "Договор",
       "invoiceDate": "Дата инвойса",
-      "dueDate": "Срок оплаты (необязательно)",
+      "dueDate": "Срок оплаты",
       "notes": "Примечания",
-      "type": "Тип",
-      "companyName": "Название компании *",
-      "taxId": "TAX ID *",
+      "type": "Тип стороны",
+      "companyName": "Название компании",
+      "taxId": "ИНН",
       "companyAddress": "Адрес компании",
-      "directorName": "Имя директора *",
+      "directorName": "ФИО директора",
       "passportCountry": "Страна паспорта",
       "directorPassport": "Паспорт директора",
-      "fullName": "ФИО *",
-      "country": "Страна *",
-      "passportNumber": "Номер паспорта *",
-      "tax": "Налог (если есть)",
+      "fullName": "ФИО",
+      "country": "Страна",
+      "passportNumber": "Номер паспорта",
       "bankName": "Название банка",
-      "accountHolder": "Имя владельца счета",
-      "accountNumber": "Номер счета"
+      "accountHolder": "Владелец счета",
+      "accountNumber": "Номер счета",
+      "tax": "Налог"
+    },
+    "sections": {
+      "from": "От кого",
+      "to": "Кому",
+      "director": "Директор",
+      "bankDetails": "Банковские реквизиты",
+      "summary": "Итоговая сводка"
     },
     "partyTypes": {
       "company": "Компания",
-      "individual": "Физ. лицо"
+      "individual": "Физическое лицо"
     },
     "items": {
       "position": "Позиция {{number}}",
@@ -2725,23 +2748,24 @@
       "create": "Создать инвойс"
     },
     "placeholders": {
-      "selectAgreement": "Выберите договор (необязательно)",
-      "notes": "Дополнительная информация об инвойсе",
-      "itemDescription": "Описание услуги или товара *"
+      "selectAgreement": "Выберите договор (опционально)",
+      "selectDate": "Выберите дату",
+      "notes": "Дополнительная информация",
+      "itemDescription": "Описание товара или услуги"
     },
     "validation": {
       "selectAgreement": "Выберите договор",
       "specifyDate": "Укажите дату",
       "specifyName": "Укажите название",
-      "specifyTaxId": "Укажите TAX ID",
+      "specifyTaxId": "Укажите ИНН",
       "specifyFullName": "Укажите ФИО",
       "specifyCountry": "Укажите страну",
       "specifyPassport": "Укажите паспорт",
-      "addAtLeastOneItem": "Добавьте хотя бы одну позицию с описанием и ценой"
+      "addAtLeastOneItem": "Добавьте хотя бы одну позицию"
     },
     "messages": {
       "agreementsLoadError": "Ошибка загрузки договоров",
-      "agreementDataLoaded": "Данные из договора загружены. Вы можете их отредактировать",
+      "agreementDataLoaded": "Данные договора загружены",
       "agreementDataLoadError": "Ошибка загрузки данных договора",
       "created": "Инвойс успешно создан",
       "createError": "Ошибка создания инвойса"
@@ -2820,32 +2844,44 @@
       "createError": "Ошибка создания чека"
     }
   },
-    "editInvoiceModal": {
-    "title": "Редактирование инвойса",
+  "editInvoiceModal": {
+    "title": "Редактировать инвойс",
+    "alerts": {
+      "editInfoTitle": "Редактирование инвойса",
+      "editInfoDesc": "Внесите необходимые изменения и сохраните"
+    },
     "buttons": {
       "save": "Сохранить изменения"
     },
     "messages": {
-      "agreementDataLoaded": "Данные из договора загружены",
+      "agreementDataLoaded": "Данные договора загружены",
       "updated": "Инвойс успешно обновлён",
       "updateError": "Ошибка обновления инвойса"
     }
   },
-    "editReceiptModal": {
-    "title": "Редактирование чека",
+  "editReceiptModal": {
+    "title": "Редактировать квитанцию",
+    "alerts": {
+      "editInfoTitle": "Редактирование квитанции об оплате",
+      "editInfoDesc": "Внесите необходимые изменения в данные квитанции"
+    },
+    "fields": {
+      "invoiceNumber": "Номер инвойса"
+    },
     "sections": {
-      "paidItems": "Оплаченные позиции"
+      "paidItems": "Оплаченные позиции",
+      "summary": "Итого"
+    },
+    "placeholders": {
+      "receiptNotes": "Дополнительная информация о платеже"
     },
     "buttons": {
       "save": "Сохранить изменения"
     },
-    "placeholders": {
-      "receiptNotes": "Дополнительная информация о чеке"
-    },
     "messages": {
       "invoiceItemsLoadError": "Ошибка загрузки позиций инвойса",
-      "updated": "Чек успешно обновлён",
-      "updateError": "Ошибка обновления чека"
+      "updated": "Квитанция успешно обновлена",
+      "updateError": "Ошибка обновления квитанции"
     }
   },
     "receiptsList": {

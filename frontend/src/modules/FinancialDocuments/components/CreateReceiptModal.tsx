@@ -2,38 +2,51 @@
 import { useState, useEffect } from 'react';
 import {
   Modal,
-  Form,
-  Input,
-  Select,
   Button,
-  Steps,
-  Space,
+  Stack,
+  Group,
+  Text,
+  Textarea,
+  NumberInput,
+  Select,
   Card,
-  Row,
-  Col,
-  DatePicker,
-  message,
-  InputNumber,
+  Grid,
+  Paper,
+  ThemeIcon,
+  Stepper,
+  Alert,
   Checkbox,
-  Upload,
+  FileButton,
   Image,
-  Alert
-} from 'antd';
+  ActionIcon,
+  Badge,
+  useMantineTheme,
+  SimpleGrid
+} from '@mantine/core';
+import { DateInput } from '@mantine/dates';
+import { notifications } from '@mantine/notifications';
+import { useMediaQuery } from '@mantine/hooks';
 import {
-  FileTextOutlined,
-  UploadOutlined,
-  DeleteOutlined,
-  CheckCircleOutlined
-} from '@ant-design/icons';
-import type { UploadFile } from 'antd/es/upload/interface';
+  IconFileText,
+  IconUpload,
+  IconTrash,
+  IconCheck,
+  IconX,
+  IconReceipt,
+  IconCalendar,
+  IconCurrencyBaht,
+  IconFileInvoice,
+  IconInfoCircle,
+  IconChevronRight,
+  IconChevronLeft,
+  IconCheckbox,
+  IconPhoto,
+  IconAlertCircle
+} from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { financialDocumentsApi, CreateReceiptDTO, Invoice, InvoiceItem } from '@/api/financialDocuments.api';
 import { agreementsApi, Agreement } from '@/api/agreements.api';
 import dayjs from 'dayjs';
-import './CreateReceiptModal.css';
-
-const { Option } = Select;
-const { TextArea } = Input;
 
 interface CreateReceiptModalProps {
   visible: boolean;
@@ -42,16 +55,34 @@ interface CreateReceiptModalProps {
   invoiceId?: number;
 }
 
+interface UploadedFile {
+  file: File;
+  preview: string;
+}
+
 const CreateReceiptModal = ({ visible, onCancel, onSuccess, invoiceId }: CreateReceiptModalProps) => {
   const { t } = useTranslation();
-  const [form] = Form.useForm();
+  const theme = useMantineTheme();
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [agreements, setAgreements] = useState<Agreement[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
-  const [uploadedFiles, setUploadedFiles] = useState<Array<{ file: UploadFile; preview: string }>>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+
+  // Form state
+  const [agreementId, setAgreementId] = useState<string | null>(null);
+  const [invoiceIdState, setInvoiceIdState] = useState<string | null>(null);
+  const [receiptDate, setReceiptDate] = useState<Date>(new Date());
+  const [amountPaid, setAmountPaid] = useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = useState<'bank_transfer' | 'cash' | 'crypto' | 'barter'>('bank_transfer');
+  const [notes, setNotes] = useState('');
+
+  // Validation errors
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (visible) {
@@ -69,7 +100,12 @@ const CreateReceiptModal = ({ visible, onCancel, onSuccess, invoiceId }: CreateR
       const response = await agreementsApi.getAll({ limit: 100 });
       setAgreements(response.data.data);
     } catch (error: any) {
-      message.error(t('createReceiptModal.messages.agreementsLoadError'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('createReceiptModal.messages.agreementsLoadError'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     }
   };
 
@@ -78,33 +114,67 @@ const CreateReceiptModal = ({ visible, onCancel, onSuccess, invoiceId }: CreateR
       const response = await financialDocumentsApi.getInvoiceById(id);
       const invoice = response.data.data;
       setSelectedInvoice(invoice);
-      form.setFieldValue('invoice_id', invoice.id);
-      form.setFieldValue('agreement_id', invoice.agreement_id);
+      setInvoiceIdState(String(invoice.id));
+      setAgreementId(String(invoice.agreement_id));
       
-      // Автоматически выбираем все неоплаченные позиции
+      // Автоматически выбираем все позиции
       if (invoice.items) {
         setSelectedItems(invoice.items.map(item => item.id!));
       }
+
+      // Предзаполняем сумму оплаты (остаток)
+      const remaining = invoice.total_amount - invoice.amount_paid;
+      setAmountPaid(remaining);
     } catch (error: any) {
-      message.error(t('createReceiptModal.messages.invoiceLoadError'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('createReceiptModal.messages.invoiceLoadError'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     }
   };
 
-  const handleAgreementChange = async (agreementId: number) => {
+  const handleAgreementChange = async (value: string | null) => {
+    if (!value) {
+      setAgreementId(null);
+      setInvoices([]);
+      setSelectedInvoice(null);
+      setSelectedItems([]);
+      setInvoiceIdState(null);
+      return;
+    }
+
+    setAgreementId(value);
+
     try {
-      const response = await financialDocumentsApi.getInvoicesByAgreement(agreementId);
+      const response = await financialDocumentsApi.getInvoicesByAgreement(Number(value));
       setInvoices(response.data.data);
       setSelectedInvoice(null);
       setSelectedItems([]);
-      form.setFieldValue('invoice_id', undefined);
+      setInvoiceIdState(null);
     } catch (error: any) {
-      message.error(t('createReceiptModal.messages.invoicesLoadError'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('createReceiptModal.messages.invoicesLoadError'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     }
   };
 
-  const handleInvoiceChange = async (invoiceId: number) => {
+  const handleInvoiceChange = async (value: string | null) => {
+    if (!value) {
+      setInvoiceIdState(null);
+      setSelectedInvoice(null);
+      setSelectedItems([]);
+      return;
+    }
+
+    setInvoiceIdState(value);
+
     try {
-      const response = await financialDocumentsApi.getInvoiceById(invoiceId);
+      const response = await financialDocumentsApi.getInvoiceById(Number(value));
       const invoice = response.data.data;
       setSelectedInvoice(invoice);
       
@@ -115,23 +185,34 @@ const CreateReceiptModal = ({ visible, onCancel, onSuccess, invoiceId }: CreateR
       
       // Предзаполняем сумму оплаты (остаток к оплате)
       const remaining = invoice.total_amount - invoice.amount_paid;
-      form.setFieldValue('amount_paid', remaining);
+      setAmountPaid(remaining);
     } catch (error: any) {
-      message.error(t('createReceiptModal.messages.invoiceLoadError'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('createReceiptModal.messages.invoiceLoadError'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     }
   };
 
-  const handleFileUpload = (file: UploadFile) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const newFile = { 
-        file: file, 
-        preview: e.target?.result as string
+  const handleFilesUpload = (files: File[]) => {
+    const newFiles: UploadedFile[] = [];
+    
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        newFiles.push({
+          file: file,
+          preview: e.target?.result as string
+        });
+        
+        if (newFiles.length === files.length) {
+          setUploadedFiles([...uploadedFiles, ...newFiles]);
+        }
       };
-      setUploadedFiles([...uploadedFiles, newFile]);
-    };
-    reader.readAsDataURL(file as any);
-    return false;
+      reader.readAsDataURL(file);
+    });
   };
 
   const removeFile = (index: number) => {
@@ -145,50 +226,105 @@ const CreateReceiptModal = ({ visible, onCancel, onSuccess, invoiceId }: CreateR
     setInvoices([]);
     setSelectedItems([]);
     setUploadedFiles([]);
-    form.resetFields();
-    form.setFieldValue('receipt_date', dayjs());
-    form.setFieldValue('payment_method', 'bank_transfer');
+    setAgreementId(null);
+    setInvoiceIdState(null);
+    setReceiptDate(new Date());
+    setAmountPaid(0);
+    setPaymentMethod('bank_transfer');
+    setNotes('');
+    setErrors({});
   };
 
-  const handleNext = async () => {
-    try {
-      if (currentStep === 0) {
-        await form.validateFields(['agreement_id', 'invoice_id', 'receipt_date', 'amount_paid', 'payment_method']);
-        
-        if (selectedItems.length === 0) {
-          message.error(t('createReceiptModal.validation.selectAtLeastOneItem'));
-          return;
-        }
+  const toggleItemSelection = (itemId: number) => {
+    if (selectedItems.includes(itemId)) {
+      setSelectedItems(selectedItems.filter(id => id !== itemId));
+    } else {
+      setSelectedItems([...selectedItems, itemId]);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (!selectedInvoice || !selectedInvoice.items) return;
+    
+    if (selectedItems.length === selectedInvoice.items.length) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(selectedInvoice.items.map(item => item.id!));
+    }
+  };
+
+  const validateStep = (step: number): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (step === 0) {
+      if (!agreementId) {
+        newErrors.agreementId = t('createReceiptModal.validation.selectAgreement');
       }
-      
+      if (!invoiceIdState) {
+        newErrors.invoiceId = t('createReceiptModal.validation.selectInvoice');
+      }
+      if (!receiptDate) {
+        newErrors.receiptDate = t('createReceiptModal.validation.specifyDate');
+      }
+      if (!amountPaid || amountPaid <= 0) {
+        newErrors.amountPaid = t('createReceiptModal.validation.specifyAmount');
+      }
+      if (selectedInvoice && amountPaid > (selectedInvoice.total_amount - selectedInvoice.amount_paid)) {
+        newErrors.amountPaid = t('createReceiptModal.validation.amountExceedsRemaining');
+      }
+      if (!paymentMethod) {
+        newErrors.paymentMethod = t('createReceiptModal.validation.selectPaymentMethod');
+      }
+      if (selectedItems.length === 0) {
+        notifications.show({
+          title: t('errors.validation'),
+          message: t('createReceiptModal.validation.selectAtLeastOneItem'),
+          color: 'red',
+          icon: <IconX size={18} />
+        });
+        return false;
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleNext = () => {
+    if (validateStep(currentStep)) {
       setCurrentStep(currentStep + 1);
-    } catch (error) {
-      console.error('Validation error:', error);
     }
   };
 
   const handlePrev = () => {
     setCurrentStep(currentStep - 1);
+    setErrors({});
   };
 
   const handleSubmit = async () => {
+    if (!validateStep(currentStep)) return;
+
     try {
       setLoading(true);
-      const values = await form.validateFields();
 
       if (selectedItems.length === 0) {
-        message.error(t('createReceiptModal.validation.selectAtLeastOneItem'));
+        notifications.show({
+          title: t('errors.validation'),
+          message: t('createReceiptModal.validation.selectAtLeastOneItem'),
+          color: 'red',
+          icon: <IconX size={18} />
+        });
         setLoading(false);
         return;
       }
 
       const receiptData: CreateReceiptDTO = {
-        invoice_id: values.invoice_id,
-        agreement_id: values.agreement_id || undefined,
-        receipt_date: dayjs(values.receipt_date).format('YYYY-MM-DD'),
-        amount_paid: values.amount_paid,
-        payment_method: values.payment_method,
-        notes: values.notes,
+        invoice_id: Number(invoiceIdState),
+        agreement_id: agreementId ? Number(agreementId) : undefined,
+        receipt_date: dayjs(receiptDate).format('YYYY-MM-DD'),
+        amount_paid: amountPaid,
+        payment_method: paymentMethod,
+        notes: notes,
         selected_items: selectedItems
       };
 
@@ -199,32 +335,43 @@ const CreateReceiptModal = ({ visible, onCancel, onSuccess, invoiceId }: CreateR
       if (uploadedFiles.length > 0) {
         const formData = new FormData();
         uploadedFiles.forEach((fileObj, index) => {
-          formData.append(`file_${index}`, fileObj.file as any);
+          formData.append(`file_${index}`, fileObj.file);
         });
 
         try {
           await financialDocumentsApi.uploadReceiptFiles(receiptId, formData);
         } catch (uploadError) {
           console.error('File upload error:', uploadError);
-          message.warning(t('createReceiptModal.messages.createdButFilesNotUploaded'));
+          notifications.show({
+            title: t('common.success'),
+            message: t('createReceiptModal.messages.createdButFilesNotUploaded'),
+            color: 'orange',
+            icon: <IconAlertCircle size={18} />
+          });
         }
       }
 
-      message.success(t('createReceiptModal.messages.created'));
+      notifications.show({
+        title: t('common.success'),
+        message: t('createReceiptModal.messages.created'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
+      
       onSuccess();
       resetForm();
     } catch (error: any) {
       console.error('Error creating receipt:', error);
-      message.error(error.response?.data?.message || t('createReceiptModal.messages.createError'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: error.response?.data?.message || t('createReceiptModal.messages.createError'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     } finally {
       setLoading(false);
     }
   };
-
-  const steps = [
-    { title: t('createReceiptModal.steps.basic'), icon: <FileTextOutlined /> },
-    { title: t('createReceiptModal.steps.files'), icon: <UploadOutlined /> }
-  ];
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US').format(amount);
@@ -246,368 +393,423 @@ const CreateReceiptModal = ({ visible, onCancel, onSuccess, invoiceId }: CreateR
 
   return (
     <Modal
-      title={t('createReceiptModal.title')}
-      open={visible}
-      onCancel={onCancel}
-      width={900}
-      footer={null}
-      className="create-receipt-modal dark-theme"
-      destroyOnClose
+      opened={visible}
+      onClose={onCancel}
+      title={
+        <Group gap="sm">
+          <ThemeIcon size="lg" radius="md" variant="gradient" gradient={{ from: 'blue', to: 'cyan' }}>
+            <IconReceipt size={20} />
+          </ThemeIcon>
+          <Text size="lg" fw={700}>
+            {t('createReceiptModal.title')}
+          </Text>
+        </Group>
+      }
+      size={isMobile ? 'full' : 'xl'}
+      centered={!isMobile}
+      padding="lg"
     >
-      <Steps 
-        current={currentStep} 
-        items={steps} 
-        style={{ marginBottom: 24 }}
-        responsive={false}
-        size="small"
-      />
+      <Stack gap="lg">
+        {/* Stepper */}
+        <Stepper 
+          active={currentStep} 
+          onStepClick={setCurrentStep}
+          size={isMobile ? 'xs' : 'sm'}
+          iconSize={isMobile ? 32 : 42}
+        >
+          <Stepper.Step
+            label={!isMobile ? t('createReceiptModal.steps.basic') : undefined}
+            description={!isMobile ? t('createReceiptModal.steps.basicDesc') : undefined}
+            icon={<IconFileText size={18} />}
+          />
+          <Stepper.Step
+            label={!isMobile ? t('createReceiptModal.steps.files') : undefined}
+            description={!isMobile ? t('createReceiptModal.steps.filesDesc') : undefined}
+            icon={<IconUpload size={18} />}
+          />
+        </Stepper>
 
-      <Form form={form} layout="vertical">
         {/* Шаг 1: Основная информация */}
-        <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>
-          <Row gutter={16}>
-            <Col xs={24} md={12}>
-              <Form.Item 
-                name="agreement_id" 
-                label={t('createReceiptModal.fields.agreement')}
-                rules={[{ required: true, message: t('createReceiptModal.validation.selectAgreement') }]}
-              >
+        {currentStep === 0 && (
+          <Stack gap="md">
+            <Grid gutter="md">
+              <Grid.Col span={{ base: 12, sm: 6 }}>
                 <Select
+                  label={t('createReceiptModal.fields.agreement')}
                   placeholder={t('createReceiptModal.placeholders.selectAgreement')}
-                  showSearch
-                  optionFilterProp="children"
-                  size="large"
+                  leftSection={<IconFileInvoice size={18} />}
+                  data={agreements.map(agreement => ({
+                    value: String(agreement.id),
+                    label: agreement.agreement_number + (agreement.property_name ? ` - ${agreement.property_name}` : '')
+                  }))}
+                  value={agreementId}
                   onChange={handleAgreementChange}
+                  searchable
+                  clearable
                   disabled={!!invoiceId}
-                >
-                  {agreements.map(agreement => (
-                    <Option key={agreement.id} value={agreement.id}>
-                      {agreement.agreement_number}
-                      {agreement.property_name && ` - ${agreement.property_name}`}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-
-            <Col xs={24} md={12}>
-              <Form.Item 
-                name="invoice_id" 
-                label={t('createReceiptModal.fields.invoice')}
-                rules={[{ required: true, message: t('createReceiptModal.validation.selectInvoice') }]}
-              >
-                <Select
-                  placeholder={t('createReceiptModal.placeholders.selectInvoice')}
-                  showSearch
-                  optionFilterProp="children"
-                  size="large"
-                  onChange={handleInvoiceChange}
-                  disabled={invoices.length === 0 || !!invoiceId}
-                >
-                  {invoices.map(invoice => (
-                    <Option key={invoice.id} value={invoice.id}>
-                      {invoice.invoice_number} - {formatCurrency(invoice.total_amount - invoice.amount_paid)} THB {t('createReceiptModal.remaining')}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-
-          {selectedInvoice && (
-            <Alert
-              message={t('createReceiptModal.invoiceInfo.title')}
-              description={
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  <div>
-                    <strong>{t('createReceiptModal.invoiceInfo.totalAmount')}:</strong> {formatCurrency(selectedInvoice.total_amount)} THB
-                  </div>
-                  <div>
-                    <strong>{t('createReceiptModal.invoiceInfo.alreadyPaid')}:</strong> {formatCurrency(selectedInvoice.amount_paid)} THB
-                  </div>
-                  <div>
-                    <strong>{t('createReceiptModal.invoiceInfo.remainingToPay')}:</strong>{' '}
-                    <span style={{ color: '#faad14', fontWeight: 600 }}>
-                      {formatCurrency(remainingAmount)} THB
-                    </span>
-                  </div>
-                </Space>
-              }
-              type="info"
-              showIcon
-              style={{ marginBottom: 16 }}
-            />
-          )}
-
-          <Row gutter={16}>
-            <Col xs={24} md={12}>
-              <Form.Item 
-                name="receipt_date" 
-                label={t('createReceiptModal.fields.paymentDate')}
-                rules={[{ required: true, message: t('createReceiptModal.validation.specifyDate') }]}
-                initialValue={dayjs()}
-              >
-                <DatePicker 
-                  style={{ width: '100%' }} 
-                  format="DD.MM.YYYY" 
-                  size="large"
+                  error={errors.agreementId}
+                  styles={{ input: { fontSize: '16px' } }}
+                  required
                 />
-              </Form.Item>
-            </Col>
+              </Grid.Col>
 
-            <Col xs={24} md={12}>
-              <Form.Item 
-                name="amount_paid" 
-                label={t('createReceiptModal.fields.paymentAmount')}
-                rules={[
-                  { required: true, message: t('createReceiptModal.validation.specifyAmount') },
-                  {
-                    validator: (_, value) => {
-                      if (selectedInvoice && value > remainingAmount) {
-                        return Promise.reject(t('createReceiptModal.validation.amountExceedsRemaining'));
-                      }
-                      return Promise.resolve();
-                    }
-                  }
-                ]}
+              <Grid.Col span={{ base: 12, sm: 6 }}>
+                <Select
+                  label={t('createReceiptModal.fields.invoice')}
+                  placeholder={t('createReceiptModal.placeholders.selectInvoice')}
+                  leftSection={<IconReceipt size={18} />}
+                  data={invoices.map(invoice => ({
+                    value: String(invoice.id),
+                    label: `${invoice.invoice_number} - ${formatCurrency(invoice.total_amount - invoice.amount_paid)} THB ${t('createReceiptModal.remaining')}`
+                  }))}
+                  value={invoiceIdState}
+                  onChange={handleInvoiceChange}
+                  searchable
+                  clearable
+                  disabled={invoices.length === 0 || !!invoiceId}
+                  error={errors.invoiceId}
+                  styles={{ input: { fontSize: '16px' } }}
+                  required
+                />
+              </Grid.Col>
+            </Grid>
+
+            {/* Информация о выбранном инвойсе */}
+            {selectedInvoice && (
+              <Alert
+                icon={<IconInfoCircle size={18} />}
+                title={t('createReceiptModal.invoiceInfo.title')}
+                color="blue"
+                variant="light"
               >
-                <InputNumber
-                  style={{ width: '100%' }}
+                <Stack gap="xs">
+                  <Group justify="space-between">
+                    <Text size="sm">
+                      <strong>{t('createReceiptModal.invoiceInfo.totalAmount')}:</strong>
+                    </Text>
+                    <Text size="sm" fw={600}>
+                      {formatCurrency(selectedInvoice.total_amount)} THB
+                    </Text>
+                  </Group>
+                  <Group justify="space-between">
+                    <Text size="sm">
+                      <strong>{t('createReceiptModal.invoiceInfo.alreadyPaid')}:</strong>
+                    </Text>
+                    <Text size="sm" fw={600}>
+                      {formatCurrency(selectedInvoice.amount_paid)} THB
+                    </Text>
+                  </Group>
+                  <Group justify="space-between">
+                    <Text size="sm">
+                      <strong>{t('createReceiptModal.invoiceInfo.remainingToPay')}:</strong>
+                    </Text>
+                    <Text size="sm" fw={600} c="yellow">
+                      {formatCurrency(remainingAmount)} THB
+                    </Text>
+                  </Group>
+                </Stack>
+              </Alert>
+            )}
+
+            <Grid gutter="md">
+              <Grid.Col span={{ base: 12, sm: 6 }}>
+                <DateInput
+                  label={t('createReceiptModal.fields.paymentDate')}
+                  placeholder={t('createReceiptModal.placeholders.selectDate')}
+                  leftSection={<IconCalendar size={18} />}
+                  value={receiptDate}
+                  onChange={(date) => setReceiptDate(date || new Date())}
+                  valueFormat="DD.MM.YYYY"
+                  clearable={false}
+                  error={errors.receiptDate}
+                  styles={{ input: { fontSize: '16px' } }}
+                  required
+                />
+              </Grid.Col>
+
+              <Grid.Col span={{ base: 12, sm: 6 }}>
+                <NumberInput
+                  label={t('createReceiptModal.fields.paymentAmount')}
                   placeholder="0"
+                  leftSection={<IconCurrencyBaht size={18} />}
+                  value={amountPaid}
+                  onChange={(value) => setAmountPaid(typeof value === 'number' ? value : 0)}
                   min={0.01}
                   max={remainingAmount || undefined}
                   step={100}
-                  formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                  parser={value => parseFloat(value!.replace(/,/g, ''))}
-                  addonAfter="THB"
-                  size="large"
+                  thousandSeparator=" "
+                  suffix=" THB"
+                  error={errors.amountPaid}
+                  styles={{ input: { fontSize: '16px' } }}
+                  required
                 />
-              </Form.Item>
-            </Col>
-          </Row>
+              </Grid.Col>
+            </Grid>
 
-          <Form.Item 
-            name="payment_method" 
-            label={t('createReceiptModal.fields.paymentMethod')}
-            rules={[{ required: true, message: t('createReceiptModal.validation.selectPaymentMethod') }]}
-            initialValue="bank_transfer"
-          >
-            <Select size="large" placeholder={t('createReceiptModal.placeholders.selectMethod')}>
-              <Option value="bank_transfer">{t('createReceiptModal.paymentMethods.bankTransfer')}</Option>
-              <Option value="cash">{t('createReceiptModal.paymentMethods.cash')}</Option>
-              <Option value="crypto">{t('createReceiptModal.paymentMethods.crypto')}</Option>
-              <Option value="barter">{t('createReceiptModal.paymentMethods.barter')}</Option>
-            </Select>
-          </Form.Item>
-
-          {/* Выбор позиций для оплаты */}
-          {selectedInvoice && selectedInvoice.items && selectedInvoice.items.length > 0 && (
-            <Card 
-              size="small" 
-              title={t('createReceiptModal.sections.selectItems')} 
-              style={{ marginBottom: 16 }}
-            >
-              <Space direction="vertical" style={{ width: '100%' }}>
-                <Checkbox
-                  checked={selectedItems.length === selectedInvoice.items.length}
-                  indeterminate={
-                    selectedItems.length > 0 && 
-                    selectedItems.length < selectedInvoice.items.length
-                  }
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedItems(selectedInvoice.items!.map(item => item.id!));
-                    } else {
-                      setSelectedItems([]);
-                    }
-                  }}
-                  style={{ fontWeight: 600 }}
-                >
-                  {t('createReceiptModal.selectAll')}
-                </Checkbox>
-
-                {selectedInvoice.items.map((item: InvoiceItem) => (
-                  <Card 
-                    key={item.id} 
-                    size="small"
-                    style={{ 
-                      background: '#141414', 
-                      border: selectedItems.includes(item.id!) ? '1px solid #1890ff' : '1px solid #303030'
-                    }}
-                  >
-                    <Checkbox
-                      checked={selectedItems.includes(item.id!)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedItems([...selectedItems, item.id!]);
-                        } else {
-                          setSelectedItems(selectedItems.filter(id => id !== item.id));
-                        }
-                      }}
-                    >
-                      <Space direction="vertical" size={2} style={{ width: '100%' }}>
-                        <div style={{ fontWeight: 600 }}>{item.description}</div>
-                        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)' }}>
-                          {item.quantity} x {formatCurrency(item.unit_price)} THB = {formatCurrency(item.total_price)} THB
-                        </div>
-                      </Space>
-                    </Checkbox>
-                  </Card>
-                ))}
-              </Space>
-            </Card>
-          )}
-
-          <Form.Item 
-            name="notes" 
-            label={t('createReceiptModal.fields.notes')}
-          >
-            <TextArea 
-              rows={3} 
-              placeholder={t('createReceiptModal.placeholders.notes')} 
-              size="large"
+            <Select
+              label={t('createReceiptModal.fields.paymentMethod')}
+              placeholder={t('createReceiptModal.placeholders.selectMethod')}
+              data={[
+                { value: 'bank_transfer', label: t('createReceiptModal.paymentMethods.bankTransfer') },
+                { value: 'cash', label: t('createReceiptModal.paymentMethods.cash') },
+                { value: 'crypto', label: t('createReceiptModal.paymentMethods.crypto') },
+                { value: 'barter', label: t('createReceiptModal.paymentMethods.barter') }
+              ]}
+              value={paymentMethod}
+              onChange={(value) => setPaymentMethod(value as 'bank_transfer' | 'cash' | 'crypto' | 'barter')}
+              error={errors.paymentMethod}
+              styles={{ input: { fontSize: '16px' } }}
+              required
             />
-          </Form.Item>
-        </div>
+
+            {/* Выбор позиций для оплаты */}
+            {selectedInvoice && selectedInvoice.items && selectedInvoice.items.length > 0 && (
+              <Card shadow="sm" padding="md" radius="md" withBorder>
+                <Stack gap="md">
+                  <Group justify="space-between">
+                    <Group gap="xs">
+                      <ThemeIcon size="md" radius="md" variant="light" color="blue">
+                        <IconCheckbox size={18} />
+                      </ThemeIcon>
+                      <Text size="sm" fw={600}>
+                        {t('createReceiptModal.sections.selectItems')}
+                      </Text>
+                    </Group>
+                    <Badge color="blue" variant="light">
+                      {selectedItems.length} / {selectedInvoice.items.length}
+                    </Badge>
+                  </Group>
+
+                  <Checkbox
+                    label={t('createReceiptModal.selectAll')}
+                    checked={selectedItems.length === selectedInvoice.items.length}
+                    indeterminate={
+                      selectedItems.length > 0 && 
+                      selectedItems.length < selectedInvoice.items.length
+                    }
+                    onChange={toggleSelectAll}
+                    fw={600}
+                  />
+
+                  <Stack gap="xs">
+                    {selectedInvoice.items.map((item: InvoiceItem) => (
+                      <Card
+                        key={item.id}
+                        padding="sm"
+                        radius="md"
+                        withBorder
+                        style={{
+                          borderColor: selectedItems.includes(item.id!) 
+                            ? theme.colors.blue[6] 
+                            : undefined,
+                          borderWidth: selectedItems.includes(item.id!) ? 2 : 1,
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => toggleItemSelection(item.id!)}
+                      >
+                        <Checkbox
+                          checked={selectedItems.includes(item.id!)}
+                          onChange={() => toggleItemSelection(item.id!)}
+                          label={
+                            <Stack gap={4}>
+                              <Text size="sm" fw={600}>
+                                {item.description}
+                              </Text>
+                              <Text size="xs" c="dimmed">
+                                {item.quantity} x {formatCurrency(item.unit_price)} THB = {formatCurrency(item.total_price)} THB
+                              </Text>
+                            </Stack>
+                          }
+                        />
+                      </Card>
+                    ))}
+                  </Stack>
+                </Stack>
+              </Card>
+            )}
+
+            <Textarea
+              label={t('createReceiptModal.fields.notes')}
+              placeholder={t('createReceiptModal.placeholders.notes')}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              minRows={3}
+              styles={{ input: { fontSize: '16px' } }}
+            />
+          </Stack>
+        )}
 
         {/* Шаг 2: Загрузка файлов */}
-        <div style={{ display: currentStep === 1 ? 'block' : 'none' }}>
-          <Alert
-            message={t('createReceiptModal.fileUpload.title')}
-            description={t('createReceiptModal.fileUpload.description')}
-            type="info"
-            showIcon
-            style={{ marginBottom: 16 }}
-          />
+        {currentStep === 1 && (
+          <Stack gap="md">
+            <Alert
+              icon={<IconInfoCircle size={18} />}
+              title={t('createReceiptModal.fileUpload.title')}
+              color="blue"
+              variant="light"
+            >
+              {t('createReceiptModal.fileUpload.description')}
+            </Alert>
 
-          {uploadedFiles.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <Row gutter={[8, 8]}>
+            {/* Предпросмотр загруженных файлов */}
+            {uploadedFiles.length > 0 && (
+              <SimpleGrid cols={{ base: 2, xs: 3, sm: 4 }} spacing="xs">
                 {uploadedFiles.map((fileObj, index) => (
-                  <Col key={index} xs={12} sm={8} md={6}>
-                    <div style={{ 
-                      position: 'relative',
-                      border: '1px solid #303030',
-                      borderRadius: '4px',
-                      padding: '8px',
-                      background: '#141414'
-                    }}>
-                      <Image
-                        src={fileObj.preview}
-                        alt={`File ${index + 1}`}
-                        style={{ 
-                          width: '100%', 
-                          height: '120px', 
-                          objectFit: 'cover',
-                          borderRadius: '2px'
-                        }}
-                      />
-                      <Button
-                        danger
-                        size="small"
-                        icon={<DeleteOutlined />}
-                        onClick={() => removeFile(index)}
-                        style={{
-                          position: 'absolute',
-                          top: '4px',
-                          right: '4px',
-                          minWidth: 'auto',
-                          padding: '4px 8px'
-                        }}
-                      />
-                    </div>
-                  </Col>
+                  <Card
+                    key={index}
+                    padding="xs"
+                    radius="md"
+                    withBorder
+                    style={{ position: 'relative' }}
+                  >
+                    <Image
+                      src={fileObj.preview}
+                      alt={`File ${index + 1}`}
+                      height={120}
+                      fit="cover"
+                      radius="sm"
+                    />
+                    <ActionIcon
+                      color="red"
+                      variant="filled"
+                      size="sm"
+                      radius="xl"
+                      onClick={() => removeFile(index)}
+                      style={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 4
+                      }}
+                    >
+                      <IconTrash size={14} />
+                    </ActionIcon>
+                  </Card>
                 ))}
-              </Row>
-            </div>
-          )}
+              </SimpleGrid>
+            )}
 
-          <Upload
-            accept="image/*"
-            beforeUpload={handleFileUpload}
-            showUploadList={false}
-            maxCount={10}
-            multiple
-          >
-            <Button 
-              icon={<UploadOutlined />} 
-              block
-              size="large"
-              type={uploadedFiles.length > 0 ? 'dashed' : 'default'}
+            <FileButton
+              onChange={handleFilesUpload}
+              accept="image/*"
+              multiple
             >
-              {uploadedFiles.length > 0 
-                ? t('createReceiptModal.fileUpload.uploadedMore', { count: uploadedFiles.length })
-                : t('createReceiptModal.fileUpload.uploadButton')}
-            </Button>
-          </Upload>
+              {(props) => (
+                <Button
+                  {...props}
+                  leftSection={<IconUpload size={18} />}
+                  variant={uploadedFiles.length > 0 ? 'light' : 'filled'}
+                  fullWidth
+                  size="lg"
+                >
+                  {uploadedFiles.length > 0 
+                    ? t('createReceiptModal.fileUpload.uploadMore', { count: uploadedFiles.length })
+                    : t('createReceiptModal.fileUpload.uploadButton')}
+                </Button>
+              )}
+            </FileButton>
 
-          {/* Итоговая информация */}
-          <Card 
-            size="small" 
-            title={t('createReceiptModal.sections.summary')} 
-            style={{ 
-              marginTop: 16, 
-              background: '#141414', 
-              border: '1px solid #303030' 
-            }}
-          >
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <Row justify="space-between">
-                <Col>{t('createReceiptModal.summary.paymentAmount')}:</Col>
-                <Col style={{ fontSize: '18px', fontWeight: 700, color: '#52c41a' }}>
-                  {formatCurrency(form.getFieldValue('amount_paid') || 0)} THB
-                </Col>
-              </Row>
-              <Row justify="space-between">
-                <Col>{t('createReceiptModal.summary.paymentMethod')}:</Col>
-                <Col style={{ fontWeight: 600 }}>
-                  {getPaymentMethodText(form.getFieldValue('payment_method'))}
-                </Col>
-              </Row>
-              <Row justify="space-between">
-                <Col>{t('createReceiptModal.summary.itemsPaid')}:</Col>
-                <Col style={{ fontWeight: 600 }}>
-                  {selectedItems.length}
-                </Col>
-              </Row>
-              <Row justify="space-between">
-                <Col>{t('createReceiptModal.summary.filesAttached')}:</Col>
-                <Col style={{ fontWeight: 600 }}>
-                  {uploadedFiles.length}
-                </Col>
-              </Row>
-            </Space>
-          </Card>
-        </div>
-      </Form>
-
-      {/* Футер с кнопками навигации */}
-      <div style={{ 
-        marginTop: 24, 
-        display: 'flex', 
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '8px'
-      }}>
-        <Button onClick={onCancel}>{t('common.cancel')}</Button>
-        <Space>
-          {currentStep > 0 && (
-            <Button onClick={handlePrev}>{t('createReceiptModal.buttons.back')}</Button>
-          )}
-          {currentStep < steps.length - 1 ? (
-            <Button type="primary" onClick={handleNext}>{t('createReceiptModal.buttons.next')}</Button>
-          ) : (
-            <Button 
-              type="primary" 
-              onClick={handleSubmit} 
-              loading={loading}
-              icon={<CheckCircleOutlined />}
+            {/* Итоговая информация */}
+            <Paper
+              p="lg"
+              radius="md"
+              withBorder
+              style={{
+                background: `linear-gradient(135deg, ${theme.colors.green[9]} 0%, ${theme.colors.teal[9]} 100%)`
+              }}
             >
-              {t('createReceiptModal.buttons.create')}
-            </Button>
-          )}
-        </Space>
-      </div>
+              <Stack gap="md">
+                <Group gap="xs">
+                  <ThemeIcon size="md" radius="md" variant="white" color="green">
+                    <IconCheck size={18} />
+                  </ThemeIcon>
+                  <Text size="md" fw={600} c="white">
+                    {t('createReceiptModal.sections.summary')}
+                  </Text>
+                </Group>
+
+                <Group justify="space-between">
+                  <Text size="sm" c="white" opacity={0.9}>
+                    {t('createReceiptModal.summary.paymentAmount')}:
+                  </Text>
+                  <Text size="lg" fw={700} c="white">
+                    {formatCurrency(amountPaid)} THB
+                  </Text>
+                </Group>
+
+                <Group justify="space-between">
+                  <Text size="sm" c="white" opacity={0.9}>
+                    {t('createReceiptModal.summary.paymentMethod')}:
+                  </Text>
+                  <Text size="sm" fw={600} c="white">
+                    {getPaymentMethodText(paymentMethod)}
+                  </Text>
+                </Group>
+
+                <Group justify="space-between">
+                  <Text size="sm" c="white" opacity={0.9}>
+                    {t('createReceiptModal.summary.itemsPaid')}:
+                  </Text>
+                  <Text size="sm" fw={600} c="white">
+                    {selectedItems.length}
+                  </Text>
+                </Group>
+
+                <Group justify="space-between">
+                  <Text size="sm" c="white" opacity={0.9}>
+                    {t('createReceiptModal.summary.filesAttached')}:
+                  </Text>
+                  <Badge color="white" variant="light">
+                    <Group gap={4}>
+                      <IconPhoto size={14} />
+                      {uploadedFiles.length}
+                    </Group>
+                  </Badge>
+                </Group>
+              </Stack>
+            </Paper>
+          </Stack>
+        )}
+
+        {/* Кнопки навигации */}
+        <Group justify="space-between">
+          <Button
+            variant="subtle"
+            onClick={onCancel}
+          >
+            {t('common.cancel')}
+          </Button>
+
+          <Group gap="xs">
+            {currentStep > 0 && (
+              <Button
+                variant="light"
+                leftSection={<IconChevronLeft size={18} />}
+                onClick={handlePrev}
+              >
+                {t('createReceiptModal.buttons.back')}
+              </Button>
+            )}
+            {currentStep < 1 ? (
+              <Button
+                rightSection={<IconChevronRight size={18} />}
+                onClick={handleNext}
+              >
+                {t('createReceiptModal.buttons.next')}
+              </Button>
+            ) : (
+              <Button
+                leftSection={<IconCheck size={18} />}
+                onClick={handleSubmit}
+                loading={loading}
+                gradient={{ from: 'green', to: 'teal' }}
+                variant="gradient"
+              >
+                {t('createReceiptModal.buttons.create')}
+              </Button>
+            )}
+          </Group>
+        </Group>
+      </Stack>
     </Modal>
   );
 };

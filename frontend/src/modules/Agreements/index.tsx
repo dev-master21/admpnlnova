@@ -18,7 +18,9 @@ import {
   Loader,
   Pagination,
   useMantineTheme,
-  Paper
+  Paper,
+  Divider,
+  Box
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { modals } from '@mantine/modals';
@@ -34,7 +36,8 @@ import {
   IconCurrencyDollar,
   IconSearch,
   IconCheck,
-  IconX
+  IconX,
+  IconCalendar
 } from '@tabler/icons-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -257,59 +260,124 @@ const Agreements = () => {
       radius="md"
       withBorder
       style={{
-        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-        cursor: 'pointer'
-      }}
-      onClick={() => navigate(`/agreements/${agreement.id}`)}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = theme.shadows.md;
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = theme.shadows.sm;
+        transition: 'all 0.2s ease',
+        borderLeft: `4px solid ${theme.colors[getStatusColor(agreement.status)][6]}`
       }}
     >
-      <Stack gap="sm">
-        <Group justify="space-between" align="flex-start">
-          <Text fw={600} size="sm" style={{ flex: 1 }}>
-            {agreement.agreement_number}
-          </Text>
-          <Group gap={4}>
+      <Stack gap="md">
+        {/* Заголовок с номером и типом */}
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <Box style={{ flex: 1 }}>
+            <Text fw={700} size="md" mb={4}>
+              {agreement.agreement_number}
+            </Text>
             {getTypeTag(agreement.type)}
-            {getStatusTag(agreement.status)}
-          </Group>
+          </Box>
+          {getStatusTag(agreement.status)}
         </Group>
 
+        <Divider />
+
+        {/* Информация об объекте */}
         {agreement.property_name && (
-          <div>
-            <Text size="xs" c="dimmed">
-              {t('agreements.mobile.property')}:
+          <Box>
+            <Text size="xs" c="dimmed" mb={4}>
+              {t('agreements.table.property')}:
             </Text>
             <Text size="sm" fw={500}>
               {agreement.property_name}
             </Text>
-          </div>
+            {agreement.property_number && (
+              <Text size="xs" c="dimmed">
+                {agreement.property_number}
+              </Text>
+            )}
+          </Box>
         )}
 
-        <Group justify="space-between" mt="xs">
-          <Text size="xs" c="dimmed">
-            {new Date(agreement.created_at).toLocaleDateString('ru-RU')}
-          </Text>
+        {/* Описание */}
+        {agreement.description && (
+          <Box>
+            <Text size="xs" c="dimmed" mb={4}>
+              {t('agreements.table.description')}:
+            </Text>
+            <Text size="sm" lineClamp={2}>
+              {agreement.description}
+            </Text>
+          </Box>
+        )}
+
+        {/* Подписи */}
+        <Group justify="space-between">
+          <Group gap={4}>
+            <IconFileText size={16} color={theme.colors.gray[6]} />
+            <Text size="xs" c="dimmed">
+              {t('agreements.table.signatures')}:
+            </Text>
+            <Badge size="sm" variant="light">
+              {agreement.signed_count || 0} / {agreement.signature_count || 0}
+            </Badge>
+          </Group>
+
+          <Group gap={4}>
+            <IconCalendar size={16} color={theme.colors.gray[6]} />
+            <Text size="xs" c="dimmed">
+              {new Date(agreement.created_at).toLocaleDateString('ru-RU')}
+            </Text>
+          </Group>
+        </Group>
+
+        <Divider />
+
+        {/* Кнопки действий */}
+        <Group gap="xs">
           <Button
-            size="xs"
             variant="light"
+            size="xs"
+            flex={1}
+            leftSection={<IconEye size={16} />}
+            onClick={() => navigate(`/agreements/${agreement.id}`)}
+          >
+            {t('agreements.actions.view')}
+          </Button>
+          <Button
+            variant="light"
+            color="blue"
+            size="xs"
+            flex={1}
+            leftSection={<IconEdit size={16} />}
+            onClick={() => navigate(`/agreements/${agreement.id}?edit=true`)}
+          >
+            {t('agreements.actions.edit')}
+          </Button>
+          <ActionIcon
+            variant="light"
+            color="red"
+            size="lg"
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/agreements/${agreement.id}`);
+              handleDelete(agreement.id);
             }}
           >
-            {t('agreements.mobile.view')}
-          </Button>
+            <IconTrash size={18} />
+          </ActionIcon>
         </Group>
       </Stack>
     </Card>
   );
+
+  // Вспомогательная функция для получения цвета статуса
+  const getStatusColor = (status: string): string => {
+    const statusColors: Record<string, string> = {
+      draft: 'gray',
+      pending_signatures: 'blue',
+      signed: 'green',
+      active: 'teal',
+      expired: 'yellow',
+      cancelled: 'red'
+    };
+    return statusColors[status] || 'gray';
+  };
 
   return (
     <Stack gap="lg" p={isMobile ? 'sm' : 'md'}>

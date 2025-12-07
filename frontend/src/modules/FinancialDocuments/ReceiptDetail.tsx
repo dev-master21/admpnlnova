@@ -3,41 +3,60 @@ import { useState, useEffect } from 'react';
 import {
   Card,
   Button,
-  Space,
-  Descriptions,
-  Tag,
-  Divider,
-  message,
-  Modal,
-  Row,
-  Col,
-  Statistic,
-  Typography,
+  Badge,
+  Stack,
+  Group,
+  Text,
+  Title,
+  Grid,
+  Paper,
   Image,
-  Empty
-} from 'antd';
+  Center,
+  Loader,
+  Divider,
+  Box,
+  ThemeIcon,
+  useMantineTheme,
+  SimpleGrid
+} from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { modals } from '@mantine/modals';
+import { useMediaQuery } from '@mantine/hooks';
 import {
-  ArrowLeftOutlined,
-  DeleteOutlined,
-  DownloadOutlined,
-  FileTextOutlined,
-  QrcodeOutlined,
-  FileImageOutlined,
-  EditOutlined,
-  LinkOutlined
-} from '@ant-design/icons';
+  IconArrowLeft,
+  IconTrash,
+  IconDownload,
+  IconFileText,
+  IconQrcode,
+  IconPhoto,
+  IconEdit,
+  IconLink,
+  IconCheck,
+  IconX,
+  IconCurrencyBaht,
+  IconCalendar,
+  IconUser,
+  IconFileInvoice,
+  IconReceipt,
+  IconCreditCard,
+  IconCash,
+  IconBuildingBank,
+  IconCoins,
+  IconPackage,
+  IconAlertCircle
+} from '@tabler/icons-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { financialDocumentsApi, Receipt } from '@/api/financialDocuments.api';
-import './ReceiptDetail.css';
 import EditReceiptModal from './components/EditReceiptModal';
-
-const { Title, Text } = Typography;
 
 const ReceiptDetail = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const theme = useMantineTheme();
   const { id } = useParams<{ id: string }>();
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [loading, setLoading] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -54,7 +73,12 @@ const ReceiptDetail = () => {
       const response = await financialDocumentsApi.getReceiptById(Number(id));
       setReceipt(response.data.data);
     } catch (error: any) {
-      message.error(t('receiptDetail.messages.loadError'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('receiptDetail.messages.loadError'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
       navigate('/financial-documents?tab=receipts');
     } finally {
       setLoading(false);
@@ -62,19 +86,35 @@ const ReceiptDetail = () => {
   };
 
   const handleDelete = () => {
-    Modal.confirm({
+    modals.openConfirmModal({
       title: t('receiptDetail.confirm.deleteTitle'),
-      content: t('receiptDetail.confirm.deleteDescription'),
-      okText: t('common.delete'),
-      okType: 'danger',
-      cancelText: t('common.cancel'),
-      onOk: async () => {
+      children: (
+        <Text size="sm">
+          {t('receiptDetail.confirm.deleteDescription')}
+        </Text>
+      ),
+      labels: {
+        confirm: t('common.delete'),
+        cancel: t('common.cancel')
+      },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
         try {
           await financialDocumentsApi.deleteReceipt(Number(id));
-          message.success(t('receiptDetail.messages.deleted'));
+          notifications.show({
+            title: t('common.success'),
+            message: t('receiptDetail.messages.deleted'),
+            color: 'green',
+            icon: <IconCheck size={18} />
+          });
           navigate('/financial-documents?tab=receipts');
         } catch (error: any) {
-          message.error(t('receiptDetail.messages.deleteError'));
+          notifications.show({
+            title: t('errors.generic'),
+            message: t('receiptDetail.messages.deleteError'),
+            color: 'red',
+            icon: <IconX size={18} />
+          });
         }
       }
     });
@@ -82,22 +122,45 @@ const ReceiptDetail = () => {
 
   const handleCopyLink = async () => {
     if (!receipt?.uuid) {
-      message.error(t('receiptDetail.messages.uuidNotFound'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('receiptDetail.messages.uuidNotFound'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
       return;
     }
     
     const link = `https://admin.novaestate.company/receipt-verify/${receipt.uuid}`;
     try {
       await navigator.clipboard.writeText(link);
-      message.success(t('receiptDetail.messages.linkCopied'));
+      notifications.show({
+        title: t('common.success'),
+        message: t('receiptDetail.messages.linkCopied'),
+        color: 'green',
+        icon: <IconCheck size={18} />
+      });
     } catch (error) {
-      message.error(t('receiptDetail.messages.linkCopyError'));
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('receiptDetail.messages.linkCopyError'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
     }
   };
 
   const handleDownloadPDF = async () => {
     try {
-      message.loading({ content: t('receiptDetail.messages.generatingPDF'), key: 'pdf' });
+      notifications.show({
+        id: 'pdf-download',
+        loading: true,
+        title: t('receiptDetail.messages.generatingPDF'),
+        message: t('common.pleaseWait'),
+        autoClose: false,
+        withCloseButton: false
+      });
+
       const response = await financialDocumentsApi.downloadReceiptPDF(Number(id));
       
       const blob = new Blob([response.data], { type: 'application/pdf' });
@@ -110,272 +173,548 @@ const ReceiptDetail = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
       
-      message.success({ content: t('receiptDetail.messages.pdfDownloaded'), key: 'pdf' });
+      notifications.update({
+        id: 'pdf-download',
+        color: 'green',
+        title: t('common.success'),
+        message: t('receiptDetail.messages.pdfDownloaded'),
+        icon: <IconCheck size={18} />,
+        loading: false,
+        autoClose: 3000
+      });
     } catch (error: any) {
-      message.error({ content: t('receiptDetail.messages.pdfDownloadError'), key: 'pdf' });
+      notifications.update({
+        id: 'pdf-download',
+        color: 'red',
+        title: t('errors.generic'),
+        message: t('receiptDetail.messages.pdfDownloadError'),
+        icon: <IconX size={18} />,
+        loading: false,
+        autoClose: 3000
+      });
     }
   };
 
-  const getStatusTag = (status: string) => {
-    const statusConfig: Record<string, { color: string; text: string }> = {
-      pending: { color: 'processing', text: t('receiptDetail.statuses.pending') },
-      verified: { color: 'success', text: t('receiptDetail.statuses.verified') },
-      rejected: { color: 'error', text: t('receiptDetail.statuses.rejected') }
+  const getStatusBadge = (status: string) => {
+    const statusConfig: Record<string, { color: string; icon: React.ReactNode }> = {
+      pending: { 
+        color: 'blue', 
+        icon: <IconAlertCircle size={14} /> 
+      },
+      verified: { 
+        color: 'green', 
+        icon: <IconCheck size={14} /> 
+      },
+      rejected: { 
+        color: 'red', 
+        icon: <IconX size={14} /> 
+      }
     };
     
-    const config = statusConfig[status] || { color: 'default', text: status };
-    return <Tag color={config.color}>{config.text}</Tag>;
+    const config = statusConfig[status] || { color: 'gray', icon: null };
+    const text = t(`receiptDetail.statuses.${status}`);
+    
+    return (
+      <Badge 
+        size="lg" 
+        color={config.color} 
+        variant="light"
+        leftSection={config.icon}
+      >
+        {text}
+      </Badge>
+    );
+  };
+
+  const getPaymentMethodIcon = (method: string) => {
+    const icons: Record<string, React.ReactNode> = {
+      bank_transfer: <IconBuildingBank size={20} />,
+      cash: <IconCash size={20} />,
+      crypto: <IconCoins size={20} />,
+      barter: <IconPackage size={20} />
+    };
+    return icons[method] || <IconCreditCard size={20} />;
   };
 
   const getPaymentMethodText = (method: string) => {
-    const methodConfig: Record<string, string> = {
-      bank_transfer: t('receiptDetail.paymentMethods.bankTransfer'),
-      cash: t('receiptDetail.paymentMethods.cash'),
-      crypto: t('receiptDetail.paymentMethods.crypto'),
-      barter: t('receiptDetail.paymentMethods.barter')
-    };
-    
-    return methodConfig[method] || method;
+    return t(`receiptDetail.paymentMethods.${method}`);
   };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US').format(amount);
   };
 
-  if (!receipt) {
+  if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '100px 20px' }}>
-        {loading ? t('receiptDetail.loading') : t('receiptDetail.notFound')}
-      </div>
+      <Center style={{ height: '70vh' }}>
+        <Stack align="center" gap="md">
+          <Loader size="lg" />
+          <Text size="sm" c="dimmed">
+            {t('receiptDetail.loading')}
+          </Text>
+        </Stack>
+      </Center>
     );
   }
 
+  if (!receipt) {
+    return (
+      <Center style={{ height: '70vh' }}>
+        <Stack align="center" gap="md">
+          <ThemeIcon size={80} radius="xl" variant="light" color="red">
+            <IconFileText size={40} />
+          </ThemeIcon>
+          <Text size="lg" fw={600}>
+            {t('receiptDetail.notFound')}
+          </Text>
+          <Button
+            leftSection={<IconArrowLeft size={18} />}
+            onClick={() => navigate('/financial-documents?tab=receipts')}
+          >
+            {t('receiptDetail.buttons.backToList')}
+          </Button>
+        </Stack>
+      </Center>
+    );
+  }
+
+  const InfoItem = ({ 
+    icon, 
+    label, 
+    value, 
+    color = 'gray' 
+  }: { 
+    icon: React.ReactNode; 
+    label: string; 
+    value: React.ReactNode; 
+    color?: string;
+  }) => (
+    <Paper p="md" radius="md" withBorder>
+      <Group gap="sm" wrap="nowrap">
+        <ThemeIcon size="lg" radius="md" variant="light" color={color}>
+          {icon}
+        </ThemeIcon>
+        <Box style={{ flex: 1 }}>
+          <Text size="xs" c="dimmed" mb={4}>
+            {label}
+          </Text>
+          <Text size="sm" fw={500}>
+            {value}
+          </Text>
+        </Box>
+      </Group>
+    </Paper>
+  );
+
   return (
-    <div className="receipt-detail-container">
+    <Stack gap="lg" p={isMobile ? 'sm' : 'md'}>
       {/* Кнопка назад для мобильных */}
-      <div className="mobile-back-button">
-        <Button 
-          icon={<ArrowLeftOutlined />} 
+      {isMobile && (
+        <Button
+          variant="light"
+          leftSection={<IconArrowLeft size={18} />}
           onClick={() => navigate('/financial-documents?tab=receipts')}
-          block
+          fullWidth
         >
           {t('receiptDetail.buttons.backToList')}
         </Button>
-      </div>
+      )}
 
       {/* Заголовок и действия */}
-      <Card
-        title={
-          <Space>
-            <FileTextOutlined />
-            <span>{t('receiptDetail.title')} {receipt.receipt_number}</span>
-            {getStatusTag(receipt.status)}
-          </Space>
-        }
-        extra={
-          <Space wrap className="detail-actions">
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="md">
+          {/* Заголовок */}
+          <Group justify="space-between" wrap="wrap">
+            <Group gap="sm">
+              <ThemeIcon 
+                size="xl" 
+                radius="md" 
+                variant="gradient"
+                gradient={{ from: 'teal', to: 'green' }}
+              >
+                <IconReceipt size={24} />
+              </ThemeIcon>
+              <Box>
+                <Group gap="xs">
+                  <Title order={isMobile ? 4 : 3}>
+                    {receipt.receipt_number}
+                  </Title>
+                  {getStatusBadge(receipt.status)}
+                </Group>
+                <Text size="xs" c="dimmed">
+                  {t('receiptDetail.title')}
+                </Text>
+              </Box>
+            </Group>
+
+            {!isMobile && (
+              <Button
+                variant="light"
+                leftSection={<IconArrowLeft size={18} />}
+                onClick={() => navigate('/financial-documents?tab=receipts')}
+              >
+                {t('receiptDetail.buttons.back')}
+              </Button>
+            )}
+          </Group>
+
+          <Divider />
+
+          {/* Кнопки действий */}
+          <Group gap="xs" wrap="wrap">
             <Button
-              icon={<ArrowLeftOutlined />}
-              onClick={() => navigate('/financial-documents?tab=receipts')}
-              className="desktop-only"
-            >
-              {t('receiptDetail.buttons.back')}
-            </Button>
-            <Button
-              icon={<EditOutlined />}
+              variant="light"
+              leftSection={<IconEdit size={18} />}
               onClick={() => setEditModalVisible(true)}
+              flex={isMobile ? 1 : undefined}
             >
-              <span className="button-text">{t('receiptDetail.buttons.edit')}</span>
+              {!isMobile && t('receiptDetail.buttons.edit')}
             </Button>
             <Button
-              icon={<LinkOutlined />}
+              variant="light"
+              color="blue"
+              leftSection={<IconLink size={18} />}
               onClick={handleCopyLink}
+              flex={isMobile ? 1 : undefined}
             >
-              <span className="button-text">{t('receiptDetail.buttons.copyLink')}</span>
+              {!isMobile && t('receiptDetail.buttons.copyLink')}
             </Button>
             <Button
-              icon={<DownloadOutlined />}
+              variant="light"
+              color="teal"
+              leftSection={<IconDownload size={18} />}
               onClick={handleDownloadPDF}
+              flex={isMobile ? 1 : undefined}
             >
-              <span className="button-text">{t('receiptDetail.buttons.downloadPDF')}</span>
+              {!isMobile && t('receiptDetail.buttons.downloadPDF')}
             </Button>
             <Button
-              danger
-              icon={<DeleteOutlined />}
+              variant="light"
+              color="red"
+              leftSection={<IconTrash size={18} />}
               onClick={handleDelete}
+              flex={isMobile ? 1 : undefined}
             >
-              <span className="button-text">{t('common.delete')}</span>
+              {!isMobile && t('common.delete')}
             </Button>
-          </Space>
-        }
-      >
-        {/* Статистика */}
-        <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-          <Col xs={24} sm={12}>
-            <Card>
-              <Statistic
-                title={t('receiptDetail.fields.amountPaid')}
-                value={receipt.amount_paid}
-                suffix="THB"
-                valueStyle={{ color: '#52c41a' }}
-                formatter={(value) => formatCurrency(Number(value))}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12}>
-            <Card>
-              <Statistic
-                title={t('receiptDetail.fields.paymentMethod')}
-                value={getPaymentMethodText(receipt.payment_method)}
-                valueStyle={{ fontSize: '18px' }}
-              />
-            </Card>
-          </Col>
-        </Row>
+          </Group>
+        </Stack>
+      </Card>
 
-        {/* Основная информация */}
-        <Descriptions 
-          title={t('receiptDetail.sections.mainInfo')} 
-          bordered 
-          column={{ xs: 1, sm: 2 }}
-          size="small"
-        >
-          <Descriptions.Item label={t('receiptDetail.fields.paymentDate')}>
-            {new Date(receipt.receipt_date).toLocaleDateString('ru-RU')}
-          </Descriptions.Item>
-          <Descriptions.Item label={t('receiptDetail.fields.paymentMethod')}>
-            {getPaymentMethodText(receipt.payment_method)}
-          </Descriptions.Item>
-          {receipt.invoice_number && (
-            <Descriptions.Item label={t('receiptDetail.fields.invoice')}>
-              <Button 
-                type="link" 
-                size="small"
-                onClick={() => navigate(`/financial-documents/invoices/${receipt.invoice_id}`)}
-              >
-                {receipt.invoice_number}
-              </Button>
-            </Descriptions.Item>
-          )}
-          {receipt.agreement_number && (
-            <Descriptions.Item label={t('receiptDetail.fields.agreement')}>
-              <Button 
-                type="link" 
-                size="small"
-                onClick={() => navigate(`/agreements/${receipt.agreement_id}`)}
-              >
-                {receipt.agreement_number}
-              </Button>
-            </Descriptions.Item>
-          )}
-          <Descriptions.Item label={t('receiptDetail.fields.created')}>
-            {new Date(receipt.created_at).toLocaleDateString('ru-RU')}{' '}
-            {receipt.created_by_name && `(${receipt.created_by_name})`}
-          </Descriptions.Item>
-        </Descriptions>
+      {/* Статистика */}
+      <Grid gutter="md">
+        <Grid.Col span={{ base: 12, sm: 6 }}>
+          <Card
+            shadow="sm"
+            padding="lg"
+            radius="md"
+            withBorder
+            style={{
+              background: `linear-gradient(135deg, ${theme.colors.green[9]} 0%, ${theme.colors.teal[9]} 100%)`,
+              transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = `0 8px 24px ${theme.colors.green[9]}40`;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = theme.shadows.sm;
+            }}
+          >
+            <Stack gap="xs">
+              <Group gap="xs">
+                <ThemeIcon size="md" radius="md" variant="white" color="green">
+                  <IconCurrencyBaht size={20} />
+                </ThemeIcon>
+                <Text size="sm" c="white" opacity={0.9}>
+                  {t('receiptDetail.fields.amountPaid')}
+                </Text>
+              </Group>
+              <Group align="baseline" gap={4}>
+                <Text size="2rem" fw={700} c="white" style={{ lineHeight: 1 }}>
+                  {formatCurrency(receipt.amount_paid)}
+                </Text>
+                <Text size="lg" c="white" opacity={0.9}>
+                  {t('common.currencyTHB')}
+                </Text>
+              </Group>
+            </Stack>
+          </Card>
+        </Grid.Col>
 
-        {/* Оплаченные позиции */}
-        {receipt.items && receipt.items.length > 0 && (
-          <>
-            <Divider />
-            <Title level={5}>{t('receiptDetail.sections.paidItems')}</Title>
-            <Space direction="vertical" style={{ width: '100%' }} size="small">
+        <Grid.Col span={{ base: 12, sm: 6 }}>
+          <Card
+            shadow="sm"
+            padding="lg"
+            radius="md"
+            withBorder
+            style={{
+              background: `linear-gradient(135deg, ${theme.colors.blue[9]} 0%, ${theme.colors.cyan[9]} 100%)`,
+              transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = `0 8px 24px ${theme.colors.blue[9]}40`;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = theme.shadows.sm;
+            }}
+          >
+            <Stack gap="xs">
+              <Group gap="xs">
+                <ThemeIcon size="md" radius="md" variant="white" color="blue">
+                  {getPaymentMethodIcon(receipt.payment_method)}
+                </ThemeIcon>
+                <Text size="sm" c="white" opacity={0.9}>
+                  {t('receiptDetail.fields.paymentMethod')}
+                </Text>
+              </Group>
+              <Text size="xl" fw={700} c="white" style={{ lineHeight: 1.2 }}>
+                {getPaymentMethodText(receipt.payment_method)}
+              </Text>
+            </Stack>
+          </Card>
+        </Grid.Col>
+      </Grid>
+
+      {/* Основная информация */}
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="md">
+          <Group gap="sm">
+            <ThemeIcon size="lg" radius="md" variant="light" color="blue">
+              <IconFileText size={20} />
+            </ThemeIcon>
+            <Title order={4}>{t('receiptDetail.sections.mainInfo')}</Title>
+          </Group>
+
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <InfoItem
+              icon={<IconCalendar size={20} />}
+              label={t('receiptDetail.fields.paymentDate')}
+              value={new Date(receipt.receipt_date).toLocaleDateString('ru-RU')}
+              color="teal"
+            />
+
+            <InfoItem
+              icon={getPaymentMethodIcon(receipt.payment_method)}
+              label={t('receiptDetail.fields.paymentMethod')}
+              value={getPaymentMethodText(receipt.payment_method)}
+              color="blue"
+            />
+
+            {receipt.invoice_number && (
+              <InfoItem
+                icon={<IconFileInvoice size={20} />}
+                label={t('receiptDetail.fields.invoice')}
+                value={
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    p={0}
+                    onClick={() => navigate(`/financial-documents/invoices/${receipt.invoice_id}`)}
+                  >
+                    {receipt.invoice_number}
+                  </Button>
+                }
+                color="violet"
+              />
+            )}
+
+            {receipt.agreement_number && (
+              <InfoItem
+                icon={<IconFileText size={20} />}
+                label={t('receiptDetail.fields.agreement')}
+                value={
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    p={0}
+                    onClick={() => navigate(`/agreements/${receipt.agreement_id}`)}
+                  >
+                    {receipt.agreement_number}
+                  </Button>
+                }
+                color="orange"
+              />
+            )}
+
+            <InfoItem
+              icon={<IconUser size={20} />}
+              label={t('receiptDetail.fields.created')}
+              value={
+                <>
+                  {new Date(receipt.created_at).toLocaleDateString('ru-RU')}
+                  {receipt.created_by_name && (
+                    <>
+                      <br />
+                      <Text size="xs" c="dimmed">
+                        {receipt.created_by_name}
+                      </Text>
+                    </>
+                  )}
+                </>
+              }
+              color="gray"
+            />
+          </SimpleGrid>
+        </Stack>
+      </Card>
+
+      {/* Оплаченные позиции */}
+      {receipt.items && receipt.items.length > 0 && (
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="md">
+            <Group gap="sm">
+              <ThemeIcon size="lg" radius="md" variant="light" color="green">
+                <IconPackage size={20} />
+              </ThemeIcon>
+              <Title order={4}>{t('receiptDetail.sections.paidItems')}</Title>
+            </Group>
+
+            <Stack gap="xs">
               {receipt.items.map((item, index) => (
-                <Card 
-                  key={item.id || index} 
-                  size="small"
-                  style={{ background: '#141414', border: '1px solid #303030' }}
+                <Paper
+                  key={item.id || index}
+                  p="md"
+                  radius="md"
+                  withBorder
+                  style={{
+                    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                    cursor: 'default'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateX(4px)';
+                    e.currentTarget.style.boxShadow = theme.shadows.md;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateX(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                 >
-                  <Row justify="space-between" align="middle">
-                    <Col xs={18}>
-                      <div style={{ fontWeight: 600 }}>{item.description}</div>
-                      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)' }}>
-                        {item.quantity} x {formatCurrency(item.unit_price || 0)} THB
-                      </div>
-                    </Col>
-                    <Col xs={6} style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 600 }}>
-                        {formatCurrency(item.total_price || 0)} THB
-                      </div>
-                    </Col>
-                  </Row>
-                </Card>
+                  <Group justify="space-between" wrap="nowrap">
+                    <Box style={{ flex: 1 }}>
+                      <Text fw={600} size="sm" mb={4}>
+                        {item.description}
+                      </Text>
+                      <Group gap={4}>
+                        <Badge size="sm" variant="light" color="gray">
+                          {item.quantity} x {formatCurrency(item.unit_price || 0)} {t('common.currencyTHB')}
+                        </Badge>
+                      </Group>
+                    </Box>
+                    <Box ta="right">
+                      <Text size="lg" fw={700} c="green">
+                        {formatCurrency(item.total_price || 0)}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {t('common.currencyTHB')}
+                      </Text>
+                    </Box>
+                  </Group>
+                </Paper>
               ))}
-            </Space>
-          </>
-        )}
+            </Stack>
+          </Stack>
+        </Card>
+      )}
 
-        {/* Прикрепленные файлы */}
-        {receipt.files && receipt.files.length > 0 ? (
-          <>
-            <Divider />
-            <Card size="small" title={<><FileImageOutlined /> {t('receiptDetail.sections.paymentProofs')}</>}>
-              <Row gutter={[16, 16]}>
-                {receipt.files.map((file, index) => (
-                  <Col key={file.id || index} xs={12} sm={8} md={6}>
-                    <Image
-                      src={`${import.meta.env.VITE_API_BASE_URL || ''}${file.file_path}`}
-                      alt={file.file_name}
-                      style={{ 
-                        width: '100%',
-                        height: '150px',
-                        objectFit: 'cover',
-                        borderRadius: '4px',
-                        border: '1px solid #303030'
-                      }}
-                    />
-                    <div style={{ 
-                      fontSize: '11px', 
-                      color: 'rgba(255,255,255,0.45)',
-                      marginTop: '4px',
-                      textAlign: 'center'
-                    }}>
-                      {file.file_name}
-                    </div>
-                  </Col>
-                ))}
-              </Row>
-            </Card>
-          </>
-        ) : (
-          <>
-            <Divider />
-            <Card size="small" title={<><FileImageOutlined /> {t('receiptDetail.sections.paymentProofs')}</>}>
-              <Empty 
-                description={t('receiptDetail.noFiles')} 
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              />
-            </Card>
-          </>
-        )}
+      {/* Прикрепленные файлы */}
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="md">
+          <Group gap="sm">
+            <ThemeIcon size="lg" radius="md" variant="light" color="violet">
+              <IconPhoto size={20} />
+            </ThemeIcon>
+            <Title order={4}>{t('receiptDetail.sections.paymentProofs')}</Title>
+          </Group>
 
-        {/* QR код */}
-        {receipt.qr_code_base64 && (
-          <>
-            <Divider />
-            <Card size="small" title={<><QrcodeOutlined /> {t('receiptDetail.sections.qrCode')}</>}>
-              <div style={{ textAlign: 'center' }}>
+          {receipt.files && receipt.files.length > 0 ? (
+            <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="md">
+              {receipt.files.map((file, index) => (
+                <Box key={file.id || index}>
+                  <Image
+                    src={`${import.meta.env.VITE_API_BASE_URL || ''}${file.file_path}`}
+                    alt={file.file_name}
+                    radius="md"
+                    style={{
+                      cursor: 'pointer',
+                      transition: 'transform 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'scale(1.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'scale(1)';
+                    }}
+                  />
+                  <Text size="xs" c="dimmed" mt={4} ta="center" lineClamp={1}>
+                    {file.file_name}
+                  </Text>
+                </Box>
+              ))}
+            </SimpleGrid>
+          ) : (
+            <Paper p="xl" radius="md" withBorder>
+              <Center>
+                <Stack align="center" gap="md">
+                  <ThemeIcon size={60} radius="xl" variant="light" color="gray">
+                    <IconPhoto size={30} />
+                  </ThemeIcon>
+                  <Text size="sm" c="dimmed" ta="center">
+                    {t('receiptDetail.noFiles')}
+                  </Text>
+                </Stack>
+              </Center>
+            </Paper>
+          )}
+        </Stack>
+      </Card>
+
+      {/* QR код */}
+      {receipt.qr_code_base64 && (
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="md">
+            <Group gap="sm">
+              <ThemeIcon size="lg" radius="md" variant="light" color="indigo">
+                <IconQrcode size={20} />
+              </ThemeIcon>
+              <Title order={4}>{t('receiptDetail.sections.qrCode')}</Title>
+            </Group>
+
+            <Center>
+              <Paper p="md" radius="md" withBorder>
                 <Image
                   src={receipt.qr_code_base64}
                   alt="QR Code"
-                  style={{ maxWidth: '200px' }}
-                  preview={false}
+                  w={200}
+                  h={200}
                 />
-              </div>
-            </Card>
-          </>
-        )}
+              </Paper>
+            </Center>
+          </Stack>
+        </Card>
+      )}
 
-        {/* Примечания */}
-        {receipt.notes && (
-          <>
-            <Divider />
-            <Card size="small" title={t('receiptDetail.sections.notes')}>
-              <Text>{receipt.notes}</Text>
-            </Card>
-          </>
-        )}
-      </Card>
+      {/* Примечания */}
+      {receipt.notes && (
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="md">
+            <Group gap="sm">
+              <ThemeIcon size="lg" radius="md" variant="light" color="yellow">
+                <IconAlertCircle size={20} />
+              </ThemeIcon>
+              <Title order={4}>{t('receiptDetail.sections.notes')}</Title>
+            </Group>
+
+            <Paper p="md" radius="md" withBorder>
+              <Text size="sm">{receipt.notes}</Text>
+            </Paper>
+          </Stack>
+        </Card>
+      )}
+
       {/* Модальное окно редактирования */}
       <EditReceiptModal
         visible={editModalVisible}
@@ -386,7 +725,7 @@ const ReceiptDetail = () => {
           fetchReceipt();
         }}
       />
-    </div>
+    </Stack>
   );
 };
 
