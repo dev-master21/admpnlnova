@@ -220,5 +220,13 @@ router.get('/:id/ai-edit/history', requirePermission('agreements.view'), (req, r
   agreementsController.getAiEditHistory(req as AuthRequest, res);
 });
 
+// Получить договор по номеру договора (для модального окна в финансовых документах)
+router.get('/by-number/:agreementNumber', authenticate, (req, res) => {
+  agreementsController.getByAgreementNumber(req as AuthRequest, res);
+});
+
+router.get('/by-number/:agreementNumber/pdf', authenticate, (req, res) => {
+  agreementsController.downloadPDFByAgreementNumber(req as AuthRequest, res);
+});
 
 export default router;

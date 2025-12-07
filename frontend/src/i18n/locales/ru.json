@@ -2602,6 +2602,48 @@
     "noReceipts": "Чеки не найдены",
     "search": "Поиск по номеру",
     "paymentProgress": "Прогресс оплаты",
+        "agreementModal": {
+      "title": "Детали договора",
+      "loading": "Загрузка данных договора...",
+      "loadError": "Ошибка загрузки договора",
+      "notFound": "Данные договора не найдены",
+      "agreementNumber": "Номер договора",
+      "dateFrom": "Дата начала",
+      "dateTo": "Дата окончания",
+      "rentMonthly": "Аренда (месяц)",
+      "rentTotal": "Аренда (общая)",
+      "deposit": "Депозит",
+      "description": "Описание",
+      "parties": "Стороны договора",
+      "signatures": "Подписи",
+      "of": "из",
+      "downloadPDF": "Скачать PDF",
+      "openAgreement": "Открыть договор",
+      "downloadingPDF": "Скачивание договора...",
+      "pdfDownloaded": "PDF договора скачан",
+      "pdfDownloadError": "Ошибка скачивания PDF",
+      "signed": "Подписано",
+      "pending": "Ожидание",
+      "signedAt": "Дата подписания",
+      "taxId": "ИНН",
+      "director": "Директор",
+      "passport": "Паспорт",
+      "country": "Страна",
+      "noName": "Не указано",
+      "roles": {
+        "lessor": "Арендодатель",
+        "landlord": "Арендодатель",
+        "tenant": "Арендатор",
+        "lessee": "Арендатор"
+      },
+      "statuses": {
+        "active": "Активен",
+        "draft": "Черновик",
+        "pending_signatures": "Ожидает подписей",
+        "signed": "Подписан",
+        "cancelled": "Отменен"
+      }
+    },
     "tabs": {
       "invoices": "Инвойсы",
       "receipts": "Чеки"
@@ -2677,6 +2719,7 @@
       "invoiceDeleteError": "Ошибка удаления инвойса",
       "receiptDeleteError": "Ошибка удаления чека"
     }
+    
   },
   "createInvoiceModal": {
     "title": "Создать инвойс",

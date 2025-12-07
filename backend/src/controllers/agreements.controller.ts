@@ -2880,6 +2880,149 @@ async aiEdit(req: AuthRequest, res: Response): Promise<void> {
       });
     }
   }
+
+
+/**
+ * Получить договор по номеру договора
+ * GET /api/agreements/by-number/:agreementNumber
+ */
+async getByAgreementNumber(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const { agreementNumber } = req.params;
+
+    // Получаем договор с полной информацией
+    const agreement = await db.queryOne(`
+      SELECT 
+        a.*,
+        at.name as template_name,
+        COALESCE(pt_ru.property_name, pt_en.property_name, p.complex_name, CONCAT('Объект ', p.property_number)) as property_name,
+        COALESCE(a.property_number_override, p.property_number) as property_number,
+        COALESCE(a.property_address_override, p.address) as property_address,
+        u.username as created_by_name,
+        (SELECT COUNT(*) FROM agreement_signatures WHERE agreement_id = a.id) as signature_count,
+        (SELECT COUNT(*) FROM agreement_signatures WHERE agreement_id = a.id AND is_signed = 1) as signed_count
+      FROM agreements a
+      LEFT JOIN agreement_templates at ON a.template_id = at.id
+      LEFT JOIN properties p ON a.property_id = p.id
+      LEFT JOIN property_translations pt_ru ON p.id = pt_ru.property_id AND pt_ru.language_code = 'ru'
+      LEFT JOIN property_translations pt_en ON p.id = pt_en.property_id AND pt_en.language_code = 'en'
+      LEFT JOIN admin_users u ON a.created_by = u.id
+      WHERE a.agreement_number = ? AND a.deleted_at IS NULL
+    `, [agreementNumber]);
+
+    if (!agreement) {
+      res.status(404).json({
+        success: false,
+        message: 'Договор не найден'
+      });
+      return;
+    }
+
+    // Получаем подписи
+    const signatures = await db.query(
+      'SELECT * FROM agreement_signatures WHERE agreement_id = ? ORDER BY created_at',
+      [(agreement as any).id]
+    );
+
+    // Получаем стороны договора
+    const parties = await db.query(
+      'SELECT * FROM agreement_parties WHERE agreement_id = ? ORDER BY id',
+      [(agreement as any).id]
+    );
+
+    // Для каждой стороны получаем документы
+    for (const party of parties as any[]) {
+      const documents = await db.query(
+        'SELECT id, document_path, document_base64, document_type, file_size, mime_type, uploaded_at FROM agreement_party_documents WHERE party_id = ? ORDER BY uploaded_at',
+        [party.id]
+      );
+      party.documents = documents;
+    }
+
+    logger.info(`Agreement fetched by number: ${agreementNumber} by user ${req.admin?.username}`);
+
+    res.json({
+      success: true,
+      data: {
+        ...agreement,
+        signatures,
+        parties
+      }
+    });
+  } catch (error) {
+    logger.error('Get agreement by number error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Ошибка получения договора'
+    });
+  }
+}
+/**
+ * Скачать PDF договора по номеру
+ * GET /api/agreements/by-number/:agreementNumber/pdf
+ */
+async downloadPDFByAgreementNumber(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const { agreementNumber } = req.params;
+
+    const agreement = await db.queryOne<any>(
+      'SELECT id, pdf_path, agreement_number FROM agreements WHERE agreement_number = ? AND deleted_at IS NULL',
+      [agreementNumber]
+    );
+
+    if (!agreement) {
+      res.status(404).json({
+        success: false,
+        message: 'Договор не найден'
+      });
+      return;
+    }
+
+    if (!agreement.pdf_path) {
+      // Если PDF еще не сгенерирован - генерируем сейчас
+      await this.generatePDF(agreement.id);
+      
+      const updatedAgreement = await db.queryOne<any>(
+        'SELECT pdf_path FROM agreements WHERE id = ?',
+        [agreement.id]
+      );
+      
+      agreement.pdf_path = updatedAgreement.pdf_path;
+    }
+
+    const path = require('path');
+    const filePath = path.join(__dirname, '../../public', agreement.pdf_path);
+
+    // Проверяем существование файла
+    const fs = require('fs-extra');
+    if (!await fs.pathExists(filePath)) {
+      res.status(404).json({
+        success: false,
+        message: 'PDF файл не найден'
+      });
+      return;
+    }
+
+    // Отправляем файл
+    res.download(filePath, `${agreement.agreement_number}.pdf`, (err) => {
+      if (err) {
+        logger.error('Error downloading PDF:', err);
+        res.status(500).json({
+          success: false,
+          message: 'Ошибка скачивания PDF'
+        });
+      }
+    });
+
+  } catch (error) {
+    logger.error('Download PDF by agreement number error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Ошибка скачивания PDF'
+    });
+  }
+}
+
 }
 
 export default new AgreementsController();

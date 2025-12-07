@@ -20,10 +20,14 @@ import {
   Box,
   ThemeIcon,
   useMantineTheme,
+  useMantineColorScheme,
   Table,
   Progress,
   Divider,
-  SimpleGrid
+  SimpleGrid,
+  Modal,
+  Tooltip,
+  ScrollArea
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { modals } from '@mantine/modals';
@@ -47,11 +51,18 @@ import {
   IconAlertCircle,
   IconPercentage,
   IconEdit,
-  IconFilter
+  IconFilter,
+  IconFileDescription,
+  IconBuilding,
+  IconUser,
+  IconIdBadge,
+  IconWriting,
+  IconExternalLink
 } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { financialDocumentsApi, Invoice, Receipt } from '@/api/financialDocuments.api';
+import { agreementsApi, Agreement, AgreementParty, AgreementSignature } from '@/api/agreements.api';
 import CreateInvoiceModal from './components/CreateInvoiceModal';
 import CreateReceiptModal from './components/CreateReceiptModal';
 import dayjs from 'dayjs';
@@ -60,6 +71,7 @@ const FinancialDocuments = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const theme = useMantineTheme();
+  const { colorScheme } = useMantineColorScheme();
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [activeTab, setActiveTab] = useState<string | null>('invoices');
   
@@ -78,6 +90,11 @@ const FinancialDocuments = () => {
   // Modals
   const [createInvoiceModalVisible, setCreateInvoiceModalVisible] = useState(false);
   const [createReceiptModalVisible, setCreateReceiptModalVisible] = useState(false);
+  const [agreementModalVisible, setAgreementModalVisible] = useState(false);
+  const [selectedAgreement, setSelectedAgreement] = useState<Agreement | null>(null);
+  const [loadingAgreement, setLoadingAgreement] = useState(false);
+  const [invoiceDetailsModalVisible, setInvoiceDetailsModalVisible] = useState(false);
+  const [selectedInvoiceForDetails, setSelectedInvoiceForDetails] = useState<Invoice | null>(null);
 
   // Statistics
   const [stats, setStats] = useState({
@@ -147,6 +164,24 @@ const FinancialDocuments = () => {
     }
   };
 
+  const fetchAgreementDetails = async (agreementNumber: string) => {
+    setLoadingAgreement(true);
+    try {
+      const response = await agreementsApi.getByAgreementNumber(agreementNumber);
+      setSelectedAgreement(response.data.data);
+    } catch (error: any) {
+      notifications.show({
+        title: t('errors.generic'),
+        message: t('financialDocuments.agreementModal.loadError'),
+        color: 'red',
+        icon: <IconX size={18} />
+      });
+      setSelectedAgreement(null);
+    } finally {
+      setLoadingAgreement(false);
+    }
+  };
+
   const handleDownloadInvoicePDF = async (id: number, invoiceNumber: string) => {
     try {
       notifications.show({
@@ -183,6 +218,49 @@ const FinancialDocuments = () => {
         color: 'red',
         title: t('errors.generic'),
         message: t('financialDocuments.messages.pdfDownloadError'),
+        icon: <IconX size={18} />,
+        loading: false,
+        autoClose: 3000
+      });
+    }
+  };
+
+  const handleDownloadAgreementPDF = async (agreementId: number) => {
+    try {
+      notifications.show({
+        id: 'agreement-pdf-download',
+        loading: true,
+        title: t('financialDocuments.agreementModal.downloadingPDF'),
+        message: t('common.pleaseWait'),
+        autoClose: false,
+        withCloseButton: false
+      });
+
+      const response = await agreementsApi.downloadPDF(agreementId);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `agreement-${selectedAgreement?.agreement_number}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      notifications.update({
+        id: 'agreement-pdf-download',
+        color: 'green',
+        title: t('common.success'),
+        message: t('financialDocuments.agreementModal.pdfDownloaded'),
+        icon: <IconCheck size={18} />,
+        loading: false,
+        autoClose: 3000
+      });
+    } catch (error: any) {
+      notifications.update({
+        id: 'agreement-pdf-download',
+        color: 'red',
+        title: t('errors.generic'),
+        message: t('financialDocuments.agreementModal.pdfDownloadError'),
         icon: <IconX size={18} />,
         loading: false,
         autoClose: 3000
@@ -303,6 +381,19 @@ const FinancialDocuments = () => {
     });
   };
 
+  const handleOpenAgreementModal = async (agreementNumber: string) => {
+    setAgreementModalVisible(true);
+    await fetchAgreementDetails(agreementNumber);
+  };
+
+  const handleOpenInvoiceDetailsModal = (invoiceNumber: string) => {
+    const invoice = invoices.find(inv => inv.invoice_number === invoiceNumber);
+    if (invoice) {
+      setSelectedInvoiceForDetails(invoice);
+      setInvoiceDetailsModalVisible(true);
+    }
+  };
+
   const getStatusBadge = (status: string, type: 'invoice' | 'receipt') => {
     const invoiceConfig: Record<string, { color: string; icon: React.ReactNode }> = {
       draft: { color: 'gray', icon: <IconEdit size={12} /> },
@@ -341,7 +432,11 @@ const FinancialDocuments = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US').format(amount);
+    return new Intl.NumberFormat('ru-RU', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      useGrouping: true
+    }).format(amount);
   };
 
   const StatCard = ({ 
@@ -383,16 +478,16 @@ const FinancialDocuments = () => {
             {title}
           </Text>
         </Group>
-        <Group align="baseline" gap={4}>
+        <Stack gap={4}>
           <Text size="1.8rem" fw={700} c="white" style={{ lineHeight: 1 }}>
             {typeof value === 'number' ? formatCurrency(value) : value}
           </Text>
           {suffix && (
-            <Text size="md" c="white" opacity={0.9}>
+            <Text size="sm" c="white" opacity={0.9}>
               {suffix}
             </Text>
           )}
-        </Group>
+        </Stack>
       </Stack>
     </Paper>
   );
@@ -426,9 +521,17 @@ const FinancialDocuments = () => {
                 </Text>
               </Button>
               {invoice.agreement_number && (
-                <Text size="xs" c="dimmed">
-                  {t('financialDocuments.table.invoices.agreement')}: {invoice.agreement_number}
-                </Text>
+                <Button
+                  variant="subtle"
+                  size="xs"
+                  p={0}
+                  c="dimmed"
+                  onClick={() => handleOpenAgreementModal(invoice.agreement_number!)}
+                >
+                  <Text size="xs" td="underline">
+                    {t('financialDocuments.table.invoices.agreement')}: {invoice.agreement_number}
+                  </Text>
+                </Button>
               )}
             </Box>
             {getStatusBadge(invoice.status, 'invoice')}
@@ -467,43 +570,47 @@ const FinancialDocuments = () => {
             <Progress value={paymentProgress} color="green" size="sm" />
           </Box>
 
-          <Group justify="space-between" align="center">
-            <Group gap={4}>
-              <IconCalendar size={14} color={theme.colors.gray[6]} />
-              <Text size="xs" c="dimmed">
-                {dayjs(invoice.invoice_date).format('DD.MM.YYYY')}
-              </Text>
-            </Group>
+          <Group gap={4}>
+            <IconCalendar size={14} color={theme.colors.gray[6]} />
+            <Text size="xs" c="dimmed">
+              {dayjs(invoice.invoice_date).format('DD.MM.YYYY')}
+            </Text>
+          </Group>
 
-            <Menu position="bottom-end" shadow="md">
-              <Menu.Target>
-                <ActionIcon variant="subtle" color="gray">
-                  <IconDots size={18} />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Menu.Item
-                  leftSection={<IconEye size={16} />}
-                  onClick={() => navigate(`/financial-documents/invoices/${invoice.id}`)}
-                >
-                  {t('financialDocuments.actions.view')}
-                </Menu.Item>
-                <Menu.Item
-                  leftSection={<IconDownload size={16} />}
-                  onClick={() => handleDownloadInvoicePDF(invoice.id, invoice.invoice_number)}
-                >
-                  {t('financialDocuments.actions.downloadPDF')}
-                </Menu.Item>
-                <Menu.Divider />
-                <Menu.Item
-                  color="red"
-                  leftSection={<IconTrash size={16} />}
-                  onClick={() => handleDeleteInvoice(invoice.id)}
-                >
-                  {t('common.delete')}
-                </Menu.Item>
-              </Menu.Dropdown>
-            </Menu>
+          {/* Мобильные кнопки действий */}
+          <Group gap="xs" grow>
+            <Tooltip label={t('financialDocuments.actions.view')}>
+              <Button
+                size="xs"
+                variant="light"
+                leftSection={<IconEye size={16} />}
+                onClick={() => navigate(`/financial-documents/invoices/${invoice.id}`)}
+              >
+                {t('financialDocuments.actions.view')}
+              </Button>
+            </Tooltip>
+            <Tooltip label={t('financialDocuments.actions.downloadPDF')}>
+              <Button
+                size="xs"
+                variant="light"
+                color="blue"
+                leftSection={<IconDownload size={16} />}
+                onClick={() => handleDownloadInvoicePDF(invoice.id, invoice.invoice_number)}
+              >
+                PDF
+              </Button>
+            </Tooltip>
+            <Tooltip label={t('common.delete')}>
+              <Button
+                size="xs"
+                variant="light"
+                color="red"
+                leftSection={<IconTrash size={16} />}
+                onClick={() => handleDeleteInvoice(invoice.id)}
+              >
+                {t('common.delete')}
+              </Button>
+            </Tooltip>
           </Group>
         </Stack>
       </Card>
@@ -536,9 +643,17 @@ const FinancialDocuments = () => {
               </Text>
             </Button>
             {receipt.invoice_number && (
-              <Text size="xs" c="dimmed">
-                {t('financialDocuments.table.receipts.invoice')}: {receipt.invoice_number}
-              </Text>
+              <Button
+                variant="subtle"
+                size="xs"
+                p={0}
+                c="dimmed"
+                onClick={() => handleOpenInvoiceDetailsModal(receipt.invoice_number!)}
+              >
+                <Text size="xs" td="underline">
+                  {t('financialDocuments.table.receipts.invoice')}: {receipt.invoice_number}
+                </Text>
+              </Button>
             )}
           </Box>
           {getStatusBadge(receipt.status, 'receipt')}
@@ -565,43 +680,47 @@ const FinancialDocuments = () => {
           </Box>
         </SimpleGrid>
 
-        <Group justify="space-between" align="center">
-          <Group gap={4}>
-            <IconCalendar size={14} color={theme.colors.gray[6]} />
-            <Text size="xs" c="dimmed">
-              {dayjs(receipt.receipt_date).format('DD.MM.YYYY')}
-            </Text>
-          </Group>
+        <Group gap={4}>
+          <IconCalendar size={14} color={theme.colors.gray[6]} />
+          <Text size="xs" c="dimmed">
+            {dayjs(receipt.receipt_date).format('DD.MM.YYYY')}
+          </Text>
+        </Group>
 
-          <Menu position="bottom-end" shadow="md">
-            <Menu.Target>
-              <ActionIcon variant="subtle" color="gray">
-                <IconDots size={18} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Item
-                leftSection={<IconEye size={16} />}
-                onClick={() => navigate(`/financial-documents/receipts/${receipt.id}`)}
-              >
-                {t('financialDocuments.actions.view')}
-              </Menu.Item>
-              <Menu.Item
-                leftSection={<IconDownload size={16} />}
-                onClick={() => handleDownloadReceiptPDF(receipt.id, receipt.receipt_number)}
-              >
-                {t('financialDocuments.actions.downloadPDF')}
-              </Menu.Item>
-              <Menu.Divider />
-              <Menu.Item
-                color="red"
-                leftSection={<IconTrash size={16} />}
-                onClick={() => handleDeleteReceipt(receipt.id)}
-              >
-                {t('common.delete')}
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
+        {/* Мобильные кнопки действий */}
+        <Group gap="xs" grow>
+          <Tooltip label={t('financialDocuments.actions.view')}>
+            <Button
+              size="xs"
+              variant="light"
+              leftSection={<IconEye size={16} />}
+              onClick={() => navigate(`/financial-documents/receipts/${receipt.id}`)}
+            >
+              {t('financialDocuments.actions.view')}
+            </Button>
+          </Tooltip>
+          <Tooltip label={t('financialDocuments.actions.downloadPDF')}>
+            <Button
+              size="xs"
+              variant="light"
+              color="blue"
+              leftSection={<IconDownload size={16} />}
+              onClick={() => handleDownloadReceiptPDF(receipt.id, receipt.receipt_number)}
+            >
+              PDF
+            </Button>
+          </Tooltip>
+          <Tooltip label={t('common.delete')}>
+            <Button
+              size="xs"
+              variant="light"
+              color="red"
+              leftSection={<IconTrash size={16} />}
+              onClick={() => handleDeleteReceipt(receipt.id)}
+            >
+              {t('common.delete')}
+            </Button>
+          </Tooltip>
         </Group>
       </Stack>
     </Card>
@@ -626,6 +745,520 @@ const FinancialDocuments = () => {
       rejected: 'red'
     };
     return colors[status] || 'gray';
+  };
+
+  // Функция для определения роли на русском
+  const getRoleText = (role: string): string => {
+    const roles: Record<string, string> = {
+      'lessor': t('financialDocuments.agreementModal.roles.lessor'),
+      'landlord': t('financialDocuments.agreementModal.roles.landlord'),
+      'tenant': t('financialDocuments.agreementModal.roles.tenant'),
+      'lessee': t('financialDocuments.agreementModal.roles.lessee')
+    };
+    return roles[role.toLowerCase()] || role;
+  };
+
+  // Компонент для отображения стороны договора
+  const PartyCard = ({ party }: { party: AgreementParty }) => {
+    // Определяем is_company из типа или из флага
+    const isCompany = party.type === 'company' || party.is_company;
+    const displayName = isCompany ? party.company_name : party.individual_name || party.name;
+    
+    return (
+      <Paper p="md" radius="md" withBorder>
+        <Stack gap="sm">
+          <Group gap="xs">
+            <ThemeIcon size="md" radius="md" variant="light" color={party.role === 'lessor' || party.role === 'landlord' ? 'blue' : 'green'}>
+              {isCompany ? <IconBuilding size={18} /> : <IconUser size={18} />}
+            </ThemeIcon>
+            <Box style={{ flex: 1 }}>
+              <Text size="xs" c="dimmed">
+                {getRoleText(party.role)}
+              </Text>
+              <Text size="sm" fw={600}>
+                {displayName || t('financialDocuments.agreementModal.noName')}
+              </Text>
+            </Box>
+          </Group>
+
+          <Divider />
+
+          {isCompany ? (
+            <Stack gap="xs">
+              {party.company_name && (
+                <Group gap="xs">
+                  <IconBuilding size={14} color={theme.colors.gray[6]} />
+                  <Text size="xs">{party.company_name}</Text>
+                </Group>
+              )}
+              {party.company_tax_id && (
+                <Group gap="xs">
+                  <IconIdBadge size={14} color={theme.colors.gray[6]} />
+                  <Text size="xs">{t('financialDocuments.agreementModal.taxId')}: {party.company_tax_id}</Text>
+                </Group>
+              )}
+              {party.director_name && (
+                <Group gap="xs">
+                  <IconUser size={14} color={theme.colors.gray[6]} />
+                  <Text size="xs">{t('financialDocuments.agreementModal.director')}: {party.director_name}</Text>
+                </Group>
+              )}
+              {party.director_passport && (
+                <Group gap="xs">
+                  <IconIdBadge size={14} color={theme.colors.gray[6]} />
+                  <Text size="xs">{t('financialDocuments.agreementModal.passport')}: {party.director_passport}</Text>
+                </Group>
+              )}
+            </Stack>
+          ) : (
+            <Stack gap="xs">
+              {(party.individual_name || party.name) && (
+                <Group gap="xs">
+                  <IconUser size={14} color={theme.colors.gray[6]} />
+                  <Text size="xs">{party.individual_name || party.name}</Text>
+                </Group>
+              )}
+              {(party.individual_passport || party.passport_number) && (
+                <Group gap="xs">
+                  <IconIdBadge size={14} color={theme.colors.gray[6]} />
+                  <Text size="xs">{t('financialDocuments.agreementModal.passport')}: {party.individual_passport || party.passport_number}</Text>
+                </Group>
+              )}
+              {(party.individual_country || party.passport_country) && (
+                <Group gap="xs">
+                  <Text size="xs">{t('financialDocuments.agreementModal.country')}: {party.individual_country || party.passport_country}</Text>
+                </Group>
+              )}
+            </Stack>
+          )}
+        </Stack>
+      </Paper>
+    );
+  };
+
+  // Компонент для отображения подписи
+  const SignatureCard = ({ signature }: { signature: AgreementSignature }) => (
+    <Paper 
+      p="md" 
+      radius="md" 
+      withBorder
+      style={{
+        backgroundColor: signature.is_signed 
+          ? colorScheme === 'dark' ? theme.colors.green[9] : theme.colors.green[0]
+          : colorScheme === 'dark' ? theme.colors.dark[6] : theme.colors.gray[0]
+      }}
+    >
+      <Stack gap="sm">
+        <Group justify="space-between">
+          <Group gap="xs">
+            <ThemeIcon 
+              size="md" 
+              radius="md" 
+              variant="light" 
+              color={signature.is_signed ? 'green' : 'gray'}
+            >
+              <IconWriting size={18} />
+            </ThemeIcon>
+            <Box>
+              <Text size="sm" fw={600}>
+                {signature.signer_name}
+              </Text>
+              <Text size="xs" c="dimmed">
+                {getRoleText(signature.signer_role)}
+              </Text>
+            </Box>
+          </Group>
+          <Badge 
+            size="sm" 
+            color={signature.is_signed ? 'green' : 'gray'}
+            variant="filled"
+          >
+            {signature.is_signed ? t('financialDocuments.agreementModal.signed') : t('financialDocuments.agreementModal.pending')}
+          </Badge>
+        </Group>
+
+        {signature.is_signed && signature.signed_at && (
+          <>
+            <Divider />
+            <Stack gap={4}>
+              <Text size="xs" c="dimmed">
+                {t('financialDocuments.agreementModal.signedAt')}: {dayjs(signature.signed_at).format('DD.MM.YYYY HH:mm')}
+              </Text>
+              {signature.ip_address && (
+                <Text size="xs" c="dimmed">
+                  IP: {signature.ip_address}
+                </Text>
+              )}
+            </Stack>
+          </>
+        )}
+      </Stack>
+    </Paper>
+  );
+
+  // Модальное окно информации о договоре
+  const AgreementDetailsModal = () => {
+    return (
+      <Modal
+        opened={agreementModalVisible}
+        onClose={() => {
+          setAgreementModalVisible(false);
+          setSelectedAgreement(null);
+        }}
+        title={
+          <Group gap="xs">
+            <ThemeIcon size="lg" radius="md" variant="light" color="blue">
+              <IconFileDescription size={20} />
+            </ThemeIcon>
+            <Text size="lg" fw={600}>
+              {t('financialDocuments.agreementModal.title')}
+            </Text>
+          </Group>
+        }
+        size="xl"
+        padding="lg"
+        scrollAreaComponent={ScrollArea.Autosize}
+      >
+        {loadingAgreement ? (
+          <Center py={60}>
+            <Stack align="center" gap="md">
+              <Loader size="lg" />
+              <Text size="sm" c="dimmed">
+                {t('financialDocuments.agreementModal.loading')}
+              </Text>
+            </Stack>
+          </Center>
+        ) : selectedAgreement ? (
+          <Stack gap="lg" style={{ maxHeight: '70vh', overflowY: 'auto' }} pb="md">
+            {/* Основная информация */}
+            <Paper p="md" radius="md" withBorder>
+              <Stack gap="md">
+                <Group justify="space-between" align="flex-start" wrap="nowrap">
+                  <Box style={{ flex: 1 }}>
+                    <Text size="xs" c="dimmed" mb={4}>
+                      {t('financialDocuments.agreementModal.agreementNumber')}
+                    </Text>
+                    <Text size="lg" fw={700}>
+                      {selectedAgreement.agreement_number}
+                    </Text>
+                  </Box>
+                  <Badge size="lg" variant="light" color={selectedAgreement.status === 'active' ? 'green' : 'gray'}>
+                    {t(`financialDocuments.agreementModal.statuses.${selectedAgreement.status}`)}
+                  </Badge>
+                </Group>
+
+                <Divider />
+
+                <SimpleGrid cols={isMobile ? 1 : 2} spacing="md">
+                  {selectedAgreement.date_from && (
+                    <Box>
+                      <Text size="xs" c="dimmed" mb={4}>
+                        {t('financialDocuments.agreementModal.dateFrom')}
+                      </Text>
+                      <Group gap={4}>
+                        <IconCalendar size={16} color={theme.colors.gray[6]} />
+                        <Text size="sm" fw={500}>
+                          {dayjs(selectedAgreement.date_from).format('DD.MM.YYYY')}
+                        </Text>
+                      </Group>
+                    </Box>
+                  )}
+
+                  {selectedAgreement.date_to && (
+                    <Box>
+                      <Text size="xs" c="dimmed" mb={4}>
+                        {t('financialDocuments.agreementModal.dateTo')}
+                      </Text>
+                      <Group gap={4}>
+                        <IconCalendar size={16} color={theme.colors.gray[6]} />
+                        <Text size="sm" fw={500}>
+                          {dayjs(selectedAgreement.date_to).format('DD.MM.YYYY')}
+                        </Text>
+                      </Group>
+                    </Box>
+                  )}
+
+                  {selectedAgreement.rent_amount_monthly && (
+                    <Box>
+                      <Text size="xs" c="dimmed" mb={4}>
+                        {t('financialDocuments.agreementModal.rentMonthly')}
+                      </Text>
+                      <Text size="sm" fw={600}>
+                        {formatCurrency(selectedAgreement.rent_amount_monthly)} THB
+                      </Text>
+                    </Box>
+                  )}
+
+                  {selectedAgreement.rent_amount_total && (
+                    <Box>
+                      <Text size="xs" c="dimmed" mb={4}>
+                        {t('financialDocuments.agreementModal.rentTotal')}
+                      </Text>
+                      <Text size="sm" fw={600}>
+                        {formatCurrency(selectedAgreement.rent_amount_total)} THB
+                      </Text>
+                    </Box>
+                  )}
+
+                  {selectedAgreement.deposit_amount && (
+                    <Box>
+                      <Text size="xs" c="dimmed" mb={4}>
+                        {t('financialDocuments.agreementModal.deposit')}
+                      </Text>
+                      <Text size="sm" fw={600}>
+                        {formatCurrency(selectedAgreement.deposit_amount)} THB
+                      </Text>
+                    </Box>
+                  )}
+                </SimpleGrid>
+
+                {selectedAgreement.description && (
+                  <>
+                    <Divider />
+                    <Box>
+                      <Text size="xs" c="dimmed" mb={4}>
+                        {t('financialDocuments.agreementModal.description')}
+                      </Text>
+                      <Text size="sm">
+                        {selectedAgreement.description}
+                      </Text>
+                    </Box>
+                  </>
+                )}
+              </Stack>
+            </Paper>
+
+            {/* Стороны договора */}
+            {selectedAgreement.parties && selectedAgreement.parties.length > 0 && (
+              <Box>
+                <Text size="md" fw={600} mb="md">
+                  {t('financialDocuments.agreementModal.parties')}
+                </Text>
+                <SimpleGrid cols={isMobile ? 1 : 2} spacing="md">
+                  {selectedAgreement.parties.map((party, index) => (
+                    <PartyCard key={index} party={party} />
+                  ))}
+                </SimpleGrid>
+              </Box>
+            )}
+
+            {/* Подписи */}
+            {selectedAgreement.signatures && selectedAgreement.signatures.length > 0 && (
+              <Box>
+                <Text size="md" fw={600} mb="md">
+                  {t('financialDocuments.agreementModal.signatures')} ({selectedAgreement.signed_count || 0} {t('financialDocuments.agreementModal.of')} {selectedAgreement.signature_count || 0})
+                </Text>
+                <Stack gap="md">
+                  {selectedAgreement.signatures.map((signature, index) => (
+                    <SignatureCard key={index} signature={signature} />
+                  ))}
+                </Stack>
+              </Box>
+            )}
+
+            {/* Кнопки действий */}
+            <Group justify="space-between" pt="md">
+              <Button
+                variant="light"
+                onClick={() => {
+                  setAgreementModalVisible(false);
+                  setSelectedAgreement(null);
+                }}
+              >
+                {t('common.close')}
+              </Button>
+
+              <Group gap="xs">
+                {selectedAgreement.pdf_path && (
+                  <Button
+                    variant="light"
+                    color="blue"
+                    leftSection={<IconDownload size={18} />}
+                    onClick={() => handleDownloadAgreementPDF(selectedAgreement.id)}
+                  >
+                    {t('financialDocuments.agreementModal.downloadPDF')}
+                  </Button>
+                )}
+                <Button
+                  leftSection={<IconExternalLink size={18} />}
+                  onClick={() => {
+                    navigate(`/agreements/${selectedAgreement.id}`);
+                    setAgreementModalVisible(false);
+                    setSelectedAgreement(null);
+                  }}
+                >
+                  {t('financialDocuments.agreementModal.openAgreement')}
+                </Button>
+              </Group>
+            </Group>
+          </Stack>
+        ) : (
+          <Center py={60}>
+            <Stack align="center" gap="md">
+              <ThemeIcon size={60} radius="xl" variant="light" color="gray">
+                <IconFileDescription size={30} />
+              </ThemeIcon>
+              <Text size="sm" c="dimmed">
+                {t('financialDocuments.agreementModal.notFound')}
+              </Text>
+            </Stack>
+          </Center>
+        )}
+      </Modal>
+    );
+  };
+
+  // Модальное окно информации об инвойсе
+  const InvoiceDetailsModal = () => {
+    if (!selectedInvoiceForDetails) return null;
+
+    const invoice = selectedInvoiceForDetails;
+    const paymentProgress = (invoice.amount_paid / invoice.total_amount) * 100;
+
+    return (
+      <Modal
+        opened={invoiceDetailsModalVisible}
+        onClose={() => {
+          setInvoiceDetailsModalVisible(false);
+          setSelectedInvoiceForDetails(null);
+        }}
+        title={
+          <Group gap="xs">
+            <ThemeIcon size="lg" radius="md" variant="light" color="blue">
+              <IconFileInvoice size={20} />
+            </ThemeIcon>
+            <Text size="lg" fw={600}>
+              {t('financialDocuments.invoiceDetails.title')}
+            </Text>
+          </Group>
+        }
+        size="lg"
+        padding="lg"
+      >
+        <Stack gap="lg">
+          {/* Основная информация */}
+          <Paper p="md" radius="md" withBorder>
+            <Stack gap="md">
+              <Group justify="space-between">
+                <Box>
+                  <Text size="xs" c="dimmed" mb={4}>
+                    {t('financialDocuments.table.invoices.number')}
+                  </Text>
+                  <Text size="lg" fw={700}>
+                    {invoice.invoice_number}
+                  </Text>
+                </Box>
+                {getStatusBadge(invoice.status, 'invoice')}
+              </Group>
+
+              <Divider />
+
+              <SimpleGrid cols={2} spacing="md">
+                <Box>
+                  <Text size="xs" c="dimmed" mb={4}>
+                    {t('financialDocuments.table.invoices.date')}
+                  </Text>
+                  <Group gap={4}>
+                    <IconCalendar size={16} color={theme.colors.gray[6]} />
+                    <Text size="sm" fw={500}>
+                      {dayjs(invoice.invoice_date).format('DD.MM.YYYY')}
+                    </Text>
+                  </Group>
+                </Box>
+
+                {invoice.agreement_number && (
+                  <Box>
+                    <Text size="xs" c="dimmed" mb={4}>
+                      {t('financialDocuments.table.invoices.agreement')}
+                    </Text>
+                    <Text size="sm" fw={500}>
+                      {invoice.agreement_number}
+                    </Text>
+                  </Box>
+                )}
+              </SimpleGrid>
+            </Stack>
+          </Paper>
+
+          {/* Финансовая информация */}
+          <Paper p="md" radius="md" withBorder>
+            <Stack gap="md">
+              <Text size="sm" fw={600}>
+                {t('financialDocuments.invoiceDetails.financial')}
+              </Text>
+
+              <Divider />
+
+              <SimpleGrid cols={2} spacing="md">
+                <Box>
+                  <Text size="xs" c="dimmed" mb={4}>
+                    {t('financialDocuments.table.invoices.amount')}
+                  </Text>
+                  <Text size="lg" fw={700}>
+                    {formatCurrency(invoice.total_amount)} {t('common.currencyTHB')}
+                  </Text>
+                </Box>
+
+                <Box>
+                  <Text size="xs" c="dimmed" mb={4}>
+                    {t('financialDocuments.table.invoices.paid')}
+                  </Text>
+                  <Text size="lg" fw={700} c="green">
+                    {formatCurrency(invoice.amount_paid)} {t('common.currencyTHB')}
+                  </Text>
+                </Box>
+              </SimpleGrid>
+
+              <Box>
+                <Group justify="space-between" mb={8}>
+                  <Text size="xs" c="dimmed">
+                    {t('financialDocuments.paymentProgress')}
+                  </Text>
+                  <Text size="sm" fw={600}>
+                    {Math.round(paymentProgress)}%
+                  </Text>
+                </Group>
+                <Progress value={paymentProgress} color="green" size="lg" />
+              </Box>
+            </Stack>
+          </Paper>
+
+          {/* Кнопки действий */}
+          <Group justify="space-between">
+            <Button
+              variant="light"
+              onClick={() => {
+                setInvoiceDetailsModalVisible(false);
+                setSelectedInvoiceForDetails(null);
+              }}
+            >
+              {t('common.close')}
+            </Button>
+
+            <Group gap="xs">
+              <Button
+                variant="light"
+                color="blue"
+                leftSection={<IconDownload size={18} />}
+                onClick={() => handleDownloadInvoicePDF(invoice.id, invoice.invoice_number)}
+              >
+                {t('financialDocuments.actions.downloadPDF')}
+              </Button>
+              <Button
+                leftSection={<IconExternalLink size={18} />}
+                onClick={() => {
+                  navigate(`/financial-documents/invoices/${invoice.id}`);
+                  setInvoiceDetailsModalVisible(false);
+                  setSelectedInvoiceForDetails(null);
+                }}
+              >
+                {t('financialDocuments.actions.viewFull')}
+              </Button>
+            </Group>
+          </Group>
+        </Stack>
+      </Modal>
+    );
   };
 
   return (
@@ -800,7 +1433,20 @@ const FinancialDocuments = () => {
                                 {getStatusBadge(invoice.status, 'invoice')}
                               </Table.Td>
                               <Table.Td>
-                                <Text size="sm">{invoice.agreement_number || '—'}</Text>
+                                {invoice.agreement_number ? (
+                                  <Button
+                                    variant="subtle"
+                                    size="xs"
+                                    p={0}
+                                    onClick={() => handleOpenAgreementModal(invoice.agreement_number!)}
+                                  >
+                                    <Text size="sm" td="underline">
+                                      {invoice.agreement_number}
+                                    </Text>
+                                  </Button>
+                                ) : (
+                                  <Text size="sm">—</Text>
+                                )}
                               </Table.Td>
                               <Table.Td ta="right">
                                 <Text size="sm" fw={600}>
@@ -961,7 +1607,20 @@ const FinancialDocuments = () => {
                               {getStatusBadge(receipt.status, 'receipt')}
                             </Table.Td>
                             <Table.Td>
-                              <Text size="sm">{receipt.invoice_number || '—'}</Text>
+                              {receipt.invoice_number ? (
+                                <Button
+                                  variant="subtle"
+                                  size="xs"
+                                  p={0}
+                                  onClick={() => handleOpenInvoiceDetailsModal(receipt.invoice_number!)}
+                                >
+                                  <Text size="sm" td="underline">
+                                    {receipt.invoice_number}
+                                  </Text>
+                                </Button>
+                              ) : (
+                                <Text size="sm">—</Text>
+                              )}
                             </Table.Td>
                             <Table.Td ta="right">
                               <Text size="sm" fw={600} c="green">
@@ -1037,6 +1696,9 @@ const FinancialDocuments = () => {
           fetchReceipts();
         }}
       />
+
+      <AgreementDetailsModal />
+      <InvoiceDetailsModal />
     </Stack>
   );
 };

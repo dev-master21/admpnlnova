@@ -334,4 +334,7 @@ export const agreementsApi = {
       success: boolean;
       data: any[];
     }>(`/agreements/${id}/ai-edit/history`),
+    
+  getByAgreementNumber: (agreementNumber: string) =>
+    api.get<{ success: boolean; data: Agreement }>(`/agreements/by-number/${agreementNumber}`)
 };
