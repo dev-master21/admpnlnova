@@ -33,9 +33,9 @@ interface PageContent {
   pageNumber: number;
 }
 
-// Constants
-const PAGE_CONTENT_HEIGHT_MM = 250;
-const FIRST_PAGE_CONTENT_HEIGHT_MM = 220;
+// Constants - УМЕНЬШЕНЫ для освобождения места под блок подписей
+const PAGE_CONTENT_HEIGHT_MM = 215;
+const FIRST_PAGE_CONTENT_HEIGHT_MM = 185;
 
 // Styled Components
 const ContractWrapper = styled.div`
@@ -134,7 +134,7 @@ const PageInner = styled.div<{ isFirstPage?: boolean }>`
 `;
 
 const Header = styled.div`
-  margin-bottom: 10mm;
+  margin-bottom: 8mm;
   text-align: center;
   position: relative;
   z-index: 10;
@@ -150,7 +150,7 @@ const LogoWrapper = styled.div`
   align-items: center;
   justify-content: center;
   position: relative;
-  margin-bottom: 5mm;
+  margin-bottom: 3mm;
 `;
 
 const DecorativeLine = styled.div`
@@ -187,14 +187,16 @@ const LogoContainer = styled.div`
   z-index: 2;
   background: #f9f6f3;
   padding: 0 5mm;
-  height: 10mm;
+  height: auto;
   
   @media print {
     background: #ffffff;
   }
   
   img {
-    height: 35mm;
+    max-height: 16mm;
+    max-width: 60mm;
+    height: auto;
     width: auto;
     filter: brightness(0) saturate(100%) invert(11%) sepia(12%) saturate(1131%) hue-rotate(185deg) brightness(94%) contrast(91%);
   }
@@ -230,7 +232,7 @@ const PageContentWithLimit = styled(PageContent)`
 
 const PageFooter = styled.div`
   position: absolute;
-  bottom: 10mm;
+  bottom: 6mm;
   left: 15mm;
   right: 15mm;
   display: flex;
@@ -265,9 +267,65 @@ const PageNumber = styled.div`
   color: #666;
 `;
 
+// НОВЫЕ КОМПОНЕНТЫ ДЛЯ БЛОКА ПОДПИСЕЙ НА КАЖДОЙ СТРАНИЦЕ
+const PageFooterSignatures = styled.div<{ signaturesCount: number }>`
+  position: absolute;
+  bottom: 18mm;
+  left: 15mm;
+  right: 15mm;
+  display: ${props => props.signaturesCount <= 2 ? 'flex' : 'grid'};
+  ${props => props.signaturesCount > 2 && `
+    grid-template-columns: repeat(2, 1fr);
+  `}
+  justify-content: space-between;
+  gap: 4mm;
+  border-top: 1px solid #1b273b;
+  padding-top: 1.5mm;
+  z-index: 9;
+  
+  @media print {
+    border-top: 1px solid #1b273b !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+`;
+
+const SignatureBlock = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5mm;
+  flex: 1;
+`;
+
+const SignatureRole = styled.div`
+  font-weight: 600;
+  font-size: 3.2mm;
+  color: #1b273b;
+`;
+
+const SignatureLine = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 2mm;
+  font-size: 3mm;
+  min-height: 12mm;
+`;
+
+const SignatureImageSmall = styled.img`
+  max-height: 12mm;
+  max-width: 40mm;
+  object-fit: contain;
+`;
+
+const SignatureName = styled.div`
+  font-size: 2.8mm;
+  color: #666;
+  font-weight: 300;
+`;
+
 const PageQRCode = styled.div`
   position: absolute;
-  bottom: 16mm;
+  bottom: 12mm;
   right: 15mm;
   opacity: 0.4;
   z-index: 5;
@@ -1457,6 +1515,42 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
     return roleTranslations[role.toLowerCase()] || role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
   };
 
+  // НОВАЯ ФУНКЦИЯ: Рендер компактного блока подписей на каждой странице
+  const renderPageSignatures = () => {
+    if (!agreement?.signatures || agreement.signatures.length === 0) return null;
+
+    return (
+      <PageFooterSignatures signaturesCount={agreement.signatures.length}>
+        {agreement.signatures.map((signature: any) => {
+          // Находим соответствующую сторону по роли
+          const party = agreement?.parties?.find((p: any) => p.role === signature.signer_role);
+          
+          // Определяем что показывать: название компании или имя
+          let displayName = signature.signer_name;
+          if (party?.is_company && party?.company_name) {
+            displayName = party.company_name;
+          }
+
+          return (
+            <SignatureBlock key={signature.id}>
+              <SignatureRole>{formatRole(signature.signer_role)}:</SignatureRole>
+              <SignatureLine>
+                {signature.is_signed && signature.signature_data ? (
+                  <SignatureImageSmall src={signature.signature_data} alt="Signature" />
+                ) : (
+                  <span>___________</span>
+                )}
+              </SignatureLine>
+              <SignatureName>
+                {party?.is_company ? displayName : `Name: ${displayName}`}
+              </SignatureName>
+            </SignatureBlock>
+          );
+        })}
+      </PageFooterSignatures>
+    );
+  };
+
     const totalPages = isEditing ? 1 : pages.length + (agreement?.signatures?.length > 0 ? 1 : 0);
 
     // Editing mode - single page
@@ -1610,6 +1704,10 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
                 
             {pages[0]?.nodes.map(node => renderNodeForPrint(node))}
             </PageContent>
+
+              {/* БЛОК ПОДПИСЕЙ НА ПЕРВОЙ СТРАНИЦЕ */}
+              {renderPageSignatures()}
+
               {agreement?.qr_code_base64 && (
               <PageQRCode>
                 <img 
@@ -1643,6 +1741,10 @@ const DocumentEditor = forwardRef<HTMLDivElement, DocumentEditorProps>(
                 <PageContent>
                   {page.nodes.map(node => renderNodeForPrint(node))}
                 </PageContent>
+
+                {/* БЛОК ПОДПИСЕЙ НА ВСЕХ ПРОМЕЖУТОЧНЫХ СТРАНИЦАХ */}
+                {renderPageSignatures()}
+
                 {agreement?.qr_code_base64 && (
                   <PageQRCode>
                     <img 

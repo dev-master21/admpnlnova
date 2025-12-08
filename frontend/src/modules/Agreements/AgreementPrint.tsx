@@ -139,7 +139,7 @@ const AgreementPrint = () => {
       <DocumentEditor
         agreement={agreement}
         isEditing={false}
-        logoUrl="https://admin.novaestate.company/nova-logo.svg"
+        logoUrl={agreement.logoUrl || 'https://admin.novaestate.company/nova-logo.svg'}
       />
     </div>
   );
