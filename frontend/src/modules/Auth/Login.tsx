@@ -1,5 +1,5 @@
 // frontend/src/modules/Auth/Login.tsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -29,6 +29,7 @@ import {
   IconShieldCheck
 } from '@tabler/icons-react';
 import { authApi } from '@/api/auth.api';
+import { partnersApi } from '@/api/partners.api';
 import { useAuthStore, User } from '@/store/authStore';
 import { useMediaQuery } from '@mantine/hooks';
 
@@ -43,6 +44,33 @@ const Login = () => {
   const setAuth = useAuthStore((state) => state.setAuth);
   const [loading, setLoading] = useState(false);
   const isMobile = useMediaQuery('(max-width: 768px)');
+
+  // Partner branding
+  const [logoFilename, setLogoFilename] = useState<string>('logo.svg');
+  const [partnerName, setPartnerName] = useState<string>('NOVA Estate');
+
+  // Load partner branding
+  useEffect(() => {
+    const loadPartnerBranding = async () => {
+      try {
+        const currentDomain = window.location.hostname;
+        const result = await partnersApi.getByDomain(currentDomain);
+        
+        if (result.logo_filename) {
+          setLogoFilename(result.logo_filename);
+        }
+        if (result.partner_name) {
+          setPartnerName(result.partner_name);
+        }
+      } catch (error) {
+        console.error('Error loading partner branding:', error);
+        setLogoFilename('logo.svg');
+        setPartnerName('NOVA Estate');
+      }
+    };
+
+    loadPartnerBranding();
+  }, []);
 
   const form = useForm<LoginFormData>({
     initialValues: {
@@ -142,8 +170,8 @@ const Login = () => {
                   }}
                 >
                   <Image
-                    src="/logo.svg"
-                    alt="NOVA ESTATE"
+                    src={`/${logoFilename}`}
+                    alt={partnerName}
                     h={50}
                     w={50}
                     fit="contain"

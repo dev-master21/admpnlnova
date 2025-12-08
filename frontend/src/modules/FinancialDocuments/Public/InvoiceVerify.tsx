@@ -29,6 +29,7 @@ import {
   CopyOutlined
 } from '@ant-design/icons';
 import { financialDocumentsApi, Invoice } from '@/api/financialDocuments.api';
+import { partnersApi } from '@/api/partners.api';
 import './InvoiceVerify.css';
 
 const { Title, Text, Paragraph } = Typography;
@@ -38,6 +39,33 @@ const InvoiceVerify = () => {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [receiptsModalVisible, setReceiptsModalVisible] = useState(false);
+
+  // Partner branding
+  const [logoFilename, setLogoFilename] = useState<string>('logo.svg');
+  const [partnerName, setPartnerName] = useState<string>('NOVA Estate');
+
+  // Load partner branding
+  useEffect(() => {
+    const loadPartnerBranding = async () => {
+      try {
+        const currentDomain = window.location.hostname;
+        const result = await partnersApi.getByDomain(currentDomain);
+        
+        if (result.logo_filename) {
+          setLogoFilename(result.logo_filename);
+        }
+        if (result.partner_name) {
+          setPartnerName(result.partner_name);
+        }
+      } catch (error) {
+        console.error('Error loading partner branding:', error);
+        setLogoFilename('logo.svg');
+        setPartnerName('NOVA Estate');
+      }
+    };
+
+    loadPartnerBranding();
+  }, []);
 
   useEffect(() => {
     if (uuid) {
@@ -79,10 +107,8 @@ const InvoiceVerify = () => {
   };
 
   const copyAccountNumber = (accountNumber: string) => {
-      // Удаляем все символы кроме цифр
       const numbersOnly = accountNumber.replace(/\D/g, '');
 
-      // Копируем в буфер обмена
       navigator.clipboard.writeText(numbersOnly).then(() => {
         message.success('Account number copied to clipboard!');
       }).catch(() => {
@@ -161,7 +187,7 @@ const InvoiceVerify = () => {
       {/* Header */}
       <div className="verify-header">
         <div className="verify-brand">
-          <img src="/nova-logo.svg" alt="NOVAESTATE" className="brand-logo" />
+          <img src={`/${logoFilename}`} alt={partnerName} className="brand-logo" />
         </div>
         <div className="verify-title-section">
           <div className="verify-icon-wrapper">
@@ -169,7 +195,7 @@ const InvoiceVerify = () => {
           </div>
           <Title level={2} className="verify-title">Invoice Verification</Title>
           <Paragraph className="verify-subtitle">
-            Official invoice document issued by NOVAESTATE
+            Official invoice document issued by {partnerName}
           </Paragraph>
         </div>
       </div>
@@ -596,13 +622,13 @@ const InvoiceVerify = () => {
       <div className="verify-footer">
         <div className="footer-content">
           <div className="footer-logo">
-            <img src="/nova-logo.svg" alt="NOVAESTATE" />
+            <img src={`/${logoFilename}`} alt={partnerName} />
           </div>
           <div className="footer-text">
             <SafetyOutlined /> Secure and verified document
           </div>
           <div className="footer-copyright">
-            © {new Date().getFullYear()} NOVAESTATE. All rights reserved.
+            © {new Date().getFullYear()} {partnerName}. All rights reserved.
           </div>
         </div>
       </div>

@@ -175,7 +175,8 @@ class PartnersController {
         res.json({
           success: true,
           data: {
-            logo_filename: 'logo.svg'
+            logo_filename: 'logo.svg',
+            partner_name: null
           }
         });
         return;
@@ -186,7 +187,8 @@ class PartnersController {
       res.json({
         success: true,
         data: {
-          logo_filename: partner.logo_filename || 'logo.svg'
+          logo_filename: partner.logo_filename || 'logo.svg',
+          partner_name: partner.partner_name || null
         }
       });
     } catch (error) {
@@ -194,7 +196,8 @@ class PartnersController {
       res.json({
         success: true,
         data: {
-          logo_filename: 'logo.svg'
+          logo_filename: 'logo.svg',
+          partner_name: null
         }
       });
     }

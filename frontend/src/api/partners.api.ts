@@ -26,6 +26,11 @@ export interface UpdatePartnerDTO {
   is_active?: boolean;
 }
 
+export interface PartnerInfo {
+  logo_filename: string;
+  partner_name: string | null;
+}
+
 export const partnersApi = {
   /**
    * Получить всех партнёров (SuperAdmin only)
@@ -46,7 +51,7 @@ export const partnersApi = {
   /**
    * Получить партнёра по домену (публичный endpoint)
    */
-  async getByDomain(domain: string): Promise<{ logo_filename: string }> {
+  async getByDomain(domain: string): Promise<PartnerInfo> {
     const response = await api.get(`/partners/by-domain/${domain}`);
     return response.data.data;
   },

@@ -12,6 +12,7 @@ import {
 } from 'react-icons/fi';
 import styled from 'styled-components';
 import { agreementsApi } from '@/api/agreements.api';
+import { partnersApi } from '@/api/partners.api';
 
 // Styled Components
 const PageContainer = styled.div`
@@ -354,6 +355,34 @@ const AgreementVerify = () => {
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
 
+  // Partner branding
+  const [logoFilename, setLogoFilename] = useState<string>('logo.svg');
+  const [partnerName, setPartnerName] = useState<string>('NOVA Estate');
+
+  // Load partner branding
+  useEffect(() => {
+    const loadPartnerBranding = async () => {
+      try {
+        const currentDomain = window.location.hostname;
+        const result = await partnersApi.getByDomain(currentDomain);
+        
+        if (result.logo_filename) {
+          setLogoFilename(result.logo_filename);
+        }
+        if (result.partner_name) {
+          setPartnerName(result.partner_name);
+        }
+      } catch (error) {
+        console.error('Error loading partner branding:', error);
+        // Use defaults on error
+        setLogoFilename('logo.svg');
+        setPartnerName('NOVA Estate');
+      }
+    };
+
+    loadPartnerBranding();
+  }, []);
+
   useEffect(() => {
     if (verifyLink) {
       fetchAgreement();
@@ -387,7 +416,7 @@ const AgreementVerify = () => {
     });
   };
 
-const handleDownloadPDF = async () => {
+  const handleDownloadPDF = async () => {
     if (!agreement || !verifyLink) return;
     
     setDownloading(true);
@@ -443,7 +472,7 @@ const handleDownloadPDF = async () => {
     <PageContainer>
       <Header>
         <HeaderContent>
-          <Logo src="https://admin.novaestate.company/nova-logo.svg" alt="NOVA Estate" />
+          <Logo src={`/${logoFilename}`} alt={partnerName} />
         </HeaderContent>
       </Header>
 

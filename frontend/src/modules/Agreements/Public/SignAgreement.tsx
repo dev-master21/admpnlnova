@@ -16,6 +16,7 @@ import {
 } from 'react-icons/fi';
 import styled from 'styled-components';
 import { agreementsApi } from '@/api/agreements.api';
+import { partnersApi } from '@/api/partners.api';
 
 // Styled Components
 const PageContainer = styled.div`
@@ -487,6 +488,10 @@ const SignAgreement = () => {
   const [signing, setSigning] = useState(false);
   const [agreed, setAgreed] = useState(false);
 
+  // Partner branding
+  const [logoFilename, setLogoFilename] = useState<string>('logo.svg');
+  const [partnerName, setPartnerName] = useState<string>('NOVA Estate');
+
   // Процесс подписания
   const [showSigningProcess, setShowSigningProcess] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
@@ -494,16 +499,40 @@ const SignAgreement = () => {
 
   // Этапы подписания
   const signingSteps = [
-    { text: 'Проверяем подпись...', duration: 2500 },
-    { text: 'Сохраняем данные договора...', duration: 2500 },
-    { text: 'Генерируем подписанный PDF...', duration: 12000 }, // Основное время
-    { text: 'Обновляем статус договора...', duration: 2000 },
-    { text: 'Завершаем оформление...', duration: 2000 },
+    { text: 'Verifying signature...', duration: 2500 },
+    { text: 'Saving agreement data...', duration: 2500 },
+    { text: 'Generating signed PDF...', duration: 12000 },
+    { text: 'Updating agreement status...', duration: 2000 },
+    { text: 'Finalizing...', duration: 2000 },
   ];
 
   // Трекинг
   const [pageLoadTime] = useState(Date.now());
   const [signatureClearCount, setSignatureClearCount] = useState(0);
+
+  // Load partner branding
+  useEffect(() => {
+    const loadPartnerBranding = async () => {
+      try {
+        const currentDomain = window.location.hostname;
+        const result = await partnersApi.getByDomain(currentDomain);
+        
+        if (result.logo_filename) {
+          setLogoFilename(result.logo_filename);
+        }
+        if (result.partner_name) {
+          setPartnerName(result.partner_name);
+        }
+      } catch (error) {
+        console.error('Error loading partner branding:', error);
+        // Use defaults on error
+        setLogoFilename('logo.svg');
+        setPartnerName('NOVA Estate');
+      }
+    };
+
+    loadPartnerBranding();
+  }, []);
 
   useEffect(() => {
     if (link) {
@@ -524,11 +553,11 @@ const SignAgreement = () => {
       setCurrentSigner(signerData);
       
       if (signerData.is_signed) {
-        message.info('Вы уже подписали этот договор');
+        message.info('You have already signed this agreement');
       }
     } catch (error: any) {
       console.error('Fetch error:', error);
-      message.error(error.response?.data?.message || 'Ошибка загрузки данных');
+      message.error(error.response?.data?.message || 'Error loading data');
       navigate('/');
     } finally {
       setLoading(false);
@@ -542,15 +571,12 @@ const SignAgreement = () => {
     }
   };
 
-  // ✅ ИСПРАВЛЕННАЯ ФУНКЦИЯ - напрямую скачивает файл без blob URL
   const handleViewPDF = () => {
     if (!link) return;
 
     try {
-      // Формируем прямую ссылку на скачивание PDF
       const downloadUrl = `/api/agreements/download-pdf/${link}`;
       
-      // Создаем невидимую ссылку и кликаем по ней для скачивания
       const a = document.createElement('a');
       a.href = downloadUrl;
       a.download = `${agreement?.agreement_number || 'agreement'}.pdf`;
@@ -559,20 +585,20 @@ const SignAgreement = () => {
       a.click();
       document.body.removeChild(a);
       
-      message.success('Скачивание договора начато');
+      message.success('Agreement download started');
     } catch (error) {
-      message.error('Ошибка скачивания PDF');
+      message.error('Error downloading PDF');
     }
   };
 
-const handleSign = async () => {
+  const handleSign = async () => {
     if (!agreed) {
-      message.warning('Пожалуйста, подтвердите согласие с условиями договора');
+      message.warning('Please confirm your agreement with the terms');
       return;
     }
 
     if (!sigPadRef.current || sigPadRef.current.isEmpty()) {
-      message.warning('Пожалуйста, поставьте вашу подпись');
+      message.warning('Please provide your signature');
       return;
     }
 
@@ -584,46 +610,38 @@ const handleSign = async () => {
     try {
       const signatureData = sigPadRef.current.toDataURL('image/png');
       
-      // Вычисляем общее время на странице
       const totalSessionDuration = Math.floor((Date.now() - pageLoadTime) / 1000);
 
-      // ✅ ПРАВИЛЬНАЯ логика показа этапов - каждый этап со своей длительностью
       let currentStepIndex = 0;
       let serverResponseReceived = false;
 
       const showNextStep = () => {
-        if (serverResponseReceived) return; // Если сервер уже ответил - прекращаем
+        if (serverResponseReceived) return;
 
         if (currentStepIndex < signingSteps.length - 1) {
           currentStepIndex++;
           setCurrentStep(currentStepIndex);
           
-          // Планируем следующий этап с соответствующей задержкой
           setTimeout(showNextStep, signingSteps[currentStepIndex].duration);
         } else {
-          // Если этапы закончились, а сервер еще не ответил - крутим последний
           setTimeout(showNextStep, 2000);
         }
       };
 
-      // Запускаем первый этап
       setTimeout(showNextStep, signingSteps[0].duration);
 
-      // Отправляем запрос на подписание (параллельно с показом этапов)
       await agreementsApi.signAgreement(currentSigner.id, {
         signature_data: signatureData,
         signature_clear_count: signatureClearCount,
         total_session_duration: totalSessionDuration
       });
 
-      // Отмечаем что получили ответ
       serverResponseReceived = true;
       setSigningCompleted(true);
-      setCurrentStep(signingSteps.length); // Переходим к финальному этапу
+      setCurrentStep(signingSteps.length);
 
-      // Показываем успех
       setTimeout(() => {
-        message.success('Договор успешно подписан!');
+        message.success('Agreement signed successfully!');
         setShowSigningProcess(false);
         
         setTimeout(() => {
@@ -633,7 +651,7 @@ const handleSign = async () => {
 
     } catch (error: any) {
       setShowSigningProcess(false);
-      message.error(error.response?.data?.message || 'Ошибка подписания договора');
+      message.error(error.response?.data?.message || 'Error signing agreement');
     } finally {
       setSigning(false);
     }
@@ -641,7 +659,7 @@ const handleSign = async () => {
 
   const formatCurrency = (amount?: number) => {
     if (!amount) return null;
-    return `${amount.toLocaleString('ru-RU')} ฿`;
+    return `${amount.toLocaleString('en-US')} ฿`;
   };
 
   if (loading) {
@@ -658,7 +676,6 @@ const handleSign = async () => {
 
   const otherSigners = agreement.signatures?.filter((s: any) => s.id !== currentSigner.id) || [];
 
-  // Вычисляем прогресс
   const progress = signingCompleted 
     ? 100 
     : (currentStep / signingSteps.length) * 100;
@@ -667,7 +684,7 @@ const handleSign = async () => {
     <PageContainer>
       <Header>
         <HeaderContent>
-          <Logo src="https://admin.novaestate.company/nova-logo.svg" alt="NOVA Estate" />
+          <Logo src={`/${logoFilename}`} alt={partnerName} />
         </HeaderContent>
       </Header>
 
@@ -682,9 +699,9 @@ const handleSign = async () => {
               <AlertBox type="success">
                 <FiCheckCircle size={20} />
                 <div>
-                  <strong>Договор успешно подписан!</strong>
+                  <strong>Agreement signed successfully!</strong>
                   <div style={{ fontSize: '13px', marginTop: '4px' }}>
-                    Вы подписали договор {new Date(currentSigner.signed_at).toLocaleDateString('ru-RU')}
+                    You signed the agreement on {new Date(currentSigner.signed_at).toLocaleDateString('en-US')}
                   </div>
                 </div>
               </AlertBox>
@@ -698,9 +715,9 @@ const handleSign = async () => {
               <AlertBox type="info">
                 <FiAlertCircle size={20} />
                 <div>
-                  <strong>Требуется ваша подпись</strong>
+                  <strong>Your signature required</strong>
                   <div style={{ fontSize: '13px', marginTop: '4px' }}>
-                    Пожалуйста, внимательно ознакомьтесь с договором и поставьте вашу подпись
+                    Please review the agreement carefully and provide your signature
                   </div>
                 </div>
               </AlertBox>
@@ -714,20 +731,20 @@ const handleSign = async () => {
           >
             <CardTitle>
               <FiFileText size={20} />
-              Информация о договоре
+              Agreement Information
             </CardTitle>
 
             <InfoGrid>
               {agreement.agreement_number && (
                 <InfoItem>
-                  <InfoLabel>Номер договора</InfoLabel>
+                  <InfoLabel>Agreement Number</InfoLabel>
                   <InfoValue>{agreement.agreement_number}</InfoValue>
                 </InfoItem>
               )}
 
               {agreement.property_name && (
                 <InfoItem>
-                  <InfoLabel>Объект</InfoLabel>
+                  <InfoLabel>Property</InfoLabel>
                   <InfoValue>
                     {agreement.property_name}
                     {agreement.property_number && ` (${agreement.property_number})`}
@@ -737,34 +754,34 @@ const handleSign = async () => {
 
               {agreement.date_from && (
                 <InfoItem>
-                  <InfoLabel>Дата начала</InfoLabel>
+                  <InfoLabel>Start Date</InfoLabel>
                   <InfoValue>
-                    {new Date(agreement.date_from).toLocaleDateString('ru-RU')}
+                    {new Date(agreement.date_from).toLocaleDateString('en-US')}
                   </InfoValue>
                 </InfoItem>
               )}
 
               {agreement.date_to && (
                 <InfoItem>
-                  <InfoLabel>Дата окончания</InfoLabel>
+                  <InfoLabel>End Date</InfoLabel>
                   <InfoValue>
-                    {new Date(agreement.date_to).toLocaleDateString('ru-RU')}
+                    {new Date(agreement.date_to).toLocaleDateString('en-US')}
                   </InfoValue>
                 </InfoItem>
               )}
 
               {agreement.created_at && (
                 <InfoItem>
-                  <InfoLabel>Дата создания</InfoLabel>
+                  <InfoLabel>Created Date</InfoLabel>
                   <InfoValue>
-                    {new Date(agreement.created_at).toLocaleDateString('ru-RU')}
+                    {new Date(agreement.created_at).toLocaleDateString('en-US')}
                   </InfoValue>
                 </InfoItem>
               )}
 
               {(agreement.rent_amount_monthly || agreement.rent_amount_total) && (
                 <InfoItem>
-                  <InfoLabel>Сумма</InfoLabel>
+                  <InfoLabel>Amount</InfoLabel>
                   <InfoValue>
                     {formatCurrency(agreement.rent_amount_total || agreement.rent_amount_monthly)}
                   </InfoValue>
@@ -773,7 +790,7 @@ const handleSign = async () => {
 
               {agreement.deposit_amount && (
                 <InfoItem>
-                  <InfoLabel>Депозит</InfoLabel>
+                  <InfoLabel>Deposit</InfoLabel>
                   <InfoValue>
                     {formatCurrency(agreement.deposit_amount)}
                   </InfoValue>
@@ -784,7 +801,7 @@ const handleSign = async () => {
             <ButtonGroup>
               <Button variant="primary" onClick={handleViewPDF}>
                 <FiDownload size={18} />
-                Скачать договор (PDF)
+                Download Agreement (PDF)
               </Button>
             </ButtonGroup>
           </Card>
@@ -796,14 +813,14 @@ const handleSign = async () => {
           >
             <CardTitle>
               <FiUsers size={20} />
-              Подписанты
+              Signers
             </CardTitle>
 
             <SignersList>
               <SignerItem isCurrent>
                 <SignerInfo>
                   <div>
-                    <SignerName>{currentSigner.signer_name} (Вы)</SignerName>
+                    <SignerName>{currentSigner.signer_name} (You)</SignerName>
                     <SignerRole>{currentSigner.signer_role}</SignerRole>
                   </div>
                 </SignerInfo>
@@ -811,12 +828,12 @@ const handleSign = async () => {
                   {currentSigner.is_signed ? (
                     <>
                       <FiCheck size={14} />
-                      Подписано
+                      Signed
                     </>
                   ) : (
                     <>
                       <FiEdit3 size={14} />
-                      Ожидает подписи
+                      Awaiting signature
                     </>
                   )}
                 </StatusBadge>
@@ -834,12 +851,12 @@ const handleSign = async () => {
                     {signer.is_signed ? (
                       <>
                         <FiCheck size={14} />
-                        Подписано
+                        Signed
                       </>
                     ) : (
                       <>
                         <FiClock size={14} />
-                        Ожидает
+                        Pending
                       </>
                     )}
                   </StatusBadge>
@@ -856,7 +873,7 @@ const handleSign = async () => {
             >
               <CardTitle>
                 <FiEdit3 size={20} />
-                Ваша подпись
+                Your Signature
               </CardTitle>
 
               <SignatureSection>
@@ -878,17 +895,17 @@ const handleSign = async () => {
                 <CanvasControls>
                   <SignatureHint>
                     <FiEdit3 size={14} />
-                    Поставьте вашу подпись в поле выше
+                    Sign in the field above
                   </SignatureHint>
                   <ClearButton onClick={clearSignature}>
-                    Очистить
+                    Clear
                   </ClearButton>
                 </CanvasControls>
               </SignatureSection>
 
               <AgreementCheckbox>
                 <Checkbox checked={agreed} onChange={(e) => setAgreed(e.target.checked)}>
-                  Я ознакомился(лась) с договором и согласен(на) с его условиями
+                  I have read and agree to the terms of this agreement
                 </Checkbox>
               </AgreementCheckbox>
 
@@ -902,12 +919,12 @@ const handleSign = async () => {
                 {signing ? (
                   <>
                     <Spin size="small" />
-                    Подписание...
+                    Signing...
                   </>
                 ) : (
                   <>
                     <FiCheck size={18} />
-                    Подписать договор
+                    Sign Agreement
                   </>
                 )}
               </SignButton>
@@ -916,7 +933,7 @@ const handleSign = async () => {
         </AnimatePresence>
       </MainContent>
 
-      {/* Модальное окно процесса подписания */}
+      {/* Signing Process Modal */}
       <AnimatePresence>
         {showSigningProcess && (
           <SigningModal>
@@ -926,7 +943,7 @@ const handleSign = async () => {
               exit={{ opacity: 0, scale: 0.9 }}
             >
               <SigningTitle>
-                {signingCompleted ? 'Договор подписан!' : 'Подписание договора'}
+                {signingCompleted ? 'Agreement Signed!' : 'Signing Agreement'}
               </SigningTitle>
 
               <SigningSteps>
@@ -968,7 +985,7 @@ const handleSign = async () => {
                       <FiCheckCircle />
                     </StepIcon>
                     <StepText isActive={true}>
-                      Готово! Договор успешно подписан
+                      Done! Agreement signed successfully
                     </StepText>
                   </StepItem>
                 )}
