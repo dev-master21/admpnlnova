@@ -280,16 +280,30 @@ const commonVariables = [
   { key: 'date_from', label: t('createTemplate.variables.dateFrom'), example: 'January 1, 2025' },
   { key: 'date_to', label: t('createTemplate.variables.dateTo'), example: 'December 31, 2025' },
   
+  // ✅ НОВЫЕ - Компоненты дат (date_from)
+  { key: 'first_day', label: t('createTemplate.variables.firstDay'), example: '1' },
+  { key: 'first_month_full_word', label: t('createTemplate.variables.firstMonthFullWord'), example: 'January' },
+  { key: 'first_month_short_word', label: t('createTemplate.variables.firstMonthShortWord'), example: 'Jan' },
+  { key: 'first_month_number', label: t('createTemplate.variables.firstMonthNumber'), example: '01' },
+  { key: 'first_year', label: t('createTemplate.variables.firstYear'), example: '2025' },
+  
+  // ✅ НОВЫЕ - Компоненты дат (date_to)
+  { key: 'last_day', label: t('createTemplate.variables.lastDay'), example: '31' },
+  { key: 'last_month_full_word', label: t('createTemplate.variables.lastMonthFullWord'), example: 'December' },
+  { key: 'last_month_short_word', label: t('createTemplate.variables.lastMonthShortWord'), example: 'Dec' },
+  { key: 'last_month_number', label: t('createTemplate.variables.lastMonthNumber'), example: '12' },
+  { key: 'last_year', label: t('createTemplate.variables.lastYear'), example: '2025' },
+  
   // Объект недвижимости
   { key: 'property_name', label: t('createTemplate.variables.propertyName'), example: 'Villa Sunset' },
   { key: 'property_address', label: t('createTemplate.variables.propertyAddress'), example: '123 Beach Road' },
   { key: 'property_number', label: t('createTemplate.variables.propertyNumber'), example: 'PROP-001' },
   
-  // Финансы
-  { key: 'rent_amount', label: t('createTemplate.variables.rentAmount'), example: '50,000 THB' },
-  { key: 'rent_amount_monthly', label: t('createTemplate.variables.rentAmountMonthly'), example: '50,000 THB' },
-  { key: 'rent_amount_total', label: t('createTemplate.variables.rentAmountTotal'), example: '600,000 THB' },
-  { key: 'deposit_amount', label: t('createTemplate.variables.depositAmount'), example: '100,000 THB' },
+  // Финансы (с разделителем тысяч)
+  { key: 'rent_amount', label: t('createTemplate.variables.rentAmount'), example: '50,000' },
+  { key: 'rent_amount_monthly', label: t('createTemplate.variables.rentAmountMonthly'), example: '50,000' },
+  { key: 'rent_amount_total', label: t('createTemplate.variables.rentAmountTotal'), example: '600,000' },
+  { key: 'deposit_amount', label: t('createTemplate.variables.depositAmount'), example: '100,000' },
   { key: 'utilities_included', label: t('createTemplate.variables.utilitiesIncluded'), example: 'Gardening, Wi-Fi' },
   
   // Банк
@@ -297,19 +311,52 @@ const commonVariables = [
   { key: 'bank_account_name', label: t('createTemplate.variables.bankAccountName'), example: 'John Doe' },
   { key: 'bank_account_number', label: t('createTemplate.variables.bankAccountNumber'), example: '123-4-56789-0' },
   
-  // ✅ НОВЫЕ ПОЛЯ - Условия оплаты
-  { key: 'upon_signed_pay', label: t('createTemplate.variables.uponSignedPay'), example: '200,000 THB' },
-  { key: 'upon_checkin_pay', label: t('createTemplate.variables.uponCheckinPay'), example: '200,000 THB' },
-  { key: 'upon_checkout_pay', label: t('createTemplate.variables.uponCheckoutPay'), example: '200,000 THB' },
-  { key: 'upon_signed_pay_percent', label: t('createTemplate.variables.uponSignedPayPercent'), example: '33.3%' },
-  { key: 'upon_checkin_pay_percent', label: t('createTemplate.variables.uponCheckinPayPercent'), example: '33.3%' },
-  { key: 'upon_checkout_pay_percent', label: t('createTemplate.variables.uponCheckoutPayPercent'), example: '33.3%' },
+  // Условия оплаты (с разделителем тысяч)
+  { key: 'upon_signed_pay', label: t('createTemplate.variables.uponSignedPay'), example: '200,000' },
+  { key: 'upon_checkin_pay', label: t('createTemplate.variables.uponCheckinPay'), example: '200,000' },
+  { key: 'upon_checkout_pay', label: t('createTemplate.variables.uponCheckoutPay'), example: '200,000' },
+  { key: 'upon_signed_pay_percent', label: t('createTemplate.variables.uponSignedPayPercent'), example: '33%' },
+  { key: 'upon_checkin_pay_percent', label: t('createTemplate.variables.uponCheckinPayPercent'), example: '33%' },
+  { key: 'upon_checkout_pay_percent', label: t('createTemplate.variables.uponCheckoutPayPercent'), example: '34%' },
   
-  // Landlord
+  // Landlord (физ. лицо)
   { key: 'landlord_name', label: t('createTemplate.variables.landlordName'), example: 'John Smith' },
   { key: 'landlord_country', label: t('createTemplate.variables.landlordCountry'), example: 'Thailand' },
   { key: 'landlord_passport', label: t('createTemplate.variables.landlordPassport'), example: 'AB1234567' },
   { key: 'landlord_passport_number', label: t('createTemplate.variables.landlordPassportNumber'), example: 'AB1234567' },
+  // ✅ НОВЫЕ - Landlord (компания)
+  { key: 'landlord_company_name', label: t('createTemplate.variables.landlordCompanyName'), example: 'Landlord Co Ltd' },
+  { key: 'landlord_company_address', label: t('createTemplate.variables.landlordCompanyAddress'), example: '123 Business St' },
+  { key: 'landlord_company_tax_id', label: t('createTemplate.variables.landlordCompanyTaxId'), example: '1234567890' },
+  { key: 'landlord_director_name', label: t('createTemplate.variables.landlordDirectorName'), example: 'John Smith' },
+  { key: 'landlord_director_passport', label: t('createTemplate.variables.landlordDirectorPassport'), example: 'AB1234567' },
+  { key: 'landlord_director_country', label: t('createTemplate.variables.landlordDirectorCountry'), example: 'Thailand' },
+  
+  // Tenant (физ. лицо)
+  { key: 'tenant_name', label: t('createTemplate.variables.tenantName'), example: 'Jane Doe' },
+  { key: 'tenant_country', label: t('createTemplate.variables.tenantCountry'), example: 'USA' },
+  { key: 'tenant_passport', label: t('createTemplate.variables.tenantPassport'), example: 'CD9876543' },
+  { key: 'tenant_passport_number', label: t('createTemplate.variables.tenantPassportNumber'), example: 'CD9876543' },
+  // ✅ НОВЫЕ - Tenant (компания)
+  { key: 'tenant_company_name', label: t('createTemplate.variables.tenantCompanyName'), example: 'Tenant Corp' },
+  { key: 'tenant_company_address', label: t('createTemplate.variables.tenantCompanyAddress'), example: '456 Trade Ave' },
+  { key: 'tenant_company_tax_id', label: t('createTemplate.variables.tenantCompanyTaxId'), example: '0987654321' },
+  { key: 'tenant_director_name', label: t('createTemplate.variables.tenantDirectorName'), example: 'Jane Doe' },
+  { key: 'tenant_director_passport', label: t('createTemplate.variables.tenantDirectorPassport'), example: 'CD9876543' },
+  { key: 'tenant_director_country', label: t('createTemplate.variables.tenantDirectorCountry'), example: 'USA' },
+  
+  // Lessor (физ. лицо)
+  { key: 'lessor_name', label: t('createTemplate.variables.lessorName'), example: 'Company Ltd' },
+  { key: 'lessor_country', label: t('createTemplate.variables.lessorCountry'), example: 'Thailand' },
+  { key: 'lessor_passport', label: t('createTemplate.variables.lessorPassport'), example: 'EF1234567' },
+  { key: 'lessor_passport_number', label: t('createTemplate.variables.lessorPassportNumber'), example: 'EF1234567' },
+  // ✅ НОВЫЕ - Lessor (компания)
+  { key: 'lessor_company_name', label: t('createTemplate.variables.lessorCompanyName'), example: 'Lessor Co Ltd' },
+  { key: 'lessor_company_address', label: t('createTemplate.variables.lessorCompanyAddress'), example: '789 Market Rd' },
+  { key: 'lessor_company_tax_id', label: t('createTemplate.variables.lessorCompanyTaxId'), example: '1122334455' },
+  { key: 'lessor_director_name', label: t('createTemplate.variables.lessorDirectorName'), example: 'Mike Johnson' },
+  { key: 'lessor_director_passport', label: t('createTemplate.variables.lessorDirectorPassport'), example: 'EF1122334' },
+  { key: 'lessor_director_country', label: t('createTemplate.variables.lessorDirectorCountry'), example: 'Singapore' },
   
   // Representative
   { key: 'representative_name', label: t('createTemplate.variables.representativeName'), example: 'Sarah Johnson' },
@@ -317,41 +364,57 @@ const commonVariables = [
   { key: 'representative_passport', label: t('createTemplate.variables.representativePassport'), example: 'US7654321' },
   { key: 'representative_passport_number', label: t('createTemplate.variables.representativePassportNumber'), example: 'US7654321' },
   
-  // Tenant
-  { key: 'tenant_name', label: t('createTemplate.variables.tenantName'), example: 'Jane Doe' },
-  { key: 'tenant_country', label: t('createTemplate.variables.tenantCountry'), example: 'USA' },
-  { key: 'tenant_passport', label: t('createTemplate.variables.tenantPassport'), example: 'CD9876543' },
-  { key: 'tenant_passport_number', label: t('createTemplate.variables.tenantPassportNumber'), example: 'CD9876543' },
-  
-  // Lessor
-  { key: 'lessor_name', label: t('createTemplate.variables.lessorName'), example: 'Company Ltd' },
-  { key: 'lessor_country', label: t('createTemplate.variables.lessorCountry'), example: 'Thailand' },
-  { key: 'lessor_passport', label: t('createTemplate.variables.lessorPassport'), example: 'EF1234567' },
-  { key: 'lessor_passport_number', label: t('createTemplate.variables.lessorPassportNumber'), example: 'EF1234567' },
-  
-  // Agent
+  // Agent (физ. лицо)
   { key: 'agent_name', label: t('createTemplate.variables.agentName'), example: 'Real Estate Co.' },
   { key: 'agent_country', label: t('createTemplate.variables.agentCountry'), example: 'Thailand' },
   { key: 'agent_passport', label: t('createTemplate.variables.agentPassport'), example: 'GH1234567' },
   { key: 'agent_passport_number', label: t('createTemplate.variables.agentPassportNumber'), example: 'GH1234567' },
+  // ✅ НОВЫЕ - Agent (компания)
+  { key: 'agent_company_name', label: t('createTemplate.variables.agentCompanyName'), example: 'Real Estate Agency Ltd' },
+  { key: 'agent_company_address', label: t('createTemplate.variables.agentCompanyAddress'), example: '321 Agency Blvd' },
+  { key: 'agent_company_tax_id', label: t('createTemplate.variables.agentCompanyTaxId'), example: '5566778899' },
+  { key: 'agent_director_name', label: t('createTemplate.variables.agentDirectorName'), example: 'Agent Director' },
+  { key: 'agent_director_passport', label: t('createTemplate.variables.agentDirectorPassport'), example: 'GH7654321' },
+  { key: 'agent_director_country', label: t('createTemplate.variables.agentDirectorCountry'), example: 'Thailand' },
   
-  // Seller
+  // Seller (физ. лицо)
   { key: 'seller_name', label: t('createTemplate.variables.sellerName'), example: 'Seller Name' },
   { key: 'seller_country', label: t('createTemplate.variables.sellerCountry'), example: 'Thailand' },
   { key: 'seller_passport', label: t('createTemplate.variables.sellerPassport'), example: 'IJ1234567' },
   { key: 'seller_passport_number', label: t('createTemplate.variables.sellerPassportNumber'), example: 'IJ1234567' },
+  // ✅ НОВЫЕ - Seller (компания)
+  { key: 'seller_company_name', label: t('createTemplate.variables.sellerCompanyName'), example: 'Seller Corp' },
+  { key: 'seller_company_address', label: t('createTemplate.variables.sellerCompanyAddress'), example: '999 Seller St' },
+  { key: 'seller_company_tax_id', label: t('createTemplate.variables.sellerCompanyTaxId'), example: '1231231234' },
+  { key: 'seller_director_name', label: t('createTemplate.variables.sellerDirectorName'), example: 'Seller Director' },
+  { key: 'seller_director_passport', label: t('createTemplate.variables.sellerDirectorPassport'), example: 'IJ7654321' },
+  { key: 'seller_director_country', label: t('createTemplate.variables.sellerDirectorCountry'), example: 'Thailand' },
   
-  // Buyer
+  // Buyer (физ. лицо)
   { key: 'buyer_name', label: t('createTemplate.variables.buyerName'), example: 'Buyer Name' },
   { key: 'buyer_country', label: t('createTemplate.variables.buyerCountry'), example: 'USA' },
   { key: 'buyer_passport', label: t('createTemplate.variables.buyerPassport'), example: 'KL9876543' },
   { key: 'buyer_passport_number', label: t('createTemplate.variables.buyerPassportNumber'), example: 'KL9876543' },
+  // ✅ НОВЫЕ - Buyer (компания)
+  { key: 'buyer_company_name', label: t('createTemplate.variables.buyerCompanyName'), example: 'Buyer Inc' },
+  { key: 'buyer_company_address', label: t('createTemplate.variables.buyerCompanyAddress'), example: '888 Buyer Ave' },
+  { key: 'buyer_company_tax_id', label: t('createTemplate.variables.buyerCompanyTaxId'), example: '4564564567' },
+  { key: 'buyer_director_name', label: t('createTemplate.variables.buyerDirectorName'), example: 'Buyer Director' },
+  { key: 'buyer_director_passport', label: t('createTemplate.variables.buyerDirectorPassport'), example: 'KL1234567' },
+  { key: 'buyer_director_country', label: t('createTemplate.variables.buyerDirectorCountry'), example: 'USA' },
   
-  // Principal
+  // Principal (физ. лицо)
   { key: 'principal_name', label: t('createTemplate.variables.principalName'), example: 'Principal Name' },
   { key: 'principal_country', label: t('createTemplate.variables.principalCountry'), example: 'Russia' },
   { key: 'principal_passport', label: t('createTemplate.variables.principalPassport'), example: 'MN1234567' },
   { key: 'principal_passport_number', label: t('createTemplate.variables.principalPassportNumber'), example: 'MN1234567' },
+  // ✅ НОВЫЕ - Principal (компания)
+  { key: 'principal_company_name', label: t('createTemplate.variables.principalCompanyName'), example: 'Principal LLC' },
+  { key: 'principal_company_address', label: t('createTemplate.variables.principalCompanyAddress'), example: '777 Principal Way' },
+  { key: 'principal_company_tax_id', label: t('createTemplate.variables.principalCompanyTaxId'), example: '7897897890' },
+  { key: 'principal_director_name', label: t('createTemplate.variables.principalDirectorName'), example: 'Principal Director' },
+  { key: 'principal_director_passport', label: t('createTemplate.variables.principalDirectorPassport'), example: 'MN7654321' },
+  { key: 'principal_director_country', label: t('createTemplate.variables.principalDirectorCountry'), example: 'Russia' },
   
   // Witnesses (до 5 свидетелей)
   { key: 'witness_name', label: t('createTemplate.variables.witness1Name'), example: 'Witness Name' },
@@ -374,7 +437,7 @@ const commonVariables = [
   { key: 'witness5_country', label: t('createTemplate.variables.witness5Country'), example: 'Canada' },
   { key: 'witness5_passport', label: t('createTemplate.variables.witness5Passport'), example: 'WX1234567' },
   
-  // Companies (до 3 компаний)
+  // Companies (до 3 компаний) - автозаполняются из сторон-компаний
   { key: 'company1_name', label: t('createTemplate.variables.company1Name'), example: 'Company Ltd' },
   { key: 'company1_address', label: t('createTemplate.variables.company1Address'), example: '123 Business St' },
   { key: 'company1_tax_id', label: t('createTemplate.variables.company1TaxId'), example: '1234567890' },

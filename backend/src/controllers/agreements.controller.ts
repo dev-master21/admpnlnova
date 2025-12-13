@@ -408,7 +408,7 @@ async create(req: AuthRequest, res: Response): Promise<void> {
     const public_link = `https://agreement.${baseDomain}/agreement/${public_link_uuid}`;
     const verify_link = uuidv4();
 
-    // Подготавливаем переменные для замены в шаблоне
+// Подготавливаем переменные для замены в шаблоне
     const variables: any = {
       agreement_number,
       city: city || 'Phuket',
@@ -418,38 +418,58 @@ async create(req: AuthRequest, res: Response): Promise<void> {
       property_name: property_name_manual || (property as any)?.property_name || '',
       property_number: property_number_manual || (property as any)?.property_number || '',
       property_address: property_address_override || (property as any)?.address || '',
-      rent_amount_monthly: rent_amount_monthly || '',
-      rent_amount_total: calculatedRentTotal || rent_amount_total || '',
-      deposit_amount: deposit_amount || '',
+      // ✅ ФОРМАТИРОВАНИЕ ЧИСЕЛ С РАЗДЕЛИТЕЛЕМ ТЫСЯЧ
+      rent_amount_monthly: this.formatNumber(rent_amount_monthly),
+      rent_amount_total: this.formatNumber(calculatedRentTotal || rent_amount_total),
+      deposit_amount: this.formatNumber(deposit_amount),
+      upon_signed_pay: this.formatNumber(upon_signed_pay),
+      upon_checkin_pay: this.formatNumber(upon_checkin_pay),
+      upon_checkout_pay: this.formatNumber(upon_checkout_pay),
       utilities_included: utilities_included || '',
       bank_name: bank_name || '',
       bank_account_name: bank_account_name || '',
-      bank_account_number: bank_account_number || '',
-      upon_signed_pay: upon_signed_pay || '',
-      upon_checkin_pay: upon_checkin_pay || '',
-      upon_checkout_pay: upon_checkout_pay || ''
+      bank_account_number: bank_account_number || ''
     };
 
-    // ✅ РАСЧЕТ ПРОЦЕНТОВ
+    // ✅ ДОБАВЛЯЕМ КОМПОНЕНТЫ ДАТ
+    const dateFromComponents = this.getDateComponents(date_from);
+    if (dateFromComponents) {
+      variables.first_day = dateFromComponents.day;
+      variables.first_month_full_word = dateFromComponents.monthFullWord;
+      variables.first_month_short_word = dateFromComponents.monthShortWord;
+      variables.first_month_number = dateFromComponents.monthNumber;
+      variables.first_year = dateFromComponents.year;
+    }
+
+    const dateToComponents = this.getDateComponents(date_to);
+    if (dateToComponents) {
+      variables.last_day = dateToComponents.day;
+      variables.last_month_full_word = dateToComponents.monthFullWord;
+      variables.last_month_short_word = dateToComponents.monthShortWord;
+      variables.last_month_number = dateToComponents.monthNumber;
+      variables.last_year = dateToComponents.year;
+    }
+
+    // ✅ РАСЧЕТ ПРОЦЕНТОВ С ПРАВИЛЬНЫМ ФОРМАТИРОВАНИЕМ
     const totalForPercent = calculatedRentTotal || rent_amount_total;
     if (totalForPercent && totalForPercent > 0) {
       if (upon_signed_pay) {
         const percent = (parseFloat(upon_signed_pay) / parseFloat(totalForPercent)) * 100;
-        variables.upon_signed_pay_percent = percent.toFixed(1) + '%';
+        variables.upon_signed_pay_percent = this.formatPercent(percent);
       } else {
         variables.upon_signed_pay_percent = '';
       }
 
       if (upon_checkin_pay) {
         const percent = (parseFloat(upon_checkin_pay) / parseFloat(totalForPercent)) * 100;
-        variables.upon_checkin_pay_percent = percent.toFixed(1) + '%';
+        variables.upon_checkin_pay_percent = this.formatPercent(percent);
       } else {
         variables.upon_checkin_pay_percent = '';
       }
 
       if (upon_checkout_pay) {
         const percent = (parseFloat(upon_checkout_pay) / parseFloat(totalForPercent)) * 100;
-        variables.upon_checkout_pay_percent = percent.toFixed(1) + '%';
+        variables.upon_checkout_pay_percent = this.formatPercent(percent);
       } else {
         variables.upon_checkout_pay_percent = '';
       }
@@ -459,19 +479,37 @@ async create(req: AuthRequest, res: Response): Promise<void> {
       variables.upon_checkout_pay_percent = '';
     }
 
+    // ✅ СЧЁТЧИК КОМПАНИЙ ДЛЯ company1_*, company2_*, company3_*
+    let companyIndex = 1;
+
     // Добавляем переменные сторон
     if (parties && Array.isArray(parties)) {
       parties.forEach((party: any, index: number) => {
         const prefix = party.role || `party_${index}`;
         
         if (party.is_company) {
+          // Переменные по роли
           variables[`${prefix}_name`] = party.company_name || '';
           variables[`${prefix}_company_name`] = party.company_name || '';
           variables[`${prefix}_address`] = party.company_address || '';
+          variables[`${prefix}_company_address`] = party.company_address || '';
           variables[`${prefix}_tax_id`] = party.company_tax_id || '';
+          variables[`${prefix}_company_tax_id`] = party.company_tax_id || '';
           variables[`${prefix}_director_name`] = party.director_name || '';
           variables[`${prefix}_director_passport`] = party.director_passport || '';
           variables[`${prefix}_director_country`] = party.director_country || '';
+          
+          // ✅ АВТОЗАПОЛНЕНИЕ company1_*, company2_*, company3_*
+          if (companyIndex <= 3) {
+            const companyPrefix = `company${companyIndex}`;
+            variables[`${companyPrefix}_name`] = party.company_name || '';
+            variables[`${companyPrefix}_address`] = party.company_address || '';
+            variables[`${companyPrefix}_tax_id`] = party.company_tax_id || '';
+            variables[`${companyPrefix}_director_name`] = party.director_name || '';
+            variables[`${companyPrefix}_director_passport`] = party.director_passport || '';
+            variables[`${companyPrefix}_director_country`] = party.director_country || '';
+            companyIndex++;
+          }
         } else {
           variables[`${prefix}_name`] = party.name || '';
           variables[`${prefix}_passport_country`] = party.passport_country || '';
@@ -684,6 +722,72 @@ private calculateMonthsDifference(dateFrom: string, dateTo: string): number {
   }
   
   return Math.max(1, totalMonths); // Минимум 1 месяц
+}
+
+/**
+ * Вспомогательный метод: форматирование числа с разделителем тысяч
+ * 500000 → 500,000
+ * 5000 → 5,000
+ * 500 → 500
+ */
+private formatNumber(value: any): string {
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+  const num = parseFloat(value);
+  if (isNaN(num)) {
+    return String(value);
+  }
+  return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
+/**
+ * Вспомогательный метод: форматирование процента
+ * 50.0% → 50%
+ * 49.5% → 49.5%
+ */
+private formatPercent(value: number): string {
+  if (Number.isInteger(value)) {
+    return value + '%';
+  }
+  // Проверяем, является ли дробная часть нулевой
+  if (value % 1 === 0) {
+    return Math.round(value) + '%';
+  }
+  return value.toFixed(1).replace(/\.0$/, '') + '%';
+}
+
+/**
+ * Вспомогательный метод: получение компонентов даты
+ */
+private getDateComponents(dateStr: string): {
+  day: string;
+  monthFullWord: string;
+  monthShortWord: string;
+  monthNumber: string;
+  year: string;
+} | null {
+  if (!dateStr) return null;
+  
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return null;
+  
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const monthsShort = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+  
+  return {
+    day: String(date.getDate()),
+    monthFullWord: months[date.getMonth()],
+    monthShortWord: monthsShort[date.getMonth()],
+    monthNumber: String(date.getMonth() + 1).padStart(2, '0'),
+    year: String(date.getFullYear())
+  };
 }
 
 /**
@@ -1471,17 +1575,28 @@ async createSignatures(req: AuthRequest, res: Response): Promise<void> {
   }
 }
 
-  /**
-   * Вспомогательный метод: замена переменных в тексте
-   */
-  private replaceTemplateVariables(content: string, variables: any): string {
-    let result = content;
-    Object.keys(variables).forEach(key => {
-      const regex = new RegExp(`{{${key}}}`, 'g');
-      result = result.replace(regex, variables[key] || '');
-    });
-    return result;
-  }
+/**
+ * Вспомогательный метод: замена переменных в тексте
+ * Если значение пустое - заменяем на ________
+ * Если ключ не найден - тоже заменяем на ________
+ */
+private replaceTemplateVariables(content: string, variables: any): string {
+  let result = content;
+  
+  // Сначала заменяем все известные переменные
+  Object.keys(variables).forEach(key => {
+    const regex = new RegExp(`{{${key}}}`, 'g');
+    const value = variables[key];
+    // Если значение пустое или undefined - заменяем на ________
+    const replacement = (value === null || value === undefined || value === '') ? '________' : String(value);
+    result = result.replace(regex, replacement);
+  });
+  
+  // Затем заменяем все оставшиеся незаменённые {{...}} на ________
+  result = result.replace(/\{\{[^}]+\}\}/g, '________');
+  
+  return result;
+}
 
   /**
    * Вспомогательный метод: замена переменных в структуре
