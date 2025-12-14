@@ -1644,70 +1644,94 @@ private replaceTemplateVariables(content: string, variables: any): string {
       throw error;
     }
   }
-  /**
+/**
    * Получить список объектов для выбора
    * GET /api/agreements/properties
    */
-async getProperties(req: AuthRequest, res: Response): Promise<void> {
-  try {
-    const { search } = req.query;
+  async getProperties(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const { search } = req.query;
 
-    let query = `
-      SELECT 
-        p.id,
-        p.property_number,
-        p.complex_name,
-        p.address,
-        COALESCE(pt_ru.property_name, pt_en.property_name, p.complex_name, CONCAT('Объект ', p.property_number)) as property_name,
-        p.deal_type,
-        p.property_type
-      FROM properties p
-      LEFT JOIN property_translations pt_ru ON p.id = pt_ru.property_id AND pt_ru.language_code = 'ru'
-      LEFT JOIN property_translations pt_en ON p.id = pt_en.property_id AND pt_en.language_code = 'en'
-      WHERE p.deleted_at IS NULL
-    `;
+      // ✅ Получаем partner_id текущего пользователя
+      const userPartnerId = req.admin?.partner_id;
+      
+      logger.info(`=== GET PROPERTIES FOR AGREEMENT ===`);
+      logger.info(`User ID: ${req.admin?.id}`);
+      logger.info(`User partner_id: ${userPartnerId}`);
 
-    const queryParams: any[] = [];
+      const whereConditions: string[] = ['p.deleted_at IS NULL'];
+      const queryParams: any[] = [];
 
-    if (search) {
-      query += ` AND (COALESCE(pt_ru.property_name, pt_en.property_name, p.complex_name) LIKE ? OR p.property_number LIKE ? OR p.address LIKE ?)`;
-      queryParams.push(`%${search}%`, `%${search}%`, `%${search}%`);
-    }
-
-    query += ` ORDER BY p.complex_name, p.property_number`;
-
-    const properties = await db.query(query, queryParams);
-
-    // Группируем по комплексам
-    const grouped: any = {
-      complexes: {} as Record<string, any[]>,
-      standalone: [] as any[],
-      all: properties
-    };
-
-    (properties as any[]).forEach((prop: any) => {
-      if (prop.complex_name) {
-        if (!grouped.complexes[prop.complex_name]) {
-          grouped.complexes[prop.complex_name] = [];
-        }
-        grouped.complexes[prop.complex_name].push(prop);
+      // ✅ ФИЛЬТРАЦИЯ ПО ПАРТНЁРУ
+      if (userPartnerId !== null && userPartnerId !== undefined) {
+        whereConditions.push('au.partner_id = ?');
+        queryParams.push(userPartnerId);
+        logger.info(`✅ PARTNER FILTER APPLIED: au.partner_id = ${userPartnerId}`);
       } else {
-        grouped.standalone.push(prop);
+        logger.info(`❌ NO PARTNER FILTER - showing all properties`);
       }
-    });
 
-    res.json({
-      success: true,
-      data: grouped
-    });
-  } catch (error) {
-    logger.error('Get properties error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Ошибка получения списка объектов'
-    });
+      if (search) {
+        whereConditions.push(`(COALESCE(pt_ru.property_name, pt_en.property_name, p.complex_name) LIKE ? OR p.property_number LIKE ? OR p.address LIKE ?)`);
+        queryParams.push(`%${search}%`, `%${search}%`, `%${search}%`);
+      }
+
+      const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+
+      const query = `
+        SELECT 
+          p.id,
+          p.property_number,
+          p.complex_name,
+          p.address,
+          COALESCE(pt_ru.property_name, pt_en.property_name, p.complex_name, CONCAT('Объект ', p.property_number)) as property_name,
+          p.deal_type,
+          p.property_type
+        FROM properties p
+        LEFT JOIN property_translations pt_ru ON p.id = pt_ru.property_id AND pt_ru.language_code = 'ru'
+        LEFT JOIN property_translations pt_en ON p.id = pt_en.property_id AND pt_en.language_code = 'en'
+        LEFT JOIN admin_users au ON p.created_by = au.id
+        ${whereClause}
+        ORDER BY p.complex_name, p.property_number
+      `;
+
+      logger.info(`Query: ${query}`);
+      logger.info(`Params: ${JSON.stringify(queryParams)}`);
+
+      const properties = await db.query(query, queryParams);
+
+      logger.info(`Found ${(properties as any[]).length} properties`);
+
+      // Группируем по комплексам
+      const grouped: any = {
+        complexes: {} as Record<string, any[]>,
+        standalone: [] as any[],
+        all: properties
+      };
+
+      (properties as any[]).forEach((prop: any) => {
+        if (prop.complex_name) {
+          if (!grouped.complexes[prop.complex_name]) {
+            grouped.complexes[prop.complex_name] = [];
+          }
+          grouped.complexes[prop.complex_name].push(prop);
+        } else {
+          grouped.standalone.push(prop);
+        }
+      });
+
+      res.json({
+        success: true,
+        data: grouped
+      });
+    } catch (error) {
+      logger.error('Get properties error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Ошибка получения списка объектов'
+      });
+    }
   }
-}
   /**
    * Загрузить документ стороны
    * POST /api/agreements/parties/:partyId/document
