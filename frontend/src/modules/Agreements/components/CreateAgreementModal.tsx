@@ -71,7 +71,9 @@ import {
   IconReceipt,
   IconBriefcase,
   IconUserCheck,
-  IconQrcode
+  IconQrcode,
+  IconCalendarEvent,
+  IconSettings
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { agreementsApi, AgreementTemplate } from '@/api/agreements.api';
@@ -110,6 +112,12 @@ interface Property {
   property_name: string;
   complex_name?: string;
   address: string;
+}
+
+// Интерфейс для стороны из шаблона
+interface TemplateParty {
+  role: string;
+  label?: string;
 }
 
 // Кастомный input для DatePicker без клавиатуры на мобильных
@@ -534,7 +542,9 @@ const CreateAgreementModal = ({ visible, onCancel, onSuccess }: CreateAgreementM
       bilateral: 'violet',
       trilateral: 'orange',
       agency: 'pink',
-      transfer_act: 'teal'
+      transfer_act: 'teal',
+      reservation: 'cyan',
+      management: 'grape'
     };
     return colors[type] || 'gray';
   };
@@ -546,7 +556,9 @@ const CreateAgreementModal = ({ visible, onCancel, onSuccess }: CreateAgreementM
       bilateral: IconUsers,
       trilateral: IconUsers,
       agency: IconBriefcase,
-      transfer_act: IconFileDescription
+      transfer_act: IconFileDescription,
+      reservation: IconCalendarEvent,
+      management: IconSettings
     };
     const Icon = icons[type] || IconFileText;
     return <Icon size={20} />;
@@ -560,12 +572,45 @@ const CreateAgreementModal = ({ visible, onCancel, onSuccess }: CreateAgreementM
       setSelectedTemplate(template);
       setFormData((prev: any) => ({ ...prev, template_id: template.id }));
       if (parties.length === 0) {
-        const defaultParties = getDefaultParties(template.type);
+        // ✅ ИСПОЛЬЗУЕМ СТОРОНЫ ИЗ ШАБЛОНА ЕСЛИ ОНИ ЕСТЬ
+        const defaultParties = getDefaultPartiesFromTemplate(template);
         setParties(defaultParties);
       }
     }
   };
 
+  /**
+   * ✅ НОВАЯ ФУНКЦИЯ: Получить стороны из шаблона или использовать fallback
+   */
+  const getDefaultPartiesFromTemplate = (template: AgreementTemplate): PartyData[] => {
+    // Пробуем получить стороны из template.default_parties
+    if (template.default_parties) {
+      try {
+        const templateParties: TemplateParty[] = typeof template.default_parties === 'string'
+          ? JSON.parse(template.default_parties)
+          : template.default_parties;
+        
+        if (Array.isArray(templateParties) && templateParties.length > 0) {
+          return templateParties.map(p => ({
+            role: p.role,
+            name: '',
+            passport_country: '',
+            passport_number: '',
+            is_company: false
+          }));
+        }
+      } catch (e) {
+        console.error('Error parsing template default_parties:', e);
+      }
+    }
+    
+    // Fallback на захардкоженные значения по типу
+    return getDefaultParties(template.type);
+  };
+
+  /**
+   * Fallback функция для получения сторон по типу (для обратной совместимости)
+   */
   const getDefaultParties = (type: string): PartyData[] => {
     const partyTemplates: Record<string, PartyData[]> = {
       rent: [
@@ -590,7 +635,16 @@ const CreateAgreementModal = ({ visible, onCancel, onSuccess }: CreateAgreementM
         { role: 'agent', name: '', passport_country: '', passport_number: '', is_company: false }
       ],
       transfer_act: [
-        { role: 'principal', name: '', passport_country: '', passport_number: '', is_company: false },
+        { role: 'lessor', name: '', passport_country: '', passport_number: '', is_company: false },
+        { role: 'tenant', name: '', passport_country: '', passport_number: '', is_company: false }
+      ],
+      // ✅ НОВЫЕ ТИПЫ
+      reservation: [
+        { role: 'landlord', name: '', passport_country: '', passport_number: '', is_company: false },
+        { role: 'tenant', name: '', passport_country: '', passport_number: '', is_company: false }
+      ],
+      management: [
+        { role: 'landlord', name: '', passport_country: '', passport_number: '', is_company: false },
         { role: 'agent', name: '', passport_country: '', passport_number: '', is_company: false }
       ]
     };

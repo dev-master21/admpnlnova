@@ -137,7 +137,7 @@ async getById(req: AuthRequest, res: Response): Promise<void> {
     const connection = await db.beginTransaction();
 
     try {
-      const { name, type, content, structure } = req.body;
+      const { name, type, content, structure, default_parties } = req.body;
       const userId = req.admin!.id;
 
       if (!name || !type || !content) {
@@ -150,9 +150,9 @@ async getById(req: AuthRequest, res: Response): Promise<void> {
       }
 
       const result = await connection.query(
-        `INSERT INTO agreement_templates (name, type, content, structure, created_by)
-         VALUES (?, ?, ?, ?, ?)`,
-        [name, type, content, structure || null, userId]
+        `INSERT INTO agreement_templates (name, type, content, structure, default_parties, created_by)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [name, type, content, structure || null, default_parties || null, userId]
       );
 
       await db.commit(connection);
@@ -185,7 +185,7 @@ async getById(req: AuthRequest, res: Response): Promise<void> {
 
     try {
       const { id } = req.params;
-      const { name, content, structure, is_active } = req.body;
+      const { name, content, structure, is_active, default_parties } = req.body;
 
       const template = await db.queryOne(`
         SELECT 
@@ -237,6 +237,12 @@ async getById(req: AuthRequest, res: Response): Promise<void> {
       if (is_active !== undefined) {
         fields.push('is_active = ?');
         values.push(is_active);
+      }
+
+      // ✅ ДОБАВЛЕНА ОБРАБОТКА default_parties
+      if (default_parties !== undefined) {
+        fields.push('default_parties = ?');
+        values.push(default_parties);
       }
 
       if (fields.length > 0) {

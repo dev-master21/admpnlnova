@@ -930,7 +930,9 @@ const [contextMenu, setContextMenu] = useState<{
         bilateral: 'LEASE AGREEMENT',
         trilateral: 'LEASE AGREEMENT',
         agency: 'AGENCY AGREEMENT',
-        transfer_act: 'TRANSFER ACT'
+        transfer_act: 'TRANSFER ACT',
+        reservation: 'RESERVATION AGREEMENT',
+        management: 'MANAGEMENT AGREEMENT'
       };
       return titles[type] || 'AGREEMENT';
     };

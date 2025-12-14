@@ -15,9 +15,11 @@ import {
   Collapse,
   Row,
   Col,
-  Typography
+  Typography,
+  Table,
+  Popconfirm
 } from 'antd';
-import { ArrowLeftOutlined, SaveOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, SaveOutlined, InfoCircleOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
@@ -27,6 +29,12 @@ import './CreateTemplate.css';
 const { Option } = Select;
 const { Text } = Typography;
 
+// Интерфейс для стороны договора
+interface DefaultParty {
+  role: string;
+  label?: string;
+}
+
 const CreateTemplate = () => {
   const { t } = useTranslation();
   const [form] = Form.useForm();
@@ -34,6 +42,61 @@ const CreateTemplate = () => {
   const location = useLocation();
   const [loading, setLoading] = useState(false);
   const [editorContent, setEditorContent] = useState('');
+  const [defaultParties, setDefaultParties] = useState<DefaultParty[]>([]);
+
+  // Доступные роли для сторон договора
+  const availableRoles = [
+    { value: 'tenant', label: t('createTemplate.roles.tenant', 'Арендатор (Tenant)') },
+    { value: 'lessor', label: t('createTemplate.roles.lessor', 'Арендодатель (Lessor)') },
+    { value: 'landlord', label: t('createTemplate.roles.landlord', 'Владелец (Landlord)') },
+    { value: 'representative', label: t('createTemplate.roles.representative', 'Представитель') },
+    { value: 'principal', label: t('createTemplate.roles.principal', 'Принципал') },
+    { value: 'agent', label: t('createTemplate.roles.agent', 'Агент') },
+    { value: 'buyer', label: t('createTemplate.roles.buyer', 'Покупатель (Buyer)') },
+    { value: 'seller', label: t('createTemplate.roles.seller', 'Продавец (Seller)') },
+    { value: 'witness', label: t('createTemplate.roles.witness', 'Свидетель') },
+    { value: 'company', label: t('createTemplate.roles.company', 'Компания') }
+  ];
+
+  // Стандартные стороны для каждого типа договора
+  const getDefaultPartiesForType = (type: string): DefaultParty[] => {
+    const partiesMap: Record<string, DefaultParty[]> = {
+      rent: [
+        { role: 'tenant' },
+        { role: 'lessor' }
+      ],
+      sale: [
+        { role: 'seller' },
+        { role: 'buyer' }
+      ],
+      bilateral: [
+        { role: 'tenant' },
+        { role: 'lessor' }
+      ],
+      trilateral: [
+        { role: 'landlord' },
+        { role: 'representative' },
+        { role: 'tenant' }
+      ],
+      agency: [
+        { role: 'principal' },
+        { role: 'agent' }
+      ],
+      transfer_act: [
+        { role: 'lessor' },
+        { role: 'tenant' }
+      ],
+      reservation: [
+        { role: 'landlord' },
+        { role: 'tenant' }
+      ],
+      management: [
+        { role: 'landlord' },
+        { role: 'agent' }
+      ]
+    };
+    return partiesMap[type] || [{ role: 'landlord' }];
+  };
 
   useEffect(() => {
     const pathParts = location.pathname.split('/');
@@ -58,6 +121,21 @@ const CreateTemplate = () => {
 
       setEditorContent(data.content || '');
 
+      // Загружаем стандартные стороны из шаблона или используем по умолчанию для типа
+      if (data.default_parties) {
+        try {
+          const parties = typeof data.default_parties === 'string' 
+            ? JSON.parse(data.default_parties) 
+            : data.default_parties;
+          setDefaultParties(parties);
+        } catch (e) {
+          console.error('Error parsing default_parties:', e);
+          setDefaultParties(getDefaultPartiesForType(data.type));
+        }
+      } else {
+        setDefaultParties(getDefaultPartiesForType(data.type));
+      }
+
       message.success(t('createTemplate.messages.dataLoaded'));
     } catch (error: any) {
       message.error(t('createTemplate.messages.loadError'));
@@ -76,6 +154,40 @@ const CreateTemplate = () => {
   const getTemplateId = () => {
     const pathParts = location.pathname.split('/');
     return Number(pathParts[3]);
+  };
+
+  // Обработчик изменения типа договора
+  const handleTypeChange = (type: string) => {
+    const parties = getDefaultPartiesForType(type);
+    setDefaultParties(parties);
+  };
+
+  // Добавить новую сторону
+  const addParty = () => {
+    setDefaultParties([...defaultParties, { role: 'witness' }]);
+  };
+
+  // Удалить сторону
+  const removeParty = (index: number) => {
+    if (defaultParties.length > 1) {
+      const newParties = defaultParties.filter((_, i) => i !== index);
+      setDefaultParties(newParties);
+    } else {
+      message.warning(t('createTemplate.messages.atLeastOneParty', 'Должна быть хотя бы одна сторона'));
+    }
+  };
+
+  // Изменить роль стороны
+  const updatePartyRole = (index: number, role: string) => {
+    const newParties = [...defaultParties];
+    newParties[index] = { ...newParties[index], role };
+    setDefaultParties(newParties);
+  };
+
+  // Получить название роли
+  const getRoleLabel = (role: string): string => {
+    const found = availableRoles.find(r => r.value === role);
+    return found ? found.label : role;
   };
 
   /**
@@ -105,11 +217,9 @@ const CreateTemplate = () => {
       if (!content) return;
 
       if (tagName === 'h1') {
-        // Это заголовок договора - пропускаем или используем как title
         structure.title = content;
         return;
       } else if (tagName === 'h2') {
-        // Новая секция
         if (currentSection) {
           structure.nodes.push(currentSection);
         }
@@ -124,7 +234,6 @@ const CreateTemplate = () => {
         sectionCounter++;
       } else if ((tagName === 'h3' || tagName === 'p') && currentSection) {
         if (tagName === 'h3') {
-          // Подсекция
           const subsectionNum = currentSection.children.filter((c: any) => c.type === 'subsection').length + 1;
           currentSection.children.push({
             id: `subsection-${Date.now()}-${Math.random()}`,
@@ -134,7 +243,6 @@ const CreateTemplate = () => {
             level: 1
           });
         } else if (content) {
-          // Параграф
           currentSection.children.push({
             id: `paragraph-${Date.now()}-${Math.random()}`,
             type: 'paragraph',
@@ -142,7 +250,6 @@ const CreateTemplate = () => {
           });
         }
       } else if (tagName === 'ul' && currentSection) {
-        // Список
         const items: string[] = [];
         element.querySelectorAll('li').forEach((li: any) => {
           const itemText = li.textContent?.trim();
@@ -156,7 +263,6 @@ const CreateTemplate = () => {
           });
         }
       } else if (tagName === 'ol' && currentSection) {
-        // Нумерованный список (обрабатываем как bulletList)
         const items: string[] = [];
         element.querySelectorAll('li').forEach((li: any) => {
           const itemText = li.textContent?.trim();
@@ -176,7 +282,6 @@ const CreateTemplate = () => {
       structure.nodes.push(currentSection);
     }
 
-    // Если нет секций, создаем базовую структуру из контента
     if (structure.nodes.length === 0) {
       const plainText = doc.body.textContent?.trim() || '';
       if (plainText) {
@@ -210,7 +315,9 @@ const CreateTemplate = () => {
       bilateral: 'LEASE AGREEMENT',
       trilateral: 'LEASE AGREEMENT',
       agency: 'AGENCY AGREEMENT',
-      transfer_act: 'TRANSFER ACT'
+      transfer_act: 'TRANSFER ACT',
+      reservation: 'RESERVATION AGREEMENT',
+      management: 'MANAGEMENT AGREEMENT'
     };
     return titles[type] || 'AGREEMENT';
   };
@@ -226,6 +333,13 @@ const CreateTemplate = () => {
         return;
       }
 
+      // Проверяем что есть хотя бы одна сторона
+      if (defaultParties.length === 0) {
+        message.error(t('createTemplate.messages.atLeastOneParty', 'Добавьте хотя бы одну сторону договора'));
+        setLoading(false);
+        return;
+      }
+
       // ✅ ГЕНЕРИРУЕМ СТРУКТУРУ ИЗ HTML
       const structure = parseHTMLToStructure(editorContent, values.type);
 
@@ -233,8 +347,9 @@ const CreateTemplate = () => {
         name: values.name,
         type: values.type,
         content: editorContent,
-        structure: JSON.stringify(structure), // ✅ ТЕПЕРЬ ПЕРЕДАЕМ СТРУКТУРУ
-        is_active: values.is_active ?? true
+        structure: JSON.stringify(structure),
+        is_active: values.is_active ?? true,
+        default_parties: JSON.stringify(defaultParties) // ✅ ДОБАВЛЯЕМ СТОРОНЫ
       };
 
       if (isEditing()) {
@@ -270,6 +385,54 @@ const CreateTemplate = () => {
       ['clean']
     ]
   };
+
+  // Колонки для таблицы сторон
+  const partiesColumns = [
+    {
+      title: '№',
+      dataIndex: 'index',
+      key: 'index',
+      width: 50,
+      render: (_: any, __: any, index: number) => index + 1
+    },
+    {
+      title: t('createTemplate.parties.role', 'Роль'),
+      dataIndex: 'role',
+      key: 'role',
+      render: (role: string, _: any, index: number) => (
+        <Select
+          value={role}
+          onChange={(value) => updatePartyRole(index, value)}
+          style={{ width: '100%' }}
+        >
+          {availableRoles.map(r => (
+            <Option key={r.value} value={r.value}>{r.label}</Option>
+          ))}
+        </Select>
+      )
+    },
+    {
+      title: t('createTemplate.parties.actions', 'Действия'),
+      key: 'actions',
+      width: 80,
+      render: (_: any, __: any, index: number) => (
+        <Popconfirm
+          title={t('createTemplate.parties.confirmDelete', 'Удалить сторону?')}
+          onConfirm={() => removeParty(index)}
+          okText={t('common.yes', 'Да')}
+          cancelText={t('common.no', 'Нет')}
+          disabled={defaultParties.length <= 1}
+        >
+          <Button 
+            type="text" 
+            danger 
+            icon={<DeleteOutlined />}
+            disabled={defaultParties.length <= 1}
+          />
+        </Popconfirm>
+      )
+    }
+  ];
 
 const commonVariables = [
   // Основные
@@ -497,13 +660,19 @@ const commonVariables = [
                 label={t('createTemplate.fields.agreementType')}
                 rules={[{ required: true, message: t('createTemplate.validation.selectType') }]}
               >
-                <Select placeholder={t('createTemplate.placeholders.selectType')} size="large">
+                <Select 
+                  placeholder={t('createTemplate.placeholders.selectType')} 
+                  size="large"
+                  onChange={handleTypeChange}
+                >
                   <Option value="rent">{t('createTemplate.agreementTypes.rent')}</Option>
                   <Option value="sale">{t('createTemplate.agreementTypes.sale')}</Option>
                   <Option value="bilateral">{t('createTemplate.agreementTypes.bilateral')}</Option>
                   <Option value="trilateral">{t('createTemplate.agreementTypes.trilateral')}</Option>
                   <Option value="agency">{t('createTemplate.agreementTypes.agency')}</Option>
                   <Option value="transfer_act">{t('createTemplate.agreementTypes.transferAct')}</Option>
+                  <Option value="reservation">{t('createTemplate.agreementTypes.reservation')}</Option>
+                  <Option value="management">{t('createTemplate.agreementTypes.management')}</Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -517,6 +686,53 @@ const commonVariables = [
           </Form.Item>
 
           <Divider />
+
+          {/* ✅ СЕКЦИЯ НАСТРОЙКИ СТАНДАРТНЫХ СТОРОН */}
+          <Card 
+            title={
+              <Space>
+                <InfoCircleOutlined />
+                <span>{t('createTemplate.parties.title', 'Стандартные стороны договора')}</span>
+              </Space>
+            }
+            size="small"
+            style={{ marginBottom: 16 }}
+            extra={
+              <Button 
+                type="dashed" 
+                icon={<PlusOutlined />} 
+                onClick={addParty}
+                size="small"
+              >
+                {t('createTemplate.parties.add', 'Добавить сторону')}
+              </Button>
+            }
+          >
+            <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+              {t('createTemplate.parties.description', 'Эти стороны будут автоматически добавлены при создании договора на основе этого шаблона. Вы можете изменить их количество и роли.')}
+            </Text>
+            
+            <Table
+              dataSource={defaultParties.map((p, index) => ({ ...p, key: index }))}
+              columns={partiesColumns}
+              pagination={false}
+              size="small"
+              locale={{ emptyText: t('createTemplate.parties.noParties', 'Нет сторон') }}
+            />
+            
+            {defaultParties.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <Text type="secondary">
+                  {t('createTemplate.parties.summary', 'Стороны')}: {' '}
+                  {defaultParties.map((p, i) => (
+                    <Tag key={i} color="blue" style={{ marginRight: 4 }}>
+                      {getRoleLabel(p.role)}
+                    </Tag>
+                  ))}
+                </Text>
+              </div>
+            )}
+          </Card>
 
           <Collapse
             defaultActiveKey={['variables']}

@@ -1662,6 +1662,16 @@
       "saveChanges": "Сохранить изменения",
       "createTemplate": "Создать шаблон"
     },
+        "parties": {
+      "title": "Стандартные стороны договора",
+      "description": "Эти стороны будут автоматически добавлены при создании договора на основе этого шаблона. Вы можете изменить их количество и роли.",
+      "add": "Добавить сторону",
+      "role": "Роль",
+      "actions": "Действия",
+      "confirmDelete": "Удалить сторону?",
+      "noParties": "Нет сторон",
+      "summary": "Стороны"
+    },
     "fields": {
       "templateName": "Название шаблона",
       "agreementType": "Тип договора",
@@ -1683,7 +1693,9 @@
       "bilateral": "Двухсторонний",
       "trilateral": "Трёхсторонний",
       "agency": "Агентский",
-      "transferAct": "Акт приёма-передачи"
+      "transferAct": "Акт приёма-передачи",
+      "reservation": "Бронирование",
+      "management": "Управление"
     },
     "status": {
       "active": "Активен",
@@ -1695,6 +1707,18 @@
     "hints": {
       "useVariables": "Используйте переменные выше для вставки динамических данных"
     },
+        "roles": {
+      "tenant": "Арендатор (Tenant)",
+      "lessor": "Арендодатель (Lessor)",
+      "landlord": "Владелец (Landlord)",
+      "representative": "Представитель",
+      "principal": "Принципал",
+      "agent": "Агент",
+      "buyer": "Покупатель (Buyer)",
+      "seller": "Продавец (Seller)",
+      "witness": "Свидетель",
+      "company": "Компания"
+    },
     "messages": {
       "dataLoaded": "Данные шаблона загружены",
       "loadError": "Ошибка загрузки шаблона",
@@ -1702,7 +1726,8 @@
       "updated": "Шаблон успешно обновлен",
       "created": "Шаблон успешно создан",
       "saveError": "Ошибка сохранения шаблона",
-      "variableInserted": "Переменная {{{{variable}}}} вставлена"
+      "variableInserted": "Переменная {{{{variable}}}} вставлена",
+      "atLeastOneParty": "Должна быть хотя бы одна сторона"
     },
     "variables": {
       "uponSignedPay": "Сумма при подписании",
@@ -2235,7 +2260,9 @@
       "bilateral": "Двухсторонний",
       "trilateral": "Трёхсторонний",
       "agency": "Агентский",
-      "transfer_act": "Акт приёма-передачи"
+      "transfer_act": "Акт приёма-передачи",
+      "reservation": "Бронирование",
+      "management": "Управление"
     },
     "buttons": {
       "back": "Назад",

@@ -43,12 +43,19 @@ export interface Agreement {
   tenant?: AgreementParty;
 }
 
+// ✅ Интерфейс для стороны в шаблоне
+export interface TemplateDefaultParty {
+  role: string;
+  label?: string;
+}
+
 export interface AgreementTemplate {
   id: number;
   name: string;
   type: string;
   content: string;
   structure?: string;
+  default_parties?: string | TemplateDefaultParty[]; // ✅ ДОБАВЛЕНО
   version: number;
   is_active: boolean;
   created_by: number;
@@ -187,6 +194,23 @@ export interface AIEditResponse {
   };
 }
 
+// ✅ DTO для создания/обновления шаблона
+export interface CreateTemplateDTO {
+  name: string;
+  type: string;
+  content: string;
+  structure?: string;
+  default_parties?: string; // ✅ ДОБАВЛЕНО
+}
+
+export interface UpdateTemplateDTO {
+  name?: string;
+  content?: string;
+  structure?: string;
+  is_active?: boolean;
+  default_parties?: string; // ✅ ДОБАВЛЕНО
+}
+
 export const agreementsApi = {
   // === ДОГОВОРЫ ===
   getAll: (params?: {
@@ -244,10 +268,10 @@ export const agreementsApi = {
   getTemplateById: (id: number) =>
     api.get<{ success: boolean; data: AgreementTemplate }>(`/agreements/templates/${id}`),
 
-  createTemplate: (data: { name: string; type: string; content: string; structure?: string }) =>
+  createTemplate: (data: CreateTemplateDTO) =>
     api.post<{ success: boolean; message: string; data: { id: number } }>('/agreements/templates', data),
 
-  updateTemplate: (id: number, data: { name?: string; content?: string; structure?: string; is_active?: boolean }) =>
+  updateTemplate: (id: number, data: UpdateTemplateDTO) =>
     api.put<{ success: boolean; message: string }>(`/agreements/templates/${id}`, data),
 
   deleteTemplate: (id: number) =>
